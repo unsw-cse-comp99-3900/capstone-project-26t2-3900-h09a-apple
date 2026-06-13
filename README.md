@@ -42,3 +42,9 @@ Other scripts: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm f
 - `main` — protected, only updated through PRs that pass CI.
 - `<name>-dev` — personal working branch (e.g. `xingzhili-dev`).
 - `feat/...`, `fix/...` — short-lived feature/fix branches.
+
+## Deployment
+
+Frontend preview deploys are wired up via Vercel: every PR gets its own
+preview URL, posted as a comment on the PR. See [`docs/deployment.md`](docs/deployment.md)
+for one-time Vercel setup steps.
