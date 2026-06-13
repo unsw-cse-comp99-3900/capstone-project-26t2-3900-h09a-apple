@@ -17,9 +17,9 @@ Shared TypeScript types live in `packages/types`.
 pnpm install
 
 cd apps/api
-python -m venv .venv
-source .venv/Scripts/activate   # Windows Git Bash; use .venv/bin/activate on macOS/Linux
-pip install -r requirements.txt -r requirements-dev.txt
+py -3.11 -m venv .venv          # Windows; macOS/Linux: python3.11 -m venv .venv
+source .venv/Scripts/activate   # Windows Git Bash; macOS/Linux: source .venv/bin/activate
+pip install -r requirements-dev.txt
 cd ../..
 
 cp .env.example .env
