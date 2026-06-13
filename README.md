@@ -2,7 +2,8 @@
 
 UNSW COMP3900 26T2 capstone project.
 
-Monorepo with a Next.js frontend (`apps/web`) and a FastAPI backend (`apps/api`).
+Monorepo with a Next.js frontend (`apps/web`), a FastAPI backend (`apps/api`),
+and a placeholder slot for the Chrome MV3 extension (`apps/extension`).
 Shared TypeScript types live in `packages/types`.
 
 ## Requirements

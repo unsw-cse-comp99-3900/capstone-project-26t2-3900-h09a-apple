@@ -20,6 +20,8 @@ importers:
 
   apps/api: {}
 
+  apps/extension: {}
+
   apps/web:
     dependencies:
       next:
