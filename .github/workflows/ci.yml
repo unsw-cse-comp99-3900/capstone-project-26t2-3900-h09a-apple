@@ -68,3 +68,34 @@ jobs:
 
       - name: Test
         run: pytest
+
+  extension:
+    name: extension
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Format check
+        run: pnpm format:check
+
+      - name: Lint
+        run: pnpm --filter @h09a/extension lint
+
+      - name: Typecheck
+        run: pnpm --filter @h09a/extension typecheck
+
+      - name: Test
+        run: pnpm --filter @h09a/extension test
+
+      - name: Build
+        run: pnpm --filter @h09a/extension build

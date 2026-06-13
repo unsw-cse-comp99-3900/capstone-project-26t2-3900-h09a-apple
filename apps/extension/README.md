@@ -1,18 +1,29 @@
 # @h09a/extension
 
-Reserved slot for the Chrome MV3 extension. This package is intentionally empty
-right now — only `package.json` exists so that pnpm registers the workspace
-slot and the directory layout is stable.
+Chrome Manifest V3 extension shell for WorkTrace AI workflow capture.
 
-Real scaffolding (manifest, bundler, popup/content/background scripts, etc.)
-lands in a dedicated future Sprint card. Don't add code here without an owning
-ticket.
+The current popup manages local UI state only. It does not capture browser
+events, persist sessions, or communicate with the backend.
 
-When this is filled in, the package is expected to include:
+## Development
 
-- `manifest.json` (MV3)
-- A bundler — to be picked between Vite + custom config, [Plasmo](https://docs.plasmo.com/),
-  or [WXT](https://wxt.dev/) when the extension card is picked up
-- Background service worker, one or more content scripts, a popup
-- `lint`, `typecheck`, `test`, `build` scripts wired into the root `pnpm`
-  commands and an additional `extension` job in `.github/workflows/ci.yml`
+Run these commands from the repository root:
+
+```sh
+pnpm --filter @h09a/extension lint
+pnpm --filter @h09a/extension typecheck
+pnpm --filter @h09a/extension test
+pnpm --filter @h09a/extension build
+```
+
+The build copies extension runtime files into `apps/extension/dist`.
+
+## Load in Chrome
+
+1. Open `chrome://extensions`.
+2. Enable Developer mode.
+3. Select **Load unpacked**.
+4. Choose `apps/extension/dist`.
+
+After rebuilding, use the extension card's refresh button before reopening the
+popup.
