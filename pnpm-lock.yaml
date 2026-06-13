@@ -18,6 +18,8 @@ importers:
         specifier: ^5.6.3
         version: 5.9.3
 
+  apps/api: {}
+
   apps/web:
     dependencies:
       next:
@@ -33,6 +35,9 @@ importers:
       '@eslint/eslintrc':
         specifier: ^3.2.0
         version: 3.3.5
+      '@h09a/types':
+        specifier: workspace:*
+        version: link:../../packages/types
       '@types/node':
         specifier: ^22.10.5
         version: 22.19.21
@@ -54,6 +59,12 @@ importers:
       vitest:
         specifier: ^2.1.8
         version: 2.1.9(@types/node@22.19.21)
+
+  packages/types:
+    devDependencies:
+      typescript:
+        specifier: ^5.6.3
+        version: 5.9.3
 
 packages:
 
