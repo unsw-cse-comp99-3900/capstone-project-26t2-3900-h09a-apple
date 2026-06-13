@@ -51,9 +51,10 @@ Other scripts: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm f
 - `main` — only updated through PRs that pass CI. Repo admin should enable
   branch protection (Settings → Branches → Add rule for `main` → require status
   checks `web` and `api` to pass) so failing CI blocks merges.
-- `<TICKET-ID>-<short-description>` — one branch per Trello card, kebab-case,
-  e.g. `H09AAPPLE-21-devops-set-up-monorepo-and-ci`. Created when work on a
-  card starts, deleted after the PR is merged.
+- `<TICKET-ID>-<kebab-case-card-title>` — one branch per Trello card,
+  e.g. `H09AAPPLE-21-dev-ops-set-up-project-monorepo-and-ci-cd-pipeline`.
+  Use the name Trello auto-generates from the card title; don't shorten by
+  hand. Created when work on a card starts, deleted after the PR is merged.
 
 ## Deployment
 
