@@ -51,8 +51,9 @@ Other scripts: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm f
 - `main` — only updated through PRs that pass CI. Repo admin should enable
   branch protection (Settings → Branches → Add rule for `main` → require status
   checks `web` and `api` to pass) so failing CI blocks merges.
-- `<name>-dev` — personal working branch (e.g. `xingzhili-dev`).
-- `feat/...`, `fix/...` — short-lived feature/fix branches, merged into `main` via PR.
+- `<TICKET-ID>-<short-description>` — one branch per Trello card, kebab-case,
+  e.g. `H09AAPPLE-21-devops-set-up-monorepo-and-ci`. Created when work on a
+  card starts, deleted after the PR is merged.
 
 ## Deployment
 
