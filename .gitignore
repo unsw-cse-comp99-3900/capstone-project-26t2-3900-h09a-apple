@@ -28,7 +28,8 @@ venv/
 .env.*
 !.env.example
 
-.vscode/
+.vscode/*
+!.vscode/settings.json
 .idea/
 *.swp
 .DS_Store
