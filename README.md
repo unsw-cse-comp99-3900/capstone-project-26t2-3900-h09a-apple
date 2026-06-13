@@ -29,6 +29,15 @@ cp apps/api/.env.example apps/api/.env
 
 ## Run
 
+`pnpm dev` runs the backend through `uvicorn`, which is only on `PATH` when the
+Python venv is active in your shell. Activate it once per terminal session:
+
+```bash
+source apps/api/.venv/Scripts/activate   # macOS/Linux: source apps/api/.venv/bin/activate
+```
+
+Then:
+
 ```bash
 pnpm dev          # frontend + backend
 pnpm dev:web      # only frontend (http://localhost:3000)
@@ -39,9 +48,11 @@ Other scripts: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm f
 
 ## Branches
 
-- `main` — protected, only updated through PRs that pass CI.
+- `main` — only updated through PRs that pass CI. Repo admin should enable
+  branch protection (Settings → Branches → Add rule for `main` → require status
+  checks `web` and `api` to pass) so failing CI blocks merges.
 - `<name>-dev` — personal working branch (e.g. `xingzhili-dev`).
-- `feat/...`, `fix/...` — short-lived feature/fix branches.
+- `feat/...`, `fix/...` — short-lived feature/fix branches, merged into `main` via PR.
 
 ## Deployment
 
