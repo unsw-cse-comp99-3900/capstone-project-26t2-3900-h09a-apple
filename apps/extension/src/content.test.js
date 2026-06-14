@@ -13,6 +13,7 @@ test('content script captures clicks and navigations when recording', async () =
       <body>
         <div>
           <button id="submit-btn" aria-label="Submit Form">Submit</button>
+          <button data-testid="cancel-btn">Cancel</button>
           <p>Not interactive</p>
         </div>
       </body>
@@ -87,4 +88,27 @@ test('content script captures clicks and navigations when recording', async () =
   window.history.pushState({}, '', '/new-route');
   assert.equal(sentMessages.length, 1);
   assert.equal(sentMessages[0].type, 'NAVIGATION');
+
+  // 8. Verification: Deduplication of navigation events
+  sentMessages.length = 0;
+  window.history.pushState({}, '', '/duplicate-route');
+  window.history.replaceState({}, '', '/duplicate-route');
+  window.dispatchEvent(new window.Event('popstate'));
+  assert.equal(sentMessages.length, 1); // Multiple triggers for the same URL should only send 1 event
+  assert.equal(sentMessages[0].type, 'NAVIGATION');
+  assert.equal(sentMessages[0].payload.url, 'https://example.com/duplicate-route');
+
+  // 9. Verification: CSS selector respects data-testid
+  sentMessages.length = 0;
+  const cancelBtn = document.querySelector('[data-testid="cancel-btn"]');
+  cancelBtn.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  assert.equal(sentMessages.length, 1);
+  assert.equal(sentMessages[0].payload.selector, '[data-testid="cancel-btn"]');
+
+  // 10. Verification: State-gated capture (stops recording when state changes to 'ready')
+  sentMessages.length = 0;
+  storageChangeCallback({ recordingState: { newValue: { status: 'ready' } } }, 'local');
+  button.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  window.history.pushState({}, '', '/ignored-route');
+  assert.equal(sentMessages.length, 0); // Events should be ignored because isRecording is now false
 });
