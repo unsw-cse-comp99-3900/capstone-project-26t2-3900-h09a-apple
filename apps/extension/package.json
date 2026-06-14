@@ -7,7 +7,7 @@
     "build": "node scripts/build.mjs",
     "lint": "node scripts/check.mjs",
     "typecheck": "node scripts/check.mjs",
-    "test": "node --test src/recording-state.test.js"
+    "test": "node --test"
   },
   "devDependencies": {
     "jsdom": "^29.1.1"

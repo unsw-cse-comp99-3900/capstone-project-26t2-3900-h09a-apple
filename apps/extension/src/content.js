@@ -60,19 +60,26 @@ function getElementLabel(element) {
 }
 
 let isRecording = false;
+let piiSelectors = [];
 
 // Synchronize the recording status in the local storage
 if (chrome.storage?.local) {
-  chrome.storage.local.get(['recordingState'], (result) => {
+  chrome.storage.local.get(['recordingState', 'piiSelectors'], (result) => {
     isRecording = result.recordingState?.status === 'recording';
+    piiSelectors = result.piiSelectors || [];
     if (isRecording) {
       recordNavigation(); // Only when in the recording state will the loading navigation of the initial page be captured
     }
   });
 
   chrome.storage.onChanged.addListener((changes, area) => {
-    if (area === 'local' && changes.recordingState) {
-      isRecording = changes.recordingState.newValue?.status === 'recording';
+    if (area === 'local') {
+      if (changes.recordingState) {
+        isRecording = changes.recordingState.newValue?.status === 'recording';
+      }
+      if (changes.piiSelectors) {
+        piiSelectors = changes.piiSelectors.newValue || [];
+      }
     }
   });
 }
@@ -114,6 +121,31 @@ function getClosestInteractiveElement(el) {
   return null;
 }
 
+/**
+ * Masks PII data from text values.
+ */
+function maskValue(value, element) {
+  if (!value) return value;
+
+  // 1. Fully mask if element matches configurable PII selectors
+  if (piiSelectors.some(selector => {
+    try { return element.matches(selector); } catch (e) { return false; }
+  })) {
+    return '[MASKED]';
+  }
+
+  // 2. Regex-based masking for general text
+  let maskedValue = String(value);
+  const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+  const idRegex = /\b\d{5,}\b/g; // Assuming IDs are 5+ digits
+  const dateRegex = /\b\d{1,4}[-/]\d{1,2}[-/]\d{1,4}\b/g; // Matches formats like YYYY-MM-DD or DD/MM/YYYY
+
+  maskedValue = maskedValue.replace(emailRegex, '[MASKED]');
+  maskedValue = maskedValue.replace(idRegex, '[MASKED]');
+  maskedValue = maskedValue.replace(dateRegex, '[MASKED]');
+  return maskedValue;
+}
+
 // 1. Capture click events
 document.addEventListener(
   'click',
@@ -133,10 +165,52 @@ document.addEventListener(
   true, // Capture phase: capture the click early before any page code stops its propagation
 );
 
+// 1.5 Capture input/change events with debounce and masking
+const inputTimers = new WeakMap();
+const lastSentValues = new WeakMap();
+
+function handleInput(event) {
+  const target = event.target;
+  const interactiveTags = new Set(['input', 'textarea', 'select']);
+
+  if (!interactiveTags.has(target.nodeName.toLowerCase())) return;
+  if (target.type === 'password') return; // Totally ignore password fields
+
+  if (inputTimers.has(target)) {
+    clearTimeout(inputTimers.get(target));
+  }
+
+  const timer = setTimeout(() => {
+    if (!isRecording) return;
+    
+    // Deduplicate: Don't send if the value hasn't changed since the last recorded event
+    const currentValue = target.value;
+    if (lastSentValues.get(target) === currentValue) return;
+    lastSentValues.set(target, currentValue);
+
+    const payload = {
+      selector: getCssSelector(target),
+      label: getElementLabel(target),
+      value: maskValue(currentValue, target),
+      url: window.location.href,
+      title: document.title,
+      timestamp: Date.now(),
+    };
+    sendEvent('INPUT', payload);
+  }, 300);
+
+  inputTimers.set(target, timer);
+}
+
+document.addEventListener('input', handleInput, true);
+document.addEventListener('change', handleInput, true);
+
 // 2. Capture navigation events
 let lastUrl = '';
 
 function recordNavigation() {
+  if (!isRecording) return; // Prevent updating lastUrl and dropping events before storage syncs
+
   const currentUrl = window.location.href;
   if (currentUrl === lastUrl) return; // Deduplicate concurrent navigation triggers
   lastUrl = currentUrl;

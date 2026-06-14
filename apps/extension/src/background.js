@@ -1,5 +1,5 @@
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.type === 'CLICK' || message.type === 'NAVIGATION') {
+  if (message.type === 'CLICK' || message.type === 'NAVIGATION' || message.type === 'INPUT') {
     const newEvent = {
       type: message.type,
       payload: message.payload,
