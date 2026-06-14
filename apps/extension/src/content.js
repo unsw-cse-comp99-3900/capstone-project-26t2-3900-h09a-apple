@@ -48,14 +48,34 @@ function getCssSelector(el) {
  * Extracts visible label or aria-label for a given element.
  */
 function getElementLabel(element) {
-  const label =
-    element.innerText ||
-    element.getAttribute('aria-label') ||
-    element.getAttribute('placeholder') ||
-    element.getAttribute('title') ||
-    element.getAttribute('alt') ||
-    element.value ||
-    '';
+  let label = '';
+
+  // 1. Try to get the text from the associated <label> element
+  if (element.labels && element.labels.length > 0) {
+    label = Array.from(element.labels).map((l) => l.innerText || l.textContent).join(' ');
+  }
+
+  // 2. Try standard attributes and content
+  if (!label) {
+    label =
+      element.innerText ||
+      element.getAttribute('aria-label') ||
+      element.getAttribute('placeholder') ||
+      element.getAttribute('title') ||
+      element.getAttribute('alt') ||
+      '';
+  }
+
+  // 3. Fallback for buttons ONLY (prevent PII leakage from text input values)
+  if (!label && ['button', 'submit', 'reset'].includes(element.type)) {
+    label = element.value || '';
+  }
+
+  // 4. Fallback to name attribute
+  if (!label) {
+    label = element.name || '';
+  }
+
   return String(label).trim().replace(/\s+/g, ' ').substring(0, 100);
 }
 

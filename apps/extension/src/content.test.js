@@ -17,7 +17,7 @@ test('content script captures clicks and navigations when recording', async () =
           <p>Not interactive</p>
           <input type="password" id="pwd" />
           <input type="text" id="email" aria-label="Email" />
-          <input type="text" id="plain" />
+          <input type="text" id="plain" name="username" />
           <input type="text" id="cc" class="sensitive-data" />
         </div>
       </body>
@@ -132,6 +132,7 @@ test('content script captures clicks and navigations when recording', async () =
   assert.equal(sentMessages.length, 1);
   assert.equal(sentMessages[0].type, 'INPUT');
   assert.equal(sentMessages[0].payload.value, 'hello world');
+  assert.equal(sentMessages[0].payload.label, 'username'); // Verification: value MUST NOT leak into label
 
   // Simulate a 'change' event (e.g. from input blur) with the same value
   plainInput.dispatchEvent(new window.Event('change', { bubbles: true }));
