@@ -52,7 +52,9 @@ function getElementLabel(element) {
 
   // 1. Try to get the text from the associated <label> element
   if (element.labels && element.labels.length > 0) {
-    label = Array.from(element.labels).map((l) => l.innerText || l.textContent).join(' ');
+    label = Array.from(element.labels)
+      .map((l) => l.innerText || l.textContent)
+      .join(' ');
   }
 
   // 2. Try standard attributes and content
@@ -100,7 +102,8 @@ if (chrome.storage?.local) {
       if (changes.recordingState) {
         // Whenever the recording is turned on, we need to capture the current page user is on.
         const newStatus = changes.recordingState.newValue?.status === 'recording';
-        if (newStatus && !isRecording) { // Transitioning from off to on
+        if (newStatus && !isRecording) {
+          // Transitioning from off to on
           isRecording = true;
           lastUrl = ''; // Reset deduplication to allow capturing the baseline page
           recordNavigation(); // Capture the exact page URL where the recording started
@@ -166,9 +169,15 @@ function maskValue(value, element) {
   if (!value) return value;
 
   // 1. Fully mask if element matches configurable PII selectors
-  if (piiSelectors.some(selector => {
-    try { return element.matches(selector); } catch (e) { return false; }
-  })) {
+  if (
+    piiSelectors.some((selector) => {
+      try {
+        return element.matches(selector);
+      } catch (e) {
+        return false;
+      }
+    })
+  ) {
     return '[MASKED]';
   }
 
@@ -220,7 +229,7 @@ function handleInput(event) {
 
   const timer = setTimeout(() => {
     if (isRecording === false) return;
-    
+
     // Deduplicate: Don't send if the value hasn't changed since the last recorded event
     const currentValue = target.value;
     if (lastSentValues.get(target) === currentValue) return;

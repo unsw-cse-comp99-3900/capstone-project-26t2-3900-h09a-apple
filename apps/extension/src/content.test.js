@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 import { readFileSync } from 'node:fs';
 
-test('content script captures clicks and navigations when recording', async () => {
+test('content script captures clicks/navigations/input/metadata when recording', async () => {
   // 1. Initialize the JSDOM virtual browser environment
   const dom = new JSDOM(
     `
@@ -46,10 +46,15 @@ test('content script captures clicks and navigations when recording', async () =
     storage: {
       local: {
         // The initial state is simulated as being recorded
-        get: (keys, callback) => setTimeout(() => callback({
-          recordingState: { status: 'recording' },
-          piiSelectors: ['.sensitive-data']
-        }), 0),
+        get: (keys, callback) =>
+          setTimeout(
+            () =>
+              callback({
+                recordingState: { status: 'recording' },
+                piiSelectors: ['.sensitive-data'],
+              }),
+            0,
+          ),
       },
       onChanged: {
         addListener: (callback) => {
@@ -117,8 +122,8 @@ test('content script captures clicks and navigations when recording', async () =
   const pwdInput = document.getElementById('pwd');
   pwdInput.value = 'secret123';
   pwdInput.dispatchEvent(new window.Event('input', { bubbles: true }));
-  await new Promise(r => setTimeout(r, 350)); // wait for debounce
-  assert.equal(sentMessages.length, 0); 
+  await new Promise((r) => setTimeout(r, 350)); // wait for debounce
+  assert.equal(sentMessages.length, 0);
 
   // 11. Verification: Input captured with 300ms debounce
   const plainInput = document.getElementById('plain');
@@ -126,9 +131,9 @@ test('content script captures clicks and navigations when recording', async () =
   plainInput.dispatchEvent(new window.Event('input', { bubbles: true }));
   plainInput.value = 'hello world';
   plainInput.dispatchEvent(new window.Event('input', { bubbles: true }));
-  await new Promise(r => setTimeout(r, 100));
+  await new Promise((r) => setTimeout(r, 100));
   assert.equal(sentMessages.length, 0); // Not triggered yet
-  await new Promise(r => setTimeout(r, 250)); // Total > 300ms
+  await new Promise((r) => setTimeout(r, 250)); // Total > 300ms
   assert.equal(sentMessages.length, 1);
   assert.equal(sentMessages[0].type, 'INPUT');
   assert.equal(sentMessages[0].payload.value, 'hello world');
@@ -136,7 +141,7 @@ test('content script captures clicks and navigations when recording', async () =
 
   // Simulate a 'change' event (e.g. from input blur) with the same value
   plainInput.dispatchEvent(new window.Event('change', { bubbles: true }));
-  await new Promise(r => setTimeout(r, 350));
+  await new Promise((r) => setTimeout(r, 350));
   // The length should STILL be 1 because the value hasn't changed (deduplication works!)
   assert.equal(sentMessages.length, 1);
 
@@ -145,15 +150,18 @@ test('content script captures clicks and navigations when recording', async () =
   const emailInput = document.getElementById('email');
   emailInput.value = 'My email is test@example.com and ID is 123456 born on 1990-01-01';
   emailInput.dispatchEvent(new window.Event('input', { bubbles: true }));
-  await new Promise(r => setTimeout(r, 350));
-  assert.equal(sentMessages[0].payload.value, 'My email is [MASKED] and ID is [MASKED] born on [MASKED]');
+  await new Promise((r) => setTimeout(r, 350));
+  assert.equal(
+    sentMessages[0].payload.value,
+    'My email is [MASKED] and ID is [MASKED] born on [MASKED]',
+  );
 
   // 13. Verification: Configurable PII selector masking
   sentMessages.length = 0;
   const ccInput = document.getElementById('cc');
   ccInput.value = 'Some harmless text but in a sensitive field';
   ccInput.dispatchEvent(new window.Event('input', { bubbles: true }));
-  await new Promise(r => setTimeout(r, 350));
+  await new Promise((r) => setTimeout(r, 350));
   assert.equal(sentMessages[0].payload.value, '[MASKED]');
 
   // 14. Verification: State-gated capture (stops recording when state changes to 'ready')
