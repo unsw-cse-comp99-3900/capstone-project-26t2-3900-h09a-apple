@@ -88,6 +88,7 @@ let piiSelectors = [];
 // Synchronize the recording status in the local storage
 if (chrome.storage?.local) {
   chrome.storage.local.get(['recordingState', 'piiSelectors'], (result) => {
+    if (isRecording !== null) return; // Prevent stale state overwrite during rapid start
     isRecording = result.recordingState?.status === 'recording';
     piiSelectors = result.piiSelectors || [];
     if (isRecording) {
@@ -285,6 +286,14 @@ history.replaceState = function (...args) {
 
 window.addEventListener('popstate', recordNavigation);
 window.addEventListener('hashchange', recordNavigation);
+
+// Capture when the user switches back to this tab (e.g. from another tab or a chrome:// page)
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && isRecording) {
+    lastUrl = ''; // Force update context for the backend
+    recordNavigation();
+  }
+});
 
 if (document.readyState === 'complete' || document.readyState === 'interactive') {
   recordNavigation();
