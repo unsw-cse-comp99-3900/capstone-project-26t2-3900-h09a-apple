@@ -275,20 +275,12 @@ def main() -> None:
                 model_prompt_results.append(result)
                 all_results.append(result)
 
-            successful_api_results = [
-                item for item in model_prompt_results if item["api_success"]
-            ]
-            schema_pass_count = sum(
-                1 for item in model_prompt_results if item["schema_valid"]
-            )
+            successful_api_results = [item for item in model_prompt_results if item["api_success"]]
+            schema_pass_count = sum(1 for item in model_prompt_results if item["schema_valid"])
 
             if successful_api_results:
-                latencies = [
-                    item["latency_seconds"] for item in successful_api_results
-                ]
-                costs = [
-                    item["estimated_cost_usd"] for item in successful_api_results
-                ]
+                latencies = [item["latency_seconds"] for item in successful_api_results]
+                costs = [item["estimated_cost_usd"] for item in successful_api_results]
 
                 avg_latency_seconds = round(sum(latencies) / len(latencies), 4)
                 p95_latency_seconds = round(percentile_95(latencies), 4)
