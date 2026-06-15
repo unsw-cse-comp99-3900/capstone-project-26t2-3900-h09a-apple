@@ -88,9 +88,9 @@ let piiSelectors = [];
 // Synchronize the recording status in the local storage
 if (chrome.storage?.local) {
   chrome.storage.local.get(['recordingState', 'piiSelectors'], (result) => {
+    piiSelectors = result.piiSelectors || []; // Always load PII config, even if recording state resolves early
     if (isRecording !== null) return; // Prevent stale state overwrite during rapid start
     isRecording = result.recordingState?.status === 'recording';
-    piiSelectors = result.piiSelectors || [];
     if (isRecording) {
       pendingEvents.forEach((evt) => sendEvent(evt.type, evt.payload));
       recordNavigation(); // Only when in the recording state will the loading navigation of the initial page be captured
@@ -175,7 +175,8 @@ function maskValue(value, element) {
       try {
         return element.matches(selector);
       } catch (e) {
-        return false;
+        console.warn('[WorkTrace] Invalid PII selector, masking by default:', selector);
+        return true; // fail-closed: a bad config must still mask
       }
     })
   ) {
@@ -286,14 +287,6 @@ history.replaceState = function (...args) {
 
 window.addEventListener('popstate', recordNavigation);
 window.addEventListener('hashchange', recordNavigation);
-
-// Capture when the user switches back to this tab (e.g. from another tab or a chrome:// page)
-document.addEventListener('visibilitychange', () => {
-  if (!document.hidden && isRecording) {
-    lastUrl = ''; // Force update context for the backend
-    recordNavigation();
-  }
-});
 
 if (document.readyState === 'complete' || document.readyState === 'interactive') {
   recordNavigation();
