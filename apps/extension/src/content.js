@@ -67,7 +67,7 @@ if (chrome.storage?.local) {
   chrome.storage.local.get(['recordingState'], (result) => {
     isRecording = result.recordingState?.status === 'recording';
     if (isRecording) {
-      pendingEvents.forEach(evt => sendEvent(evt.type, evt.payload));
+      pendingEvents.forEach((evt) => sendEvent(evt.type, evt.payload));
       recordNavigation(); // Only when in the recording state will the loading navigation of the initial page be captured
     }
     pendingEvents = []; // Flush the queue

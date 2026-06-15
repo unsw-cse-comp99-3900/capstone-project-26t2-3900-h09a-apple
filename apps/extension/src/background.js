@@ -10,14 +10,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     };
 
     // Serialize storage writes to prevent race conditions during rapid incoming events
-    writeQueue = writeQueue.then(() => {
-      return chrome.storage?.session.get({ eventBuffer: [] }).then((result) => {
-        const updatedBuffer = [...result.eventBuffer, newEvent];
-        return chrome.storage.session.set({ eventBuffer: updatedBuffer }).then(() => {
-          console.log('Event buffered in session:', newEvent);
+    writeQueue = writeQueue
+      .then(() => {
+        return chrome.storage?.session.get({ eventBuffer: [] }).then((result) => {
+          const updatedBuffer = [...result.eventBuffer, newEvent];
+          return chrome.storage.session.set({ eventBuffer: updatedBuffer }).then(() => {
+            console.log('Event buffered in session:', newEvent);
+          });
         });
-      });
-    }).catch((error) => console.error('Failed to write event to storage:', error));
+      })
+      .catch((error) => console.error('Failed to write event to storage:', error));
   }
 });
 
