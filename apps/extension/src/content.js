@@ -98,7 +98,15 @@ if (chrome.storage?.local) {
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area === 'local') {
       if (changes.recordingState) {
-        isRecording = changes.recordingState.newValue?.status === 'recording';
+        // Whenever the recording is turned on, we need to capture the current page user is on.
+        const newStatus = changes.recordingState.newValue?.status === 'recording';
+        if (newStatus && !isRecording) { // Transitioning from off to on
+          isRecording = true;
+          lastUrl = ''; // Reset deduplication to allow capturing the baseline page
+          recordNavigation(); // Capture the exact page URL where the recording started
+        } else {
+          isRecording = newStatus;
+        }
       }
       if (changes.piiSelectors) {
         piiSelectors = changes.piiSelectors.newValue || [];
