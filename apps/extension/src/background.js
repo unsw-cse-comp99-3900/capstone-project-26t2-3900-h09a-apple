@@ -1,3 +1,5 @@
+let writeQueue = Promise.resolve(); // Create a promise chain to serialize writes
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'CLICK' || message.type === 'NAVIGATION') {
     const newEvent = {
@@ -7,12 +9,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       receivedAt: Date.now(),
     };
 
-    // Add event to session storage, prevent Service Worker sleeping causing data loss
-    chrome.storage?.session.get({ eventBuffer: [] }).then((result) => {
-      const updatedBuffer = [...result.eventBuffer, newEvent];
-      chrome.storage.session.set({ eventBuffer: updatedBuffer });
-      console.log('Event buffered in session:', newEvent);
-    });
+    // Serialize storage writes to prevent race conditions during rapid incoming events
+    writeQueue = writeQueue.then(() => {
+      return chrome.storage?.session.get({ eventBuffer: [] }).then((result) => {
+        const updatedBuffer = [...result.eventBuffer, newEvent];
+        return chrome.storage.session.set({ eventBuffer: updatedBuffer }).then(() => {
+          console.log('Event buffered in session:', newEvent);
+        });
+      });
+    }).catch((error) => console.error('Failed to write event to storage:', error));
   }
 });
 

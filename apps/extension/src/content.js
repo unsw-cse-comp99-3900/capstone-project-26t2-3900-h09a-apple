@@ -59,15 +59,18 @@ function getElementLabel(element) {
   return String(label).trim().replace(/\s+/g, ' ').substring(0, 100);
 }
 
-let isRecording = false;
+let isRecording = null; // null means 'initializing', true/false mean resolved
+let pendingEvents = []; // Queue for events fired before state resolves
 
 // Synchronize the recording status in the local storage
 if (chrome.storage?.local) {
   chrome.storage.local.get(['recordingState'], (result) => {
     isRecording = result.recordingState?.status === 'recording';
     if (isRecording) {
+      pendingEvents.forEach(evt => sendEvent(evt.type, evt.payload));
       recordNavigation(); // Only when in the recording state will the loading navigation of the initial page be captured
     }
+    pendingEvents = []; // Flush the queue
   });
 
   chrome.storage.onChanged.addListener((changes, area) => {
@@ -78,7 +81,12 @@ if (chrome.storage?.local) {
 }
 
 function sendEvent(type, payload) {
-  if (!isRecording) return; // In the non-recording state, events are directly discarded and not sent to the background
+  if (isRecording === false) return; // Discard if definitely not recording
+
+  if (isRecording === null) {
+    pendingEvents.push({ type, payload }); // Queue if state is still loading
+    return;
+  }
 
   try {
     chrome.runtime.sendMessage({ type, payload });
@@ -137,6 +145,8 @@ document.addEventListener(
 let lastUrl = '';
 
 function recordNavigation() {
+  if (isRecording === false) return; // Prevent mutating lastUrl when recording is off
+
   const currentUrl = window.location.href;
   if (currentUrl === lastUrl) return; // Deduplicate concurrent navigation triggers
   lastUrl = currentUrl;
@@ -164,4 +174,9 @@ history.replaceState = function (...args) {
 
 window.addEventListener('popstate', recordNavigation);
 window.addEventListener('hashchange', recordNavigation);
-window.addEventListener('load', recordNavigation);
+
+if (document.readyState === 'complete' || document.readyState === 'interactive') {
+  recordNavigation();
+} else {
+  window.addEventListener('load', recordNavigation, { once: true });
+}
