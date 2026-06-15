@@ -10,17 +10,17 @@ The generated output must be valid JSON and pass validation against the `SopPayl
 
 This spike evaluates:
 
-* JSON schema compliance
-* Latency
-* Estimated cost
-* Model and prompt suitability
+- JSON schema compliance
+- Latency
+- Estimated cost
+- Model and prompt suitability
 
 Out of scope:
 
-* RAG
-* Fine-tuning
-* Production prompt engineering
-* Real session data
+- RAG
+- Fine-tuning
+- Production prompt engineering
+- Real session data
 
 ## Test Inputs
 
@@ -50,17 +50,17 @@ The output must validate against `SopPayload`.
 
 Required fields:
 
-* `title`
-* `summary`
-* `steps`
-* `warnings`
+- `title`
+- `summary`
+- `steps`
+- `warnings`
 
 Each step must include:
 
-* `order`
-* `title`
-* `instruction`
-* `source_event_ids`
+- `order`
+- `title`
+- `instruction`
+- `source_event_ids`
 
 ## Evaluation Script
 
@@ -72,12 +72,12 @@ apps/api/scripts/evaluate_sop_llm.py
 
 The script records:
 
-* API success
-* Schema validation result
-* Latency
-* Token usage
-* Estimated cost
-* Error message if failed
+- API success
+- Schema validation result
+- Latency
+- Token usage
+- Estimated cost
+- Error message if failed
 
 ## Prompt Candidate Results
 
@@ -110,11 +110,11 @@ Chosen prompt: `basic_json_only`
 
 Reason:
 
-* `gpt-5-mini` passed schema validation on all 5 inputs.
-* It was faster than `gpt-5`.
-* It was significantly cheaper than `gpt-5`.
-* Its P95 latency was under the 45-second acceptance threshold.
-* `gpt-5` failed schema validation on 1 input.
+- `gpt-5-mini` passed schema validation on all 5 inputs.
+- It was faster than `gpt-5`.
+- It was significantly cheaper than `gpt-5`.
+- Its P95 latency was under the 45-second acceptance threshold.
+- `gpt-5` failed schema validation on 1 input.
 
 ## Final Prompt
 
