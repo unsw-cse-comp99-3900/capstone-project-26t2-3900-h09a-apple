@@ -79,7 +79,8 @@ function getElementLabel(element) {
   return String(label).trim().replace(/\s+/g, ' ').substring(0, 100);
 }
 
-let isRecording = false;
+let isRecording = null; // null means 'initializing', true/false mean resolved
+let pendingEvents = []; // Queue for events fired before state resolves
 let piiSelectors = [];
 
 // Synchronize the recording status in the local storage
@@ -88,8 +89,10 @@ if (chrome.storage?.local) {
     isRecording = result.recordingState?.status === 'recording';
     piiSelectors = result.piiSelectors || [];
     if (isRecording) {
+      pendingEvents.forEach((evt) => sendEvent(evt.type, evt.payload));
       recordNavigation(); // Only when in the recording state will the loading navigation of the initial page be captured
     }
+    pendingEvents = []; // Flush the queue
   });
 
   chrome.storage.onChanged.addListener((changes, area) => {
@@ -105,7 +108,12 @@ if (chrome.storage?.local) {
 }
 
 function sendEvent(type, payload) {
-  if (!isRecording) return; // In the non-recording state, events are directly discarded and not sent to the background
+  if (isRecording === false) return; // Discard if definitely not recording
+
+  if (isRecording === null) {
+    pendingEvents.push({ type, payload }); // Queue if state is still loading
+    return;
+  }
 
   try {
     chrome.runtime.sendMessage({ type, payload });
@@ -201,7 +209,7 @@ function handleInput(event) {
   }
 
   const timer = setTimeout(() => {
-    if (!isRecording) return;
+    if (isRecording === false) return;
     
     // Deduplicate: Don't send if the value hasn't changed since the last recorded event
     const currentValue = target.value;
@@ -229,7 +237,7 @@ document.addEventListener('change', handleInput, true);
 let lastUrl = '';
 
 function recordNavigation() {
-  if (!isRecording) return; // Prevent updating lastUrl and dropping events before storage syncs
+  if (isRecording === false) return; // Prevent mutating lastUrl when recording is off
 
   const currentUrl = window.location.href;
   if (currentUrl === lastUrl) return; // Deduplicate concurrent navigation triggers
@@ -258,4 +266,9 @@ history.replaceState = function (...args) {
 
 window.addEventListener('popstate', recordNavigation);
 window.addEventListener('hashchange', recordNavigation);
-window.addEventListener('load', recordNavigation);
+
+if (document.readyState === 'complete' || document.readyState === 'interactive') {
+  recordNavigation();
+} else {
+  window.addEventListener('load', recordNavigation, { once: true });
+}

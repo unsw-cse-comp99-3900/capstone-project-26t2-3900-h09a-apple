@@ -79,11 +79,11 @@ workflowNameInput.addEventListener('input', (event) => {
   updateState(setWorkflowName(state, event.target.value));
 });
 
-form.addEventListener('submit', (event) => {
+form.addEventListener('submit', async (event) => {
   event.preventDefault();
-  updateState(startRecording(state));
   eventCount = 0; // resert event count
-  chrome.storage?.session?.set({ eventBuffer: [] }); // Clear the previous buffer when starting a new recording
+  await chrome.storage?.session?.set({ eventBuffer: [] }); // Clear the previous buffer before starting a new recording
+  updateState(startRecording(state));
 });
 
 stopButton.addEventListener('click', () => {
