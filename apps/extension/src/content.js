@@ -110,6 +110,8 @@ if (chrome.storage?.local) {
 function sendEvent(type, payload) {
   if (isRecording === false) return; // Discard if definitely not recording
 
+  // if the content.js is still in the process of initializing, all the events
+  // happens will be add to pending queue.
   if (isRecording === null) {
     pendingEvents.push({ type, payload }); // Queue if state is still loading
     return;
