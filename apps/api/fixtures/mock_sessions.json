@@ -1,0 +1,166 @@
+[
+  {
+    "id": "sample-login-flow",
+    "description": "User logs into the application.",
+    "events": [
+      {
+        "id": "event-1",
+        "type": "navigation",
+        "url": "/login",
+        "timestamp": "2026-06-15T10:00:00Z"
+      },
+      {
+        "id": "event-2",
+        "type": "click",
+        "target": "email input",
+        "timestamp": "2026-06-15T10:00:03Z"
+      },
+      {
+        "id": "event-3",
+        "type": "input",
+        "target": "email input",
+        "value": "user@example.com",
+        "timestamp": "2026-06-15T10:00:05Z"
+      },
+      {
+        "id": "event-4",
+        "type": "input",
+        "target": "password input",
+        "value": "********",
+        "timestamp": "2026-06-15T10:00:08Z"
+      },
+      {
+        "id": "event-5",
+        "type": "click",
+        "target": "login button",
+        "timestamp": "2026-06-15T10:00:10Z"
+      }
+    ]
+  },
+  {
+    "id": "sample-create-project-flow",
+    "description": "User creates a new project.",
+    "events": [
+      {
+        "id": "event-1",
+        "type": "navigation",
+        "url": "/dashboard",
+        "timestamp": "2026-06-15T10:05:00Z"
+      },
+      {
+        "id": "event-2",
+        "type": "click",
+        "target": "new project button",
+        "timestamp": "2026-06-15T10:05:04Z"
+      },
+      {
+        "id": "event-3",
+        "type": "input",
+        "target": "project name input",
+        "value": "Customer Onboarding SOP",
+        "timestamp": "2026-06-15T10:05:08Z"
+      },
+      {
+        "id": "event-4",
+        "type": "click",
+        "target": "create project button",
+        "timestamp": "2026-06-15T10:05:12Z"
+      }
+    ]
+  },
+  {
+    "id": "sample-search-filter-flow",
+    "description": "User searches and filters a session list.",
+    "events": [
+      {
+        "id": "event-1",
+        "type": "navigation",
+        "url": "/sessions",
+        "timestamp": "2026-06-15T10:10:00Z"
+      },
+      {
+        "id": "event-2",
+        "type": "input",
+        "target": "search input",
+        "value": "onboarding",
+        "timestamp": "2026-06-15T10:10:05Z"
+      },
+      {
+        "id": "event-3",
+        "type": "click",
+        "target": "status filter dropdown",
+        "timestamp": "2026-06-15T10:10:08Z"
+      },
+      {
+        "id": "event-4",
+        "type": "click",
+        "target": "completed option",
+        "timestamp": "2026-06-15T10:10:11Z"
+      }
+    ]
+  },
+  {
+    "id": "sample-feedback-form-flow",
+    "description": "User fills and submits a feedback form.",
+    "events": [
+      {
+        "id": "event-1",
+        "type": "navigation",
+        "url": "/feedback",
+        "timestamp": "2026-06-15T10:15:00Z"
+      },
+      {
+        "id": "event-2",
+        "type": "input",
+        "target": "feedback title input",
+        "value": "Issue with generated SOP",
+        "timestamp": "2026-06-15T10:15:05Z"
+      },
+      {
+        "id": "event-3",
+        "type": "input",
+        "target": "feedback body textarea",
+        "value": "The generated SOP missed one important step.",
+        "timestamp": "2026-06-15T10:15:10Z"
+      },
+      {
+        "id": "event-4",
+        "type": "click",
+        "target": "submit feedback button",
+        "timestamp": "2026-06-15T10:15:15Z"
+      }
+    ]
+  },
+  {
+    "id": "sample-account-settings-flow",
+    "description": "User updates account settings.",
+    "events": [
+      {
+        "id": "event-1",
+        "type": "navigation",
+        "url": "/settings/profile",
+        "timestamp": "2026-06-15T10:20:00Z"
+      },
+      {
+        "id": "event-2",
+        "type": "input",
+        "target": "display name input",
+        "value": "Alex Chen",
+        "timestamp": "2026-06-15T10:20:04Z"
+      },
+      {
+        "id": "event-3",
+        "type": "input",
+        "target": "job title input",
+        "value": "Product Designer",
+        "timestamp": "2026-06-15T10:20:08Z"
+      },
+      {
+        "id": "event-4",
+        "type": "click",
+        "target": "save changes button",
+        "timestamp": "2026-06-15T10:20:12Z"
+      }
+    ]
+  }
+]
