@@ -1,5 +1,7 @@
-from typing import Protocol 
+from typing import Protocol
+
 from app.sop_schema import SopPayload
+
 
 class SopLlmProvider(Protocol):
     name: str

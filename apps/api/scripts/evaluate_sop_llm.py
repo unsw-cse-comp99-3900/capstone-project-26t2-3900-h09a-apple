@@ -8,7 +8,6 @@ from pydantic import ValidationError
 
 from app.sop_schema import SopPayload
 
-
 API_ROOT = Path(__file__).resolve().parents[1]
 FIXTURES_PATH = API_ROOT / "fixtures" / "mock_sessions.json"
 
@@ -205,7 +204,7 @@ def main() -> None:
 
     client = OpenAI()
 
-    with open(FIXTURES_PATH, "r", encoding="utf-8") as file:
+    with open(FIXTURES_PATH, encoding="utf-8") as file:
         sessions = json.load(file)
 
     models = ["gpt-5-mini", "gpt-5"]
