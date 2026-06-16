@@ -12,7 +12,7 @@ API_ROOT = Path(__file__).resolve().parents[1]
 FIXTURES_PATH = API_ROOT / "fixtures" / "mock_sessions.json"
 
 
-MODEL_PRICING_USD_PER_1M = {
+ESTIMATED_MODEL_PRICING_USD_PER_1M = {
     "gpt-5-mini": {
         "input": 0.25,
         "output": 2.00,
@@ -145,7 +145,7 @@ def estimate_cost_usd(
     prompt_tokens: int,
     completion_tokens: int,
 ) -> float:
-    pricing = MODEL_PRICING_USD_PER_1M.get(model)
+    pricing = ESTIMATED_MODEL_PRICING_USD_PER_1M.get(model)
 
     if pricing is None:
         return 0.0
