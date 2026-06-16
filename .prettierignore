@@ -8,3 +8,8 @@ pnpm-lock.yaml
 
 .venv
 __pycache__
+
+# alembic scaffolding (Python tooling, not subject to Prettier)
+apps/api/alembic/README
+apps/api/alembic/script.py.mako
+apps/api/alembic.ini
