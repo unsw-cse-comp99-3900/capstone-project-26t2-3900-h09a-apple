@@ -1,3 +1,15 @@
+function mapBufferedEventToWTEventInput(evt) {
+  const payload = evt.payload || {};
+  return {
+    type: evt.type.toLowerCase(), // Schema expects lowercase, e.g., 'click'
+    target_selector: payload.selector, // Flattened
+    target_label: payload.label, // Flattened
+    value: payload.value, // Flattened
+    url: payload.url, // Flattened
+    timestamp_ms: payload.timestamp || evt.receivedAt || 0,
+  };
+}
+
 /**
  * Assembles raw buffered events into a structured SessionPayload.
  * Handles chronological sorting and adjacent identical event deduplication.
@@ -35,13 +47,10 @@ export function assembleSession(events, metadata) {
   // 3. Assemble and return the structured SessionPayload JSON format
   return {
     client_session_id: metadata.client_session_id || crypto.randomUUID(),
-    workflowName: metadata.workflowName || '',
-    startedAt: metadata.startedAt || 0,
-    stoppedAt: metadata.stoppedAt || Date.now(),
-    eventCount: deduplicatedEvents.length,
-    events: deduplicatedEvents.map((evt) => ({
-      ...evt,
-      timestamp_ms: evt.payload?.timestamp || evt.receivedAt || 0, // Enforce schema naming
-    })),
+    workflow_name: metadata.workflowName || '',
+    started_at: new Date(metadata.startedAt || 0).toISOString(),
+    stopped_at: new Date(metadata.stoppedAt || Date.now()).toISOString(),
+    event_count: deduplicatedEvents.length,
+    events: deduplicatedEvents.map(mapBufferedEventToWTEventInput),
   };
 }

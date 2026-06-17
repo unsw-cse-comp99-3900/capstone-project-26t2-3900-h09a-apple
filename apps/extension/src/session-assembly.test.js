@@ -29,12 +29,12 @@ test('assembleSession sorts chronologically, deduplicates adjacent events, and f
 
   // Verify Metadata
   assert.equal(payload.client_session_id, 'session-xyz-789');
-  assert.equal(payload.workflowName, 'Test Backend Assembly');
-  assert.equal(payload.startedAt, 1000);
-  assert.equal(payload.stoppedAt, 5000);
+  assert.equal(payload.workflow_name, 'Test Backend Assembly');
+  assert.equal(payload.started_at, new Date(1000).toISOString());
+  assert.equal(payload.stopped_at, new Date(5000).toISOString());
 
   // Verify sorting and deduplication (11 raw -> 8 unique)
-  assert.equal(payload.eventCount, 8);
+  assert.equal(payload.event_count, 8);
   assert.equal(payload.events.length, 8);
 
   // Verify order
@@ -47,13 +47,22 @@ test('assembleSession sorts chronologically, deduplicates adjacent events, and f
   // Verify type sequence after sorting & deduplicating
   const finalSequence = payload.events.map((e) => e.type);
   assert.deepEqual(finalSequence, [
-    'NAVIGATION',
-    'NAVIGATION',
-    'CLICK',
-    'INPUT',
-    'CLICK',
-    'INPUT',
-    'INPUT',
-    'CLICK',
+    'navigation',
+    'navigation',
+    'click',
+    'input',
+    'click',
+    'input',
+    'input',
+    'click',
   ]);
+
+  // Verify flattened event structure (no nested payload)
+  const firstNav = payload.events[0];
+  assert.equal(firstNav.url, 'https://apple.com');
+  assert.equal('payload' in firstNav, false);
+
+  const firstInput = payload.events[3];
+  assert.equal(firstInput.target_selector, '#in');
+  assert.equal(firstInput.value, 'hello');
 });
