@@ -39,6 +39,8 @@ export function startRecording(state) {
     ...state,
     workflowName: state.workflowName.trim(),
     status: RecordingStatus.RECORDING,
+    client_session_id: crypto.randomUUID(), // Unique session ID
+    startedAt: Date.now(), // Baseline start time
   };
 }
 

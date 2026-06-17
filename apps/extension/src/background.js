@@ -1,3 +1,5 @@
+import { assembleSession } from './session-assembly.js';
+
 let writeQueue = Promise.resolve(); // Create a promise chain to serialize writes
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -20,6 +22,35 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         });
       })
       .catch((error) => console.error('Failed to write event to storage:', error));
+  }
+});
+
+// Listen for recording completion to assemble and save the structured session
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local' && changes.recordingState) {
+    const oldState = changes.recordingState.oldValue;
+    const newState = changes.recordingState.newValue;
+
+    if (oldState?.status === 'recording' && newState?.status === 'completed') {
+      // Chain to writeQueue to guarantee we don't assemble while events are still buffering
+      writeQueue = writeQueue
+        .then(() => {
+          return chrome.storage.session.get({ eventBuffer: [] }).then((result) => {
+            const sessionPayload = assembleSession(result.eventBuffer, {
+              client_session_id: oldState.client_session_id,
+              workflowName: oldState.workflowName,
+              startedAt: oldState.startedAt,
+              stoppedAt: Date.now(),
+            });
+
+            const storageKey = `session_${sessionPayload.client_session_id}`;
+            return chrome.storage.local.set({ [storageKey]: sessionPayload }).then(() => {
+              console.log('Structured session assembled and saved locally:', storageKey);
+            });
+          });
+        })
+        .catch((err) => console.error('Failed to assemble session:', err));
+    }
   }
 });
 
