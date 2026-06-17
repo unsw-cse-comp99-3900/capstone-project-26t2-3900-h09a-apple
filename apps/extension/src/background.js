@@ -37,13 +37,13 @@ chrome.storage.onChanged.addListener((changes, area) => {
         .then(() => {
           return chrome.storage.session.get({ eventBuffer: [] }).then((result) => {
             const sessionPayload = assembleSession(result.eventBuffer, {
-              id: oldState.id,
+              client_session_id: oldState.client_session_id,
               workflowName: oldState.workflowName,
               startedAt: oldState.startedAt,
               stoppedAt: Date.now(),
             });
 
-            const storageKey = `session_${sessionPayload.id}`;
+            const storageKey = `session_${sessionPayload.client_session_id}`;
             return chrome.storage.local.set({ [storageKey]: sessionPayload }).then(() => {
               console.log('Structured session assembled and saved locally:', storageKey);
             });

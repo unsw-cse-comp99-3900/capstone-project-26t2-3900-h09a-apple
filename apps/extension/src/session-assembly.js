@@ -34,7 +34,7 @@ export function assembleSession(events, metadata) {
 
   // 3. Assemble and return the structured SessionPayload JSON format
   return {
-    id: metadata.id || crypto.randomUUID(),
+    client_session_id: metadata.client_session_id || crypto.randomUUID(),
     workflowName: metadata.workflowName || '',
     startedAt: metadata.startedAt || 0,
     stoppedAt: metadata.stoppedAt || Date.now(),

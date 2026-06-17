@@ -4,7 +4,7 @@ import { assembleSession } from './session-assembly.js';
 
 test('assembleSession sorts chronologically, deduplicates adjacent events, and formats SessionPayload', () => {
   const metadata = {
-    id: 'session-xyz-789',
+    client_session_id: 'session-xyz-789',
     workflowName: 'Test Backend Assembly',
     startedAt: 1000,
     stoppedAt: 5000,
@@ -28,7 +28,7 @@ test('assembleSession sorts chronologically, deduplicates adjacent events, and f
   const payload = assembleSession(rawEvents, metadata);
 
   // Verify Metadata
-  assert.equal(payload.id, 'session-xyz-789');
+  assert.equal(payload.client_session_id, 'session-xyz-789');
   assert.equal(payload.workflowName, 'Test Backend Assembly');
   assert.equal(payload.startedAt, 1000);
   assert.equal(payload.stoppedAt, 5000);
