@@ -296,6 +296,21 @@ footer {
   line-height: 1.4;
 }
 
+.button-review {
+  width: 100%;
+  margin-top: 14px;
+  color: #4b58c5;
+  background: #eef1ff;
+  border-color: #cbd5ff;
+}
+
+.button-review:hover:not(:disabled) {
+  color: #fff;
+  background: linear-gradient(135deg, #706ee8, #657bdc);
+  border-color: transparent;
+  box-shadow: 0 10px 24px rgb(91 91 210 / 24%);
+}
+
 footer svg {
   flex: 0 0 auto;
   width: 16px;

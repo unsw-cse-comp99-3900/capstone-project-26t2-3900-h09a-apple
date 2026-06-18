@@ -3,6 +3,27 @@ import { assembleSession } from './session-assembly.js';
 let writeQueue = Promise.resolve(); // Create a promise chain to serialize writes
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type === 'GET_SESSION_PAYLOAD') {
+    const storageKey = `session_${message.sessionId}`;
+
+    chrome.storage.local
+      .get([storageKey])
+      .then((result) => {
+        sendResponse({
+          ok: true,
+          session: result[storageKey] || null,
+        });
+      })
+      .catch((error) => {
+        sendResponse({
+          ok: false,
+          error: error instanceof Error ? error.message : 'Failed to read session payload',
+        });
+      });
+
+    return true;
+  }
+
   if (message.type === 'CLICK' || message.type === 'NAVIGATION' || message.type === 'INPUT') {
     const newEvent = {
       type: message.type,

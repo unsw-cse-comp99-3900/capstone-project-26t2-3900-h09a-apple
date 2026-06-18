@@ -13,6 +13,7 @@ const workflowNameInput = document.querySelector('#workflowName');
 const workflowHint = document.querySelector('#workflowHint');
 const startButton = document.querySelector('#startButton');
 const stopButton = document.querySelector('#stopButton');
+const reviewButton = document.querySelector('#reviewButton');
 const statusBadge = document.querySelector('#statusBadge');
 const statusText = document.querySelector('#statusText');
 
@@ -51,11 +52,14 @@ chrome.storage?.onChanged.addListener((changes, area) => {
 
 function render() {
   const isRecording = state.status === RecordingStatus.RECORDING;
+  const canReview = state.status === RecordingStatus.COMPLETED && Boolean(state.client_session_id);
 
   workflowNameInput.value = state.workflowName;
   workflowNameInput.disabled = isRecording;
   startButton.disabled = !canStartRecording(state);
   stopButton.disabled = !canStopRecording(state);
+  reviewButton.hidden = !canReview;
+  reviewButton.disabled = !canReview;
   statusText.textContent = statusLabels[state.status];
   statusBadge.className = `status-badge status-${state.status}`;
 
@@ -88,6 +92,16 @@ form.addEventListener('submit', async (event) => {
 
 stopButton.addEventListener('click', () => {
   updateState(stopRecording(state));
+});
+
+reviewButton.addEventListener('click', () => {
+  if (state.status !== RecordingStatus.COMPLETED || !state.client_session_id) {
+    return;
+  }
+
+  chrome.tabs.create({
+    url: `http://localhost:3000/session/review?id=${encodeURIComponent(state.client_session_id)}`,
+  });
 });
 
 render();
