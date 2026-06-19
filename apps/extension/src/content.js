@@ -1,4 +1,35 @@
 // Placeholder for page event capture in later recorder tickets.
+const WORKTRACE_PAGE_MESSAGE_SOURCE = 'worktrace-web';
+const WORKTRACE_EXTENSION_MESSAGE_SOURCE = 'worktrace-extension';
+
+window.addEventListener('message', (event) => {
+  if (event.source !== window || event.data?.source !== WORKTRACE_PAGE_MESSAGE_SOURCE) {
+    return;
+  }
+
+  if (event.data.type !== 'GET_SESSION_PAYLOAD') {
+    return;
+  }
+
+  chrome.runtime.sendMessage(
+    {
+      type: 'GET_SESSION_PAYLOAD',
+      sessionId: event.data.sessionId,
+    },
+    (response) => {
+      window.postMessage(
+        {
+          source: WORKTRACE_EXTENSION_MESSAGE_SOURCE,
+          type: 'GET_SESSION_PAYLOAD_RESULT',
+          requestId: event.data.requestId,
+          response,
+        },
+        window.location.origin,
+      );
+    },
+  );
+});
+
 /**
  * Generates a stable CSS selector for a given element.
  */
