@@ -11,15 +11,30 @@ function setupPopupDom(recordingState = { status: 'ready', workflowName: '' }) {
   });
   const openedTabs = [];
   let persistedRecordingState = recordingState;
+  let localStorageValues = {};
+  let storageChangeCallback = () => {};
 
   globalThis.window = dom.window;
   globalThis.document = dom.window.document;
   globalThis.chrome = {
     storage: {
       local: {
-        get: (_keys, callback) => callback({ recordingState: persistedRecordingState }),
+        get: (keys, callback) => {
+          const result = { recordingState: persistedRecordingState };
+
+          for (const key of keys) {
+            if (key in localStorageValues) {
+              result[key] = localStorageValues[key];
+            }
+          }
+
+          callback(result);
+        },
         set: (value) => {
-          persistedRecordingState = value.recordingState;
+          if (value.recordingState) {
+            persistedRecordingState = value.recordingState;
+          }
+          localStorageValues = { ...localStorageValues, ...value };
         },
       },
       session: {
@@ -27,7 +42,9 @@ function setupPopupDom(recordingState = { status: 'ready', workflowName: '' }) {
         set: () => Promise.resolve(),
       },
       onChanged: {
-        addListener: () => {},
+        addListener: (callback) => {
+          storageChangeCallback = callback;
+        },
       },
     },
     tabs: {
@@ -35,7 +52,21 @@ function setupPopupDom(recordingState = { status: 'ready', workflowName: '' }) {
     },
   };
 
-  return { dom, openedTabs };
+  return {
+    dom,
+    openedTabs,
+    getRecordingState() {
+      return persistedRecordingState;
+    },
+    markSessionPayloadReady(sessionId) {
+      const storageKey = `session_${sessionId}`;
+      localStorageValues[storageKey] = { client_session_id: sessionId };
+      storageChangeCallback(
+        { [storageKey]: { newValue: localStorageValues[storageKey] } },
+        'local',
+      );
+    },
+  };
 }
 
 async function loadPopupScript() {
@@ -49,7 +80,7 @@ async function flushPromises() {
 }
 
 test('review session button is only available after recording is completed', async () => {
-  const { dom, openedTabs } = setupPopupDom();
+  const { dom, openedTabs, getRecordingState, markSessionPayloadReady } = setupPopupDom();
   await loadPopupScript();
 
   const workflowNameInput = dom.window.document.querySelector('#workflowName');
@@ -76,10 +107,18 @@ test('review session button is only available after recording is completed', asy
   assert.equal(stopButton.disabled, false);
   assert.equal(reviewButton.hidden, true);
 
-  // Completed: Review becomes visible and enabled
+  // Completed: Review becomes visible, but it stays disabled until the assembled payload exists.
   stopButton.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
   assert.equal(statusText.textContent, 'Completed');
   assert.equal(reviewButton.hidden, false);
+  assert.equal(reviewButton.disabled, true);
+
+  reviewButton.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+  assert.equal(openedTabs.length, 0);
+
+  // Once the service worker writes session_<id>, Review becomes enabled.
+  const sessionId = getRecordingState().client_session_id;
+  markSessionPayloadReady(sessionId);
   assert.equal(reviewButton.disabled, false);
 
   // Clicking Review opens the session review route with the generated session id

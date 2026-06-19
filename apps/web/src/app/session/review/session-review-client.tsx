@@ -63,7 +63,23 @@ const EVENT_LABELS: Record<EventType, string> = {
   tab_switch: 'Tab switch',
 };
 
-function requestSessionFromExtension(sessionId: string): Promise<SessionUploadPayload | null> {
+const SESSION_REQUEST_ATTEMPTS = [
+  { timeoutMs: 1500, delayMs: 0 },
+  { timeoutMs: 2000, delayMs: 500 },
+  { timeoutMs: 2500, delayMs: 1000 },
+  { timeoutMs: 3000, delayMs: 1500 },
+];
+
+function wait(delayMs: number): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, delayMs);
+  });
+}
+
+function requestSessionFromExtension(
+  sessionId: string,
+  timeoutMs: number,
+): Promise<SessionUploadPayload | null> {
   return new Promise((resolve, reject) => {
     if (typeof window === 'undefined' || !sessionId) {
       resolve(null);
@@ -74,7 +90,7 @@ function requestSessionFromExtension(sessionId: string): Promise<SessionUploadPa
     const timeout = window.setTimeout(() => {
       window.removeEventListener('message', handleMessage);
       reject(new Error('Timed out waiting for the WorkTrace extension'));
-    }, 2000);
+    }, timeoutMs);
 
     function handleMessage(event: MessageEvent) {
       if (event.source !== window || event.data?.source !== 'worktrace-extension') {
@@ -108,6 +124,28 @@ function requestSessionFromExtension(sessionId: string): Promise<SessionUploadPa
       window.location.origin,
     );
   });
+}
+
+async function requestSessionFromExtensionWithRetry(
+  sessionId: string,
+): Promise<SessionUploadPayload | null> {
+  let lastError: unknown;
+
+  for (const attempt of SESSION_REQUEST_ATTEMPTS) {
+    if (attempt.delayMs > 0) {
+      await wait(attempt.delayMs);
+    }
+
+    try {
+      return await requestSessionFromExtension(sessionId, attempt.timeoutMs);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new Error('Unable to load captured session from the WorkTrace extension.');
 }
 
 function formatDuration(startedAt: string, stoppedAt?: string | null): string {
@@ -152,6 +190,9 @@ function describeEvent(event: WTEventInput): string {
   if (event.type === 'submit') {
     return event.target_label ?? event.target_selector ?? 'Submitted form';
   }
+  if (event.type === 'tab_switch') {
+    return event.url ?? 'Switched browser tab';
+  }
 
   return event.url ?? 'Switched browser tab';
 }
@@ -184,9 +225,9 @@ export function SessionReviewClient({ sessionId }: SessionReviewClientProps) {
     }
 
     setLoadState('loading');
-    setLoadMessage('Loading captured session from the WorkTrace extension...');
+    setLoadMessage('Waiting for the WorkTrace extension to load the captured session...');
 
-    requestSessionFromExtension(sessionId)
+    requestSessionFromExtensionWithRetry(sessionId)
       .then((capturedSession) => {
         if (cancelled) {
           return;
@@ -218,35 +259,9 @@ export function SessionReviewClient({ sessionId }: SessionReviewClientProps) {
     };
   }, [sessionId]);
 
-  async function handleSubmit() {
-    setSubmitState('submitting');
-    setErrorMessage('');
-
-    if (!session) {
-      setSubmitState('error');
-      setErrorMessage('No captured session is loaded.');
-      return;
-    }
-
-    try {
-      const response = await fetch('http://localhost:8000/api/v1/sessions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(session),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Backend returned ${response.status}`);
-      }
-
-      setSubmitState('success');
-      window.location.href = `/sop/status?sessionId=${encodeURIComponent(session.client_session_id)}`;
-    } catch (error) {
-      setSubmitState('error');
-      setErrorMessage(error instanceof Error ? error.message : 'Session submission failed');
-    }
+  function handleSubmit() {
+    setSubmitState('error');
+    setErrorMessage('Backend submission will be implemented in H09AAPPLE-14.');
   }
 
   return (
@@ -300,7 +315,7 @@ export function SessionReviewClient({ sessionId }: SessionReviewClientProps) {
                 {session.events.map((event, index) => (
                   <li
                     className={styles.timelineItem}
-                    key={`${event.timestamp_ms}-${event.type}-${index}`}
+                    key={`${index}-${event.timestamp_ms}-${event.target_selector ?? event.url ?? event.type}`}
                   >
                     <div className={styles.eventIcon} aria-hidden="true">
                       {EVENT_ICONS[event.type]}

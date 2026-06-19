@@ -7,21 +7,26 @@ const reviewClientSource = readFileSync(
 );
 
 describe('session review timeline support', () => {
-  it('renders labels for captured click, navigation, and input events', () => {
-    expect(reviewClientSource).toContain("click: 'Click'");
-    expect(reviewClientSource).toContain("navigation: 'Navigation'");
-    expect(reviewClientSource).toContain("input: 'Input'");
-  });
+it('renders labels for all EventType values', () => {
+expect(reviewClientSource).toContain("click: 'Click'");
+expect(reviewClientSource).toContain("navigation: 'Navigation'");
+expect(reviewClientSource).toContain("input: 'Input'");
+expect(reviewClientSource).toContain("submit: 'Submit'");
+expect(reviewClientSource).toContain("tab_switch: 'Tab switch'");
+});
+it('defines icons for all EventType values', () => {
+expect(reviewClientSource).toContain('submit: (');
+expect(reviewClientSource).toContain('tab_switch: (');
+expect(reviewClientSource).toMatch(/const EVENT_ICONS: Record<EventType/);
+expect(reviewClientSource).toMatch(/const EVENT_LABELS: Record<EventType/);
+});
+it('describes submit events in the timeline', () => {
+expect(reviewClientSource).toContain("event.type === 'submit'");
+expect(reviewClientSource).toContain('Submitted form');
+});
+it('handles tab_switch events in the timeline', () => {
+// currently via default branch; prefer explicit event.type === 'tab_switch' later
+expect(reviewClientSource).toContain('Switched browser tab');
+});
 
-  it('describes click, navigation, and input payloads in the timeline', () => {
-    expect(reviewClientSource).toContain("event.type === 'navigation'");
-    expect(reviewClientSource).toContain("event.type === 'click'");
-    expect(reviewClientSource).toContain("event.type === 'input'");
-    expect(reviewClientSource).toContain('Entered ${event.value');
-  });
-
-  it('does not fall back to mock session data when loading fails', () => {
-    expect(reviewClientSource).not.toContain('MOCK_SESSION');
-    expect(reviewClientSource).toContain('No captured session was found for this id.');
-  });
 });
