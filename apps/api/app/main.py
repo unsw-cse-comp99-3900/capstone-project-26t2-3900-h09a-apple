@@ -1,8 +1,14 @@
 import os
 
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI, status
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.orm import Session as DBSession
+
+from app.database import get_db
+from app.ingestion import ingest_session
+from app.session_schema import SessionPayload
+from app.storage import ObjectStorage, get_storage
 
 load_dotenv()
 
@@ -17,7 +23,29 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+DB_DEPENDENCY = Depends(get_db)
+STORAGE_DEPENDENCY = Depends(get_storage)
+
 
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.post("/api/v1/sessions", status_code=status.HTTP_201_CREATED)
+def create_session(
+    payload: SessionPayload,
+    db: DBSession = DB_DEPENDENCY,
+    storage: ObjectStorage = STORAGE_DEPENDENCY,
+) -> dict[str, str]:
+    try:
+        ingested_session = ingest_session(payload, db, storage)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+    return {
+        "session_id": ingested_session.session_id,
+        "job_id": ingested_session.job_id,
+    }
