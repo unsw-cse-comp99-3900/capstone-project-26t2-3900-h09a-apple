@@ -6,7 +6,7 @@ from datetime import datetime
 from enum import Enum
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 # 规定合法eventtype
@@ -31,6 +31,7 @@ class WTEventInput(BaseModel):
     screenshot_id: UUID | None = None
     timestamp_ms: int = Field(gt=0)
 
+MAX_SCREENSHOT_BYTES = 10 * 1024 * 1024
 
 class ScreenshotInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -45,9 +46,13 @@ class ScreenshotInput(BaseModel):
     @classmethod
     def validate_base64(cls, value: str) -> str:
         try:
-            base64.b64decode(value, validate=True)
+            body = base64.b64decode(value, validate=True)
         except (binascii.Error, ValueError) as exc:
             raise ValueError("data_base64 must be valid base64") from exc
+
+        if len(body) > MAX_SCREENSHOT_BYTES:
+            raise ValueError("screenshot must be 10MB or smaller")
+
         return value
 
 
@@ -61,3 +66,22 @@ class SessionPayload(BaseModel):
     stopped_at: datetime | None = None
     events: list[WTEventInput]
     screenshots: list[ScreenshotInput] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_screenshot_references(self) -> SessionPayload:
+        screenshot_ids = [screenshot.id for screenshot in self.screenshots]
+
+        if len(screenshot_ids) != len(set(screenshot_ids)):
+            raise ValueError("screenshot ids must be unique")
+
+        screenshot_id_set = set(screenshot_ids)
+        missing_ids = [
+            event.screenshot_id
+            for event in self.events
+            if event.screenshot_id is not None and event.screenshot_id not in screenshot_id_set
+        ]
+
+        if missing_ids:
+            raise ValueError("event screenshot_id must reference an item in screenshots")
+
+        return self
