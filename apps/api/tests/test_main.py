@@ -4,7 +4,6 @@ from fastapi.testclient import TestClient
 import app.main as main_module
 from app.database import get_db
 from app.main import app
-from app.storage import get_storage
 
 client = TestClient(app)
 
@@ -186,9 +185,6 @@ def override_get_storage():
     storage = FakeStorage()
     app.state.fake_storage = storage
     return storage
-
-
-app.dependency_overrides[get_storage] = override_get_storage
 
 
 @pytest.fixture(autouse=True)
