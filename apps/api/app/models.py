@@ -69,6 +69,13 @@ class SopStatus(str, enum.Enum):
     published = "published"
 
 
+class CodificationJobStatus(str, enum.Enum):
+    pending = "pending"
+    processing = "processing"
+    completed = "completed"
+    failed = "failed"
+
+
 def _csv(values: type[enum.Enum]) -> str:
     """Format an Enum as ``'a','b','c'`` for use inside an SQL CHECK clause."""
     return ",".join(f"'{member.value}'" for member in values)
@@ -118,6 +125,11 @@ class Session(Base):
     )
     # No cascade on sops: generated SOPs survive their source session by design.
     sops = relationship("Sop", back_populates="session")
+    codification_jobs = relationship(
+        "CodificationJob",
+        back_populates="session",
+        cascade="all, delete-orphan",
+    )
 
     __table_args__ = (
         CheckConstraint(
@@ -250,6 +262,50 @@ class Screenshot(Base):
 
 
 # ---------------------------------------------------------------------------
+# CodificationJob
+# ---------------------------------------------------------------------------
+class CodificationJob(Base):
+    __tablename__ = "codification_jobs"
+
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    session_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("sessions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    status = Column(
+        String(32),
+        nullable=False,
+        server_default=CodificationJobStatus.pending.value,
+    )
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=text("now()"),
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=text("now()"),
+    )
+
+    session = relationship("Session", back_populates="codification_jobs")
+
+    __table_args__ = (
+        CheckConstraint(
+            f"status IN ({_csv(CodificationJobStatus)})",
+            name="ck_codification_jobs_status",
+        ),
+        Index("ix_codification_jobs_status_created", "status", "created_at"),
+    )
+
+
+# ---------------------------------------------------------------------------
 # sops
 # ---------------------------------------------------------------------------
 class Sop(Base):
@@ -311,4 +367,6 @@ __all__ = [
     "SessionStatus",
     "Sop",
     "SopStatus",
+    "CodificationJob",
+    "CodificationJobStatus",
 ]
