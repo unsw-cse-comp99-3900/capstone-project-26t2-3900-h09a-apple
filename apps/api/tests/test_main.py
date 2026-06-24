@@ -186,6 +186,7 @@ def override_get_storage():
     app.state.fake_storage = storage
     return storage
 
+
 @pytest.fixture(autouse=True)
 def fake_storage(monkeypatch):
     monkeypatch.setattr(main_module, "get_storage", override_get_storage)

@@ -37,7 +37,6 @@ def create_session(
     payload: SessionPayload,
     db: DBSession = DB_DEPENDENCY,
 ) -> dict[str, str]:
-    
     try:
         storage = get_storage() if payload.screenshots else None
         ingested_session = ingest_session(payload, db, storage)

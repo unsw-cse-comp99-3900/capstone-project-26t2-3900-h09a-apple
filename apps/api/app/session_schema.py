@@ -31,7 +31,9 @@ class WTEventInput(BaseModel):
     screenshot_id: UUID | None = None
     timestamp_ms: int = Field(gt=0)
 
+
 MAX_SCREENSHOT_BYTES = 10 * 1024 * 1024
+
 
 class ScreenshotInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
