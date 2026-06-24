@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 import app.main as main_module
 from app.database import get_db
 from app.main import app
+from app.storage import get_storage
 
 client = TestClient(app)
 
@@ -189,9 +190,11 @@ def override_get_storage():
 
 app.dependency_overrides[get_storage] = override_get_storage
 
+
 @pytest.fixture(autouse=True)
 def fake_storage(monkeypatch):
     monkeypatch.setattr(main_module, "get_storage", override_get_storage)
+
 
 class FakeDbWithSession(FakeDb):
     def __init__(self, session, existing_sop=None):
@@ -238,7 +241,7 @@ def test_generate_sop_returns_201():
         assert "steps" in body
         assert "warnings" in body
         assert db.committed is True
-        
+
     finally:
         app.dependency_overrides[get_db] = override_get_db
 
