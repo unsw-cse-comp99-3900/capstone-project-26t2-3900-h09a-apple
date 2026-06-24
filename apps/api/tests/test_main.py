@@ -1,22 +1,22 @@
 import pytest
 from fastapi.testclient import TestClient
 
+import app.main as main_module
 from app.database import get_db
 from app.main import app
-from app.storage import get_storage
 
 client = TestClient(app)
 
 
 class FakeDb:
     def __init__(self):
-        self.item = None
+        self.added = []
         self.flushed = False
         self.committed = False
         self.rolled_back = False
 
     def add(self, item):
-        self.item = item
+        self.added.append(item)
 
     def flush(self):
         self.flushed = True
@@ -148,6 +148,8 @@ def test_create_session_accepts_screenshot_payload():
     response = client.post("/api/v1/sessions", json=payload)
 
     assert response.status_code == 201
+    assert len(app.state.fake_storage.uploads) == 1
+    assert len(app.state.fake_db.added) >= 3
 
 
 def test_create_session_rejects_invalid_screenshot_base64():
@@ -184,5 +186,6 @@ def override_get_storage():
     app.state.fake_storage = storage
     return storage
 
-
-app.dependency_overrides[get_storage] = override_get_storage
+@pytest.fixture(autouse=True)
+def fake_storage(monkeypatch):
+    monkeypatch.setattr(main_module, "get_storage", override_get_storage)
