@@ -186,3 +186,66 @@ def override_get_storage():
 
 
 app.dependency_overrides[get_storage] = override_get_storage
+
+
+class FakeDbWithSession(FakeDb):
+    def __init__(self, session, existing_sop=None):
+        super().__init__()
+        self.results = [session, existing_sop]
+
+    def query(self, model):
+        return self
+
+    def filter(self, *args):
+        return self
+
+    def first(self):
+        return self.results.pop(0)
+
+
+def test_generate_sop_returns_201():
+    from types import SimpleNamespace
+
+    fake_session = SimpleNamespace(
+        id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        workflow_name="Login Flow",
+        events=[
+            SimpleNamespace(
+                id=1,
+                seq=0,
+                type="navigation",
+                url="https://example.com/login",
+                target_label=None,
+                target_selector=None,
+            ),
+        ],
+        codification_jobs=[SimpleNamespace(status="pending")],
+    )
+
+    db = FakeDbWithSession(session=fake_session)
+
+    app.dependency_overrides[get_db] = lambda: db
+    try:
+        response = client.post(f"/api/v1/sessions/{fake_session.id}/generate-sop")
+
+        assert response.status_code == 201
+        body = response.json()
+        assert "steps" in body
+        assert "warnings" in body
+        assert db.committed is True
+        
+    finally:
+        app.dependency_overrides[get_db] = override_get_db
+
+
+def test_generate_sop_returns_404_when_session_missing():
+    db = FakeDbWithSession(session=None)
+
+    app.dependency_overrides[get_db] = lambda: db
+
+    try:
+        response = client.post("/api/v1/sessions/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/generate-sop")
+
+        assert response.status_code == 404
+    finally:
+        app.dependency_overrides[get_db] = override_get_db
