@@ -4,6 +4,7 @@ from uuid import UUID
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as DBSession
 
 from app import models
@@ -11,7 +12,7 @@ from app.database import get_db
 from app.ingestion import ingest_session
 from app.mock_sop_generator import MockSopGenerator
 from app.session_schema import SessionPayload
-from app.storage import ObjectStorage, get_storage
+from app.storage import get_storage
 
 load_dotenv()
 
@@ -27,7 +28,6 @@ app.add_middleware(
 )
 
 DB_DEPENDENCY = Depends(get_db)
-STORAGE_DEPENDENCY = Depends(get_storage)
 
 
 @app.get("/health")
@@ -39,11 +39,17 @@ def health() -> dict[str, str]:
 def create_session(
     payload: SessionPayload,
     db: DBSession = DB_DEPENDENCY,
-    storage: ObjectStorage = STORAGE_DEPENDENCY,
 ) -> dict[str, str]:
     try:
+        storage = get_storage() if payload.screenshots else None
         ingested_session = ingest_session(payload, db, storage)
         db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="Session with this client_session_id already exists",
+        ) from exc
     except Exception:
         db.rollback()
         raise
