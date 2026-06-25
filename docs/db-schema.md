@@ -216,20 +216,21 @@ stores only the key.
 
 ## Table: `sops`
 
-| Column            | Type         | Null | Default             | PII          | Notes                                                      |
-| ----------------- | ------------ | ---- | ------------------- | ------------ | ---------------------------------------------------------- |
-| `id`              | uuid         | no   | `gen_random_uuid()` | —            | PK                                                         |
-| `session_id`      | uuid         | no   | —                   | —            | FK → sessions, **RESTRICT**, indexed                       |
-| `title`           | varchar(300) | no   | —                   | —            |                                                            |
-| `version`         | int          | no   | `1`                 | —            | bumps on regenerate / edit, `>= 1`                         |
-| `status`          | varchar(32)  | no   | `draft`             | —            | enum below                                                 |
-| `steps`           | jsonb        | no   | `'[]'`              | **PII-risk** | step text may echo captured data; `jsonb_typeof = 'array'` |
-| `warnings`        | jsonb        | no   | `'[]'`              | —            | matches `SopWarning` in `apps/api/app/sop_schema.py`       |
-| `generated_at`    | timestamptz  | no   | `now()`             | —            |                                                            |
-| `gen_duration_ms` | int          | yes  | —                   | —            | proves the <60s budget, `>= 0`                             |
+| Column            | Type         | Null | Default                                | PII          | Notes                                                       |
+| ----------------- | ------------ | ---- | -------------------------------------- | ------------ | ----------------------------------------------------------- |
+| `id`              | uuid         | no   | `gen_random_uuid()`                    | —            | PK                                                          |
+| `session_id`      | uuid         | no   | —                                      | —            | FK → sessions, **RESTRICT**, indexed                        |
+| `tenant_id`       | uuid         | no   | `22222222-2222-2222-2222-222222222222` | —            | logical org scope; **no FK**; indexed (`DEFAULT_TENANT_ID`) |
+| `title`           | varchar(300) | no   | —                                      | —            |                                                             |
+| `version`         | int          | no   | `1`                                    | —            | bumps on regenerate / edit, `>= 1`                          |
+| `status`          | varchar(32)  | no   | `draft`                                | —            | enum below                                                  |
+| `steps`           | jsonb        | no   | `'[]'`                                 | **PII-risk** | step text may echo captured data; `jsonb_typeof = 'array'`  |
+| `warnings`        | jsonb        | no   | `'[]'`                                 | —            | matches `SopWarning` in `apps/api/app/sop_schema.py`        |
+| `generated_at`    | timestamptz  | no   | `now()`                                | —            |                                                             |
+| `gen_duration_ms` | int          | yes  | —                                      | —            | proves the <60s budget, `>= 0`                              |
 
 **Constraints:** `uq_sops_session_version UNIQUE(session_id, version)`.
-**Indexes:** `ix_sops_session_status(session_id, status)`.
+**Indexes:** `ix_sops_session_status(session_id, status)`, `ix_sops_tenant_id(tenant_id)`.
 **Allowed `status` values:** `draft` · `needs_review` · `approved` · `published`.
 
 ### `steps` JSONB shape
