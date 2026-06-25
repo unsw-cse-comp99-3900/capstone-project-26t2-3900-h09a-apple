@@ -216,20 +216,21 @@ stores only the key.
 
 ## Table: `sops`
 
-| Column            | Type         | Null | Default             | PII          | Notes                                                      |
-| ----------------- | ------------ | ---- | ------------------- | ------------ | ---------------------------------------------------------- |
-| `id`              | uuid         | no   | `gen_random_uuid()` | —            | PK                                                         |
-| `session_id`      | uuid         | no   | —                   | —            | FK → sessions, **RESTRICT**, indexed                       |
-| `title`           | varchar(300) | no   | —                   | —            |                                                            |
-| `version`         | int          | no   | `1`                 | —            | bumps on regenerate / edit, `>= 1`                         |
-| `status`          | varchar(32)  | no   | `draft`             | —            | enum below                                                 |
-| `steps`           | jsonb        | no   | `'[]'`              | **PII-risk** | step text may echo captured data; `jsonb_typeof = 'array'` |
-| `warnings`        | jsonb        | no   | `'[]'`              | —            | matches `SopWarning` in `apps/api/app/sop_schema.py`       |
-| `generated_at`    | timestamptz  | no   | `now()`             | —            |                                                            |
-| `gen_duration_ms` | int          | yes  | —                   | —            | proves the <60s budget, `>= 0`                             |
+| Column            | Type         | Null | Default                                | PII          | Notes                                                       |
+| ----------------- | ------------ | ---- | -------------------------------------- | ------------ | ----------------------------------------------------------- |
+| `id`              | uuid         | no   | `gen_random_uuid()`                    | —            | PK                                                          |
+| `session_id`      | uuid         | no   | —                                      | —            | FK → sessions, **RESTRICT**, indexed                        |
+| `tenant_id`       | uuid         | no   | `22222222-2222-2222-2222-222222222222` | —            | logical org scope; **no FK**; indexed (`DEFAULT_TENANT_ID`) |
+| `title`           | varchar(300) | no   | —                                      | —            |                                                             |
+| `version`         | int          | no   | `1`                                    | —            | bumps on regenerate / edit, `>= 1`                          |
+| `status`          | varchar(32)  | no   | `draft`                                | —            | enum below                                                  |
+| `steps`           | jsonb        | no   | `'[]'`                                 | **PII-risk** | step text may echo captured data; `jsonb_typeof = 'array'`  |
+| `warnings`        | jsonb        | no   | `'[]'`                                 | —            | matches `SopWarning` in `apps/api/app/sop_schema.py`        |
+| `generated_at`    | timestamptz  | no   | `now()`                                | —            |                                                             |
+| `gen_duration_ms` | int          | yes  | —                                      | —            | proves the <60s budget, `>= 0`                              |
 
 **Constraints:** `uq_sops_session_version UNIQUE(session_id, version)`.
-**Indexes:** `ix_sops_session_status(session_id, status)`.
+**Indexes:** `ix_sops_session_status(session_id, status)`, `ix_sops_tenant_id(tenant_id)`.
 **Allowed `status` values:** `draft` · `needs_review` · `approved` · `published`.
 
 ### `steps` JSONB shape
@@ -284,9 +285,9 @@ them directly.
 
 ---
 
-## Out of scope (this ticket)
+## Out of scope (H09AAPPLE-15 — historical)
 
-- Multi-tenant auth tables (`users`, `tenants`) — later sprint
+- `tenants` table and full auth UX — `users` landed in H09AAPPLE-42; login in H09AAPPLE-43
 - Analytics / feedback tables
 - Partitioning of `events` (needed past ~10M rows; not Sprint 1)
 - Archival to cold storage
@@ -324,3 +325,52 @@ alembic downgrade base      # full rollback also clean
 
 The migration is wrapped in a single `BEGIN ... COMMIT` transaction (Postgres
 supports transactional DDL), so a failure halfway leaves the schema unchanged.
+
+---
+
+## Migration policy (team)
+
+Schema changes must stay in sync across the repo, CI, and every developer's
+database. Follow this whenever a ticket touches `models.py` or Postgres.
+
+1. **One PR, one revision** — ship an Alembic file in `apps/api/alembic/versions/`
+   together with `models.py` changes. Do not hand-edit local Postgres without a
+   migration.
+2. **Chain from `main` head** — new revisions must set `down_revision` to the
+   current head on `main` (check with `alembic heads`; there must be only one).
+   Rebase before opening a PR if `main` moved.
+3. **No `tenants` table** — `tenant_id` is a plain `UUID` column for row isolation,
+   not a foreign key. Dev default: `DEFAULT_TENANT_ID` / `22222222-2222-2222-2222-222222222222`.
+4. **Verify on a fresh DB** — before merge: `alembic upgrade head` on an empty
+   database (local Docker Postgres or CI).
+5. **CI** — `alembic upgrade head` runs on every `api` job PR (ephemeral Postgres
+   spun up in `.github/workflows/ci.yml`).
+6. **Document contract changes** — update this file when table/column semantics
+   change; keep `packages/types` in sync when API wire format changes.
+7. **Multiple heads** — if two branches both add migrations from the same parent,
+   merge with `alembic merge` or rebase so the chain is linear before merging to
+   `main`.
+
+PR authors: tick the database checklist in `.github/pull_request_template.md`
+when the PR touches schema.
+
+---
+
+## Table: `users` (H09AAPPLE-42)
+
+| Column            | Type         | Null | Default             | Notes                                     |
+| ----------------- | ------------ | ---- | ------------------- | ----------------------------------------- |
+| `id`              | uuid         | no   | `gen_random_uuid()` | PK                                        |
+| `email`           | varchar(255) | no   | —                   | **UNIQUE**                                |
+| `hashed_password` | varchar(255) | no   | —                   | bcrypt via passlib                        |
+| `role`            | varchar(32)  | no   | —                   | `EMPLOYEE` · `REVIEWER` · `MANAGER`       |
+| `tenant_id`       | uuid         | no   | —                   | logical org scope; **no FK** to `tenants` |
+| `created_at`      | timestamptz  | no   | `now()`             |                                           |
+
+**Revision:** `0003_users_and_sop_tenant` also adds `sops.tenant_id` (backfilled
+from `sessions.tenant_id`). `sessions.tenant_id` already existed from Sprint 1.
+
+**Auth utilities (same ticket):** `generate_token` / `verify_token` (python-jose,
+HS256, 24h, `SECRET_KEY` env), `get_current_user` FastAPI dependency (JWT
+`user_id` → DB lookup; 401 if missing/invalid). Login/register routes are
+H09AAPPLE-43.
