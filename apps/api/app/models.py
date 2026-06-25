@@ -87,9 +87,6 @@ def _csv(values: type[enum.Enum]) -> str:
     return ",".join(f"'{member.value}'" for member in values)
 
 
-# ---------------------------------------------------------------------------
-# users (H09AAPPLE-42)
-# ---------------------------------------------------------------------------
 class User(Base):
     __tablename__ = "users"
 
@@ -353,7 +350,12 @@ class Sop(Base):
         nullable=False,
         index=True,
     )
-    tenant_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    tenant_id = Column(
+        UUID(as_uuid=True),
+        nullable=False,
+        index=True,
+        server_default=text("'22222222-2222-2222-2222-222222222222'::uuid"),
+    )
     title = Column(String(300), nullable=False)
     version = Column(Integer, nullable=False, server_default="1")
     status = Column(
