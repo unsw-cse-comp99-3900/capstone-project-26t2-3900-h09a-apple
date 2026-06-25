@@ -243,7 +243,12 @@ export function GeneratingClient({ sessionId }: GeneratingClientProps) {
             <h2>We could not finish this SOP yet.</h2>
             <p>{errorMessage}</p>
           </div>
-          <button className={styles.retryButton} type="button" onClick={handleRetry} disabled={isRetrying}>
+          <button
+            className={styles.retryButton}
+            type="button"
+            onClick={handleRetry}
+            disabled={isRetrying}
+          >
             {isRetrying ? 'Retrying...' : 'Retry generation'}
           </button>
         </section>

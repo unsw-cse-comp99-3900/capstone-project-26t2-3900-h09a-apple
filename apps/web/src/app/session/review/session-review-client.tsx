@@ -309,7 +309,9 @@ export function SessionReviewClient({ sessionId }: SessionReviewClientProps) {
     } catch (error) {
       setSubmitState('error');
       setErrorMessage(
-        error instanceof Error ? error.message : 'Unable to submit this session for SOP generation.',
+        error instanceof Error
+          ? error.message
+          : 'Unable to submit this session for SOP generation.',
       );
     }
   }
