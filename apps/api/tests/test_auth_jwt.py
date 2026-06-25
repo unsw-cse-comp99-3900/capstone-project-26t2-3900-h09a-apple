@@ -5,7 +5,7 @@ import pytest
 from jose import jwt
 
 from app.auth.jwt import ALGORITHM, InvalidTokenError, generate_token, verify_token
-from app.auth.password import hash_password, verify_password
+from app.auth.password import hash_password, verify_login_password, verify_password
 from app.models import UserRole
 from app.settings import get_secret_key
 
@@ -15,6 +15,12 @@ def test_hash_and_verify_password():
     assert hashed != "secret-password"
     assert verify_password("secret-password", hashed)
     assert not verify_password("wrong-password", hashed)
+
+
+def test_verify_login_password_rejects_missing_user_hash():
+    hashed = hash_password("secret-password")
+    assert not verify_login_password("secret-password", None)
+    assert verify_login_password("secret-password", hashed)
 
 
 def test_generate_token_and_verify_round_trip():

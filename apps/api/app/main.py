@@ -8,6 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as DBSession
 
 from app import models
+from app.auth.routes import router as auth_router
 from app.database import get_db
 from app.ingestion import ingest_session
 from app.mock_sop_generator import MockSopGenerator
@@ -27,6 +28,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(auth_router)
 
 DB_DEPENDENCY = Depends(get_db)
 
