@@ -14,7 +14,7 @@ from app.auth.jwt import (
     generate_token,
     verify_refresh_token,
 )
-from app.auth.password import hash_password, verify_password
+from app.auth.password import hash_password, verify_login_password
 from app.auth_schema import (
     LoginRequest,
     LoginResponse,
@@ -81,7 +81,8 @@ def register(payload: RegisterRequest, db: DB_DEPENDENCY) -> RegisterResponse:
 @router.post("/login", response_model=LoginResponse)
 def login(payload: LoginRequest, db: DB_DEPENDENCY) -> LoginResponse:
     user = db.query(User).filter(User.email == payload.email).first()
-    if user is None or not verify_password(payload.password, user.hashed_password):
+    user_hash = user.hashed_password if user is not None else None
+    if not verify_login_password(payload.password, user_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=_INVALID_CREDENTIALS,
