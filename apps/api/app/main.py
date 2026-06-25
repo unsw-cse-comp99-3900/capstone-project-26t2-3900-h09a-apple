@@ -12,6 +12,7 @@ from app.database import get_db
 from app.ingestion import ingest_session
 from app.mock_sop_generator import MockSopGenerator
 from app.session_schema import SessionPayload
+from app.sop_schema import SopPayload
 from app.storage import get_storage
 
 load_dotenv()
@@ -62,6 +63,7 @@ def create_session(
 
 @app.post(
     "/api/v1/sessions/{session_id}/generate-sop",
+    response_model=SopPayload,
     status_code=status.HTTP_201_CREATED,
 )
 def generate_sop(
@@ -98,8 +100,17 @@ def generate_sop(
         db.add(sop)
 
         # update job status
-        if session.codification_jobs:
-            session.codification_jobs[0].status = models.CodificationJobStatus.completed.value
+        job = (
+            db.query(models.CodificationJob)
+            .filter(
+                models.CodificationJob.session_id == session.id,
+                models.CodificationJob.status == models.CodificationJobStatus.pending.value,
+            )
+            .first()
+        )
+
+        if job:
+            job.status = models.CodificationJobStatus.completed.value
 
         db.commit()
 
@@ -109,7 +120,10 @@ def generate_sop(
 
         job = (
             db.query(models.CodificationJob)
-            .filter(models.CodificationJob.session_id == session.id)
+            .filter(
+                models.CodificationJob.session_id == session.id,
+                models.CodificationJob.status == models.CodificationJobStatus.pending.value,
+            )
             .first()
         )
 

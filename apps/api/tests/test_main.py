@@ -193,9 +193,9 @@ def fake_storage(monkeypatch):
 
 
 class FakeDbWithSession(FakeDb):
-    def __init__(self, session, existing_sop=None):
+    def __init__(self, session, existing_sop=None, job=None):
         super().__init__()
-        self.results = [session, existing_sop]
+        self.results = [session, existing_sop, job]
 
     def query(self, model):
         return self
@@ -210,6 +210,7 @@ class FakeDbWithSession(FakeDb):
 def test_generate_sop_returns_201():
     from types import SimpleNamespace
 
+    fake_job = SimpleNamespace(status="pending")
     fake_session = SimpleNamespace(
         id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
         workflow_name="Login Flow",
@@ -223,10 +224,12 @@ def test_generate_sop_returns_201():
                 target_selector=None,
             ),
         ],
-        codification_jobs=[SimpleNamespace(status="pending")],
     )
 
-    db = FakeDbWithSession(session=fake_session)
+    db = FakeDbWithSession(
+        session=fake_session,
+        job=fake_job,
+    )
 
     app.dependency_overrides[get_db] = lambda: db
     try:
@@ -237,6 +240,7 @@ def test_generate_sop_returns_201():
         assert "steps" in body
         assert "warnings" in body
         assert db.committed is True
+        assert fake_job.status == "completed"
 
     finally:
         app.dependency_overrides[get_db] = override_get_db
@@ -251,5 +255,30 @@ def test_generate_sop_returns_404_when_session_missing():
         response = client.post("/api/v1/sessions/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/generate-sop")
 
         assert response.status_code == 404
+    finally:
+        app.dependency_overrides[get_db] = override_get_db
+
+
+def test_generate_sop_returns_409_when_sop_exists():
+    from types import SimpleNamespace
+
+    fake_session = SimpleNamespace(
+        id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        workflow_name="Login Flow",
+        events=[],
+    )
+
+    db = FakeDbWithSession(
+        session=fake_session,
+        existing_sop=object(),
+    )
+
+    app.dependency_overrides[get_db] = lambda: db
+
+    try:
+        response = client.post(f"/api/v1/sessions/{fake_session.id}/generate-sop")
+
+        assert response.status_code == 409
+
     finally:
         app.dependency_overrides[get_db] = override_get_db
