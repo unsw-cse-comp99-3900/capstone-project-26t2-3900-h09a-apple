@@ -45,6 +45,24 @@ jobs:
   api:
     name: api
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: worktrace
+          POSTGRES_PASSWORD: secret
+          POSTGRES_DB: worktrace
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql+psycopg://worktrace:secret@localhost:5432/worktrace
+      SECRET_KEY: ci-test-secret-key-not-for-production
+      DEFAULT_TENANT_ID: 22222222-2222-2222-2222-222222222222
     defaults:
       run:
         working-directory: apps/api
@@ -65,6 +83,9 @@ jobs:
 
       - name: Format check
         run: ruff format --check .
+
+      - name: Migrate database
+        run: alembic upgrade head
 
       - name: Test
         run: pytest
