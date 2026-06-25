@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 import app.main as main_module
 from app.database import get_db
 from app.main import app
+from app.storage import get_storage
 
 client = TestClient(app)
 
@@ -180,6 +181,9 @@ class FakeStorage:
             }
         )
 
+    def generate_signed_url(self, key: str, expires: int = 60 * 60 * 24):
+        return f"https://signed.example/{key}"
+
 
 def override_get_storage():
     storage = FakeStorage()
@@ -188,23 +192,62 @@ def override_get_storage():
 
 
 @pytest.fixture(autouse=True)
-def fake_storage(monkeypatch):
-    monkeypatch.setattr(main_module, "get_storage", override_get_storage)
+def fake_storage():
+    app.dependency_overrides[get_storage] = override_get_storage
+    yield
+    app.dependency_overrides.pop(get_storage, None)
 
 
 class FakeDbWithSession(FakeDb):
-    def __init__(self, session, existing_sop=None, job=None):
+    def __init__(
+        self,
+        session=None,
+        existing_sop=None,
+        job=None,
+        events=None,
+        screenshot=None,
+    ):
         super().__init__()
-        self.results = [session, existing_sop, job]
+
+        self.session = session
+        self.existing_sop = existing_sop
+        self.job = job
+
+        self.events = events or []
+        self.screenshot = screenshot
+
+        self.current_model = None
 
     def query(self, model):
+        self.current_model = model
         return self
 
     def filter(self, *args):
         return self
 
+    def order_by(self, *args):
+        return self
+
     def first(self):
-        return self.results.pop(0)
+        if self.current_model == main_module.models.Session:
+            return self.session
+
+        if self.current_model == main_module.models.Sop:
+            return self.existing_sop
+
+        if self.current_model == main_module.models.CodificationJob:
+            return self.job
+
+        if self.current_model == main_module.models.Screenshot:
+            return self.screenshot
+
+        return None
+
+    def all(self):
+        if self.current_model == main_module.models.Event:
+            return self.events
+
+        return []
 
 
 def test_generate_sop_returns_201():
@@ -279,6 +322,68 @@ def test_generate_sop_returns_409_when_sop_exists():
         response = client.post(f"/api/v1/sessions/{fake_session.id}/generate-sop")
 
         assert response.status_code == 409
+
+    finally:
+        app.dependency_overrides[get_db] = override_get_db
+
+
+def test_get_sop_returns_404():
+    db = FakeDbWithSession(
+        existing_sop=None,
+    )
+
+    app.dependency_overrides[get_db] = lambda: db
+
+    try:
+        response = client.get(
+            "/api/v1/sops/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+        )
+
+        assert response.status_code == 404
+
+    finally:
+        app.dependency_overrides[get_db] = override_get_db
+
+def test_get_sop_returns_200():
+    from datetime import datetime, UTC
+    from types import SimpleNamespace
+
+    fake_sop = SimpleNamespace(
+        id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        title="Login Flow",
+        version=1,
+        generated_at=datetime.now(UTC),
+        steps=[
+            {
+                "order": 1,
+                "title": "Login",
+                "instruction": "Click Login",
+                "source_event_ids": [],
+            }
+        ],
+        warnings=[],
+    )
+
+    db = FakeDbWithSession(
+        existing_sop=fake_sop,
+    )
+
+    app.dependency_overrides[get_db] = lambda: db
+
+    try:
+        response = client.get(
+            "/api/v1/sops/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+        )
+
+        assert response.status_code == 200
+
+        body = response.json()
+
+        assert body["title"] == "Login Flow"
+        assert body["version"] == 1
+        assert len(body["steps"]) == 1
+        assert body["steps"][0]["title"] == "Login"
+        assert body["steps"][0]["screenshot_url"] is None
 
     finally:
         app.dependency_overrides[get_db] = override_get_db

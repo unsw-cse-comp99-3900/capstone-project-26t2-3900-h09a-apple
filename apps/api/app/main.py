@@ -12,8 +12,14 @@ from app.database import get_db
 from app.ingestion import ingest_session
 from app.mock_sop_generator import MockSopGenerator
 from app.session_schema import SessionPayload
-from app.sop_schema import SopPayload
-from app.storage import get_storage
+from app.sop_schema import (
+    SopDetailPayload,
+    SopPayload,
+    SopStepResponse,
+    SopWarning,
+)
+from app.sop_service import resolve_step_screenshot_url
+from app.storage import ObjectStorage, get_storage
 
 load_dotenv()
 
@@ -28,8 +34,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-DB_DEPENDENCY = Depends(get_db)
-
 
 @app.get("/health")
 def health() -> dict[str, str]:
@@ -39,11 +43,11 @@ def health() -> dict[str, str]:
 @app.post("/api/v1/sessions", status_code=status.HTTP_201_CREATED)
 def create_session(
     payload: SessionPayload,
-    db: DBSession = DB_DEPENDENCY,
+    db: DBSession = Depends(get_db),
+    storage: ObjectStorage = Depends(get_storage),
 ) -> dict[str, str]:
     try:
-        storage = get_storage() if payload.screenshots else None
-        ingested_session = ingest_session(payload, db, storage)
+        ingested_session = ingest_session(payload, db, storage if payload.screenshots else None)
         db.commit()
     except IntegrityError as exc:
         db.rollback()
@@ -68,7 +72,7 @@ def create_session(
 )
 def generate_sop(
     session_id: UUID,
-    db: DBSession = DB_DEPENDENCY,
+    db: DBSession = Depends(get_db),
 ):
     # find session
     session = db.query(models.Session).filter(models.Session.id == session_id).first()
@@ -132,3 +136,50 @@ def generate_sop(
             db.commit()
 
         raise
+
+
+@app.get(
+    "/api/v1/sops/{sop_id}",
+    response_model=SopDetailPayload,
+)
+def get_sop(
+    sop_id: UUID,
+    db: DBSession = Depends(get_db),
+    storage: ObjectStorage = Depends(get_storage),
+):
+    sop = (
+        db.query(models.Sop)
+        .filter(models.Sop.id == sop_id)
+        .first()
+    )
+
+    if sop is None:
+        raise HTTPException(status_code=404, detail="SOP not found")
+
+    steps = [
+        SopStepResponse(
+            **step,
+            screenshot_url=resolve_step_screenshot_url(
+                step["source_event_ids"],
+                db,
+                storage,
+            ),
+        )
+        for step in sop.steps
+    ]
+
+    warnings = [
+        SopWarning.model_validate(warning)
+        for warning in sop.warnings
+    ]
+
+    return SopDetailPayload(
+        id=str(sop.id),
+        title=sop.title,
+        # 临时方案，需确认
+        summary=f"{len(steps)} step workflow",
+        version=sop.version,
+        generated_at=sop.generated_at,
+        steps=steps,
+        warnings=warnings,
+    )
