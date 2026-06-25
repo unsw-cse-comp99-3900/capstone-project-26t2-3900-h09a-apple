@@ -1,4 +1,4 @@
-from app.models import EventType
+from app.models import EventType, Session
 from app.sop_generator import SopGenerator
 from app.sop_schema import SopPayload, SopStep, SopWarning
 
@@ -37,7 +37,7 @@ class MockSopGenerator(SopGenerator):
             previous = current
         return None
 
-    def generate(self, session):
+    def generate(self, session: Session):
         events = sorted(session.events, key=lambda e: e.seq)
 
         groups = []
