@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as DBSession
 
+from app.auth.routes import router as auth_router
 from app.database import get_db
 from app.ingestion import ingest_session
 from app.session_schema import SessionPayload
@@ -23,6 +24,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(auth_router)
 
 DB_DEPENDENCY = Depends(get_db)
 

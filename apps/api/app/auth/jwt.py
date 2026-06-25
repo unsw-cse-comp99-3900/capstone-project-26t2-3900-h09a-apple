@@ -10,10 +10,19 @@ from app.settings import get_secret_key
 
 ALGORITHM = "HS256"
 TOKEN_EXPIRE_HOURS = 24
+REFRESH_TOKEN_EXPIRE_DAYS = 7
+ACCESS_TOKEN_EXPIRE_SECONDS = TOKEN_EXPIRE_HOURS * 3600
+
+TOKEN_TYPE_ACCESS = "access"
+TOKEN_TYPE_REFRESH = "refresh"
 
 
 class InvalidTokenError(Exception):
     pass
+
+
+def _encode_token(payload: dict) -> str:
+    return jwt.encode(payload, get_secret_key(), algorithm=ALGORITHM)
 
 
 def generate_token(user_id: UUID, role: UserRole, tenant_id: UUID) -> str:
@@ -22,17 +31,32 @@ def generate_token(user_id: UUID, role: UserRole, tenant_id: UUID) -> str:
         "user_id": str(user_id),
         "role": role.value,
         "tenant_id": str(tenant_id),
+        "type": TOKEN_TYPE_ACCESS,
         "exp": expire,
     }
-    return jwt.encode(payload, get_secret_key(), algorithm=ALGORITHM)
+    return _encode_token(payload)
 
 
-def verify_token(token: str) -> dict[str, str]:
+def generate_refresh_token(user_id: UUID, role: UserRole, tenant_id: UUID) -> str:
+    expire = datetime.now(UTC) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+    payload = {
+        "user_id": str(user_id),
+        "role": role.value,
+        "tenant_id": str(tenant_id),
+        "type": TOKEN_TYPE_REFRESH,
+        "exp": expire,
+    }
+    return _encode_token(payload)
+
+
+def _decode_token(token: str) -> dict:
     try:
-        payload = jwt.decode(token, get_secret_key(), algorithms=[ALGORITHM])
+        return jwt.decode(token, get_secret_key(), algorithms=[ALGORITHM])
     except JWTError as exc:
         raise InvalidTokenError("Invalid or expired token") from exc
 
+
+def _token_identity(payload: dict) -> dict[str, str]:
     user_id = payload.get("user_id")
     if not user_id:
         raise InvalidTokenError("Token missing user_id")
@@ -42,3 +66,18 @@ def verify_token(token: str) -> dict[str, str]:
         "role": str(payload.get("role", "")),
         "tenant_id": str(payload.get("tenant_id", "")),
     }
+
+
+def verify_token(token: str) -> dict[str, str]:
+    payload = _decode_token(token)
+    token_type = payload.get("type")
+    if token_type is not None and token_type != TOKEN_TYPE_ACCESS:
+        raise InvalidTokenError("Invalid or expired token")
+    return _token_identity(payload)
+
+
+def verify_refresh_token(token: str) -> dict[str, str]:
+    payload = _decode_token(token)
+    if payload.get("type") != TOKEN_TYPE_REFRESH:
+        raise InvalidTokenError("Invalid or expired token")
+    return _token_identity(payload)
