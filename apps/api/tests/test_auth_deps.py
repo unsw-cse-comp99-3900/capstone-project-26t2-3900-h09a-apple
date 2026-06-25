@@ -43,7 +43,7 @@ def _make_user() -> User:
 def test_get_current_user_returns_user_from_db():
     user = _make_user()
     db = FakeDb(user)
-    token = generate_token(user.id, user.role, user.tenant_id)
+    token = generate_token(user.id, UserRole.employee, user.tenant_id)
     credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
 
     current_user = get_current_user(credentials, db)
@@ -64,7 +64,7 @@ def test_get_current_user_raises_401_without_credentials():
 def test_get_current_user_raises_401_when_user_missing_from_db():
     user = _make_user()
     db = FakeDb(None)
-    token = generate_token(user.id, user.role, user.tenant_id)
+    token = generate_token(user.id, UserRole.employee, user.tenant_id)
     credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
 
     with pytest.raises(HTTPException) as exc_info:

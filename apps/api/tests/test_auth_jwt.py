@@ -6,6 +6,7 @@ from jose import jwt
 
 from app.auth.jwt import ALGORITHM, InvalidTokenError, generate_token, verify_token
 from app.auth.password import hash_password, verify_password
+from app.models import UserRole
 from app.settings import get_secret_key
 
 
@@ -20,7 +21,7 @@ def test_generate_token_and_verify_round_trip():
     user_id = UUID("11111111-1111-1111-1111-111111111111")
     tenant_id = UUID("22222222-2222-2222-2222-222222222222")
 
-    token = generate_token(user_id, "EMPLOYEE", tenant_id)
+    token = generate_token(user_id, UserRole.employee, tenant_id)
     payload = verify_token(token)
 
     assert payload["user_id"] == str(user_id)

@@ -12,6 +12,7 @@ from app.database import get_db
 from app.models import User
 
 _bearer = HTTPBearer(auto_error=False)
+_UNAUTHORIZED_HEADERS = {"WWW-Authenticate": "Bearer"}
 
 
 def get_current_user(
@@ -22,6 +23,7 @@ def get_current_user(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Not authenticated",
+            headers=_UNAUTHORIZED_HEADERS,
         )
 
     try:
@@ -31,6 +33,7 @@ def get_current_user(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token",
+            headers=_UNAUTHORIZED_HEADERS,
         ) from None
 
     user = db.query(User).filter(User.id == user_id).first()
@@ -38,6 +41,7 @@ def get_current_user(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found",
+            headers=_UNAUTHORIZED_HEADERS,
         )
 
     return user

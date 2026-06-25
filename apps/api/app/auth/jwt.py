@@ -5,6 +5,7 @@ from uuid import UUID
 
 from jose import JWTError, jwt
 
+from app.models import UserRole
 from app.settings import get_secret_key
 
 ALGORITHM = "HS256"
@@ -15,11 +16,11 @@ class InvalidTokenError(Exception):
     pass
 
 
-def generate_token(user_id: UUID, role: str, tenant_id: UUID) -> str:
+def generate_token(user_id: UUID, role: UserRole, tenant_id: UUID) -> str:
     expire = datetime.now(UTC) + timedelta(hours=TOKEN_EXPIRE_HOURS)
     payload = {
         "user_id": str(user_id),
-        "role": role,
+        "role": role.value,
         "tenant_id": str(tenant_id),
         "exp": expire,
     }
