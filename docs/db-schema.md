@@ -357,14 +357,14 @@ when the PR touches schema.
 
 ## Table: `users` (H09AAPPLE-42)
 
-| Column            | Type         | Null | Default             | Notes                                      |
-| ----------------- | ------------ | ---- | ------------------- | ------------------------------------------ |
-| `id`              | uuid         | no   | `gen_random_uuid()` | PK                                         |
-| `email`           | varchar(255) | no   | —                   | **UNIQUE**                                 |
-| `hashed_password` | varchar(255) | no   | —                   | bcrypt via passlib                         |
-| `role`            | varchar(32)  | no   | —                   | `EMPLOYEE` · `REVIEWER` · `MANAGER`        |
-| `tenant_id`       | uuid         | no   | —                   | logical org scope; **no FK** to `tenants`  |
-| `created_at`      | timestamptz  | no   | `now()`             |                                            |
+| Column            | Type         | Null | Default             | Notes                                     |
+| ----------------- | ------------ | ---- | ------------------- | ----------------------------------------- |
+| `id`              | uuid         | no   | `gen_random_uuid()` | PK                                        |
+| `email`           | varchar(255) | no   | —                   | **UNIQUE**                                |
+| `hashed_password` | varchar(255) | no   | —                   | bcrypt via passlib                        |
+| `role`            | varchar(32)  | no   | —                   | `EMPLOYEE` · `REVIEWER` · `MANAGER`       |
+| `tenant_id`       | uuid         | no   | —                   | logical org scope; **no FK** to `tenants` |
+| `created_at`      | timestamptz  | no   | `now()`             |                                           |
 
 **Revision:** `0003_users_and_sop_tenant` also adds `sops.tenant_id` (backfilled
 from `sessions.tenant_id`). `sessions.tenant_id` already existed from Sprint 1.
