@@ -327,6 +327,7 @@ def test_generate_sop_returns_409_when_sop_exists():
         app.dependency_overrides[get_db] = override_get_db
 
 
+# Tests for retrieving SOP details via the GET /api/v1/sops/{id} endpoint
 def test_get_sop_returns_404():
     db = FakeDbWithSession(
         existing_sop=None,
@@ -335,17 +336,16 @@ def test_get_sop_returns_404():
     app.dependency_overrides[get_db] = lambda: db
 
     try:
-        response = client.get(
-            "/api/v1/sops/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
-        )
+        response = client.get("/api/v1/sops/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
 
         assert response.status_code == 404
 
     finally:
         app.dependency_overrides[get_db] = override_get_db
 
+
 def test_get_sop_returns_200():
-    from datetime import datetime, UTC
+    from datetime import UTC, datetime
     from types import SimpleNamespace
 
     fake_sop = SimpleNamespace(
@@ -371,9 +371,7 @@ def test_get_sop_returns_200():
     app.dependency_overrides[get_db] = lambda: db
 
     try:
-        response = client.get(
-            "/api/v1/sops/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
-        )
+        response = client.get("/api/v1/sops/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
 
         assert response.status_code == 200
 
@@ -384,6 +382,64 @@ def test_get_sop_returns_200():
         assert len(body["steps"]) == 1
         assert body["steps"][0]["title"] == "Login"
         assert body["steps"][0]["screenshot_url"] is None
+        assert body["id"] == "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+        assert body["generated_at"] is not None
+        assert body["warnings"] == []
+
+    finally:
+        app.dependency_overrides[get_db] = override_get_db
+
+
+def test_get_sop_returns_signed_screenshot_url():
+    from datetime import UTC, datetime
+    from types import SimpleNamespace
+    from uuid import UUID
+
+    fake_event = SimpleNamespace(
+        id=UUID("11111111-1111-1111-1111-111111111111"),
+        seq=1,
+        screenshot_id=UUID("22222222-2222-2222-2222-222222222222"),
+    )
+
+    fake_screenshot = SimpleNamespace(
+        id=UUID("22222222-2222-2222-2222-222222222222"),
+        object_key="screenshots/login.png",
+    )
+
+    fake_sop = SimpleNamespace(
+        id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        title="Login Flow",
+        version=1,
+        generated_at=datetime.now(UTC),
+        steps=[
+            {
+                "order": 1,
+                "title": "Login",
+                "instruction": "Click Login",
+                "source_event_ids": [
+                    "11111111-1111-1111-1111-111111111111",
+                ],
+            }
+        ],
+        warnings=[],
+    )
+
+    db = FakeDbWithSession(
+        existing_sop=fake_sop,
+        events=[fake_event],
+        screenshot=fake_screenshot,
+    )
+
+    app.dependency_overrides[get_db] = lambda: db
+
+    try:
+        response = client.get("/api/v1/sops/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+
+        assert response.status_code == 200
+
+        body = response.json()
+
+        assert body["steps"][0]["screenshot_url"] == "https://signed.example/screenshots/login.png"
 
     finally:
         app.dependency_overrides[get_db] = override_get_db

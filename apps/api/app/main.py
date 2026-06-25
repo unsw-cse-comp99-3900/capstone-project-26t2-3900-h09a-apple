@@ -147,11 +147,7 @@ def get_sop(
     db: DBSession = Depends(get_db),
     storage: ObjectStorage = Depends(get_storage),
 ):
-    sop = (
-        db.query(models.Sop)
-        .filter(models.Sop.id == sop_id)
-        .first()
-    )
+    sop = db.query(models.Sop).filter(models.Sop.id == sop_id).first()
 
     if sop is None:
         raise HTTPException(status_code=404, detail="SOP not found")
@@ -168,15 +164,12 @@ def get_sop(
         for step in sop.steps
     ]
 
-    warnings = [
-        SopWarning.model_validate(warning)
-        for warning in sop.warnings
-    ]
+    warnings = [SopWarning.model_validate(warning) for warning in sop.warnings]
 
     return SopDetailPayload(
         id=str(sop.id),
         title=sop.title,
-        # 临时方案，需确认
+        # Mock generator summary is deterministic and not stored in the database.
         summary=f"{len(steps)} step workflow",
         version=sop.version,
         generated_at=sop.generated_at,

@@ -10,8 +10,10 @@ class SopStep(BaseModel):
     instruction: str = Field(..., min_length=1)
     source_event_ids: list[str] = Field(default_factory=list)
 
+
 class SopStepResponse(SopStep):
     screenshot_url: str | None = None
+
 
 class SopWarning(BaseModel):
     type: Literal["repeated_action", "invalid_sequence", "missing_context"]
@@ -24,6 +26,7 @@ class SopPayload(BaseModel):
     summary: str = Field(..., min_length=1)
     steps: list[SopStep] = Field(..., min_length=1)
     warnings: list[SopWarning] = Field(default_factory=list)
+
 
 class SopDetailPayload(BaseModel):
     id: str
