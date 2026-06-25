@@ -135,7 +135,7 @@ def test_register_returns_409_for_duplicate_email_in_tenant(auth_db):
     response = client.post("/api/v1/auth/register", json=register_payload())
 
     assert response.status_code == 409
-    assert response.json()["detail"] == "Email already registered"
+    assert response.json()["detail"] == "Registration failed"
 
 
 def test_register_returns_409_for_normalized_duplicate_email_in_tenant(auth_db):
@@ -150,7 +150,7 @@ def test_register_returns_409_for_normalized_duplicate_email_in_tenant(auth_db):
         json=register_payload(email="user@example.com"),
     )
     assert response.status_code == 409
-    assert response.json()["detail"] == "Email already registered"
+    assert response.json()["detail"] == "Registration failed"
 
 
 def test_login_accepts_normalized_email(auth_db):
@@ -328,3 +328,21 @@ def test_refresh_token_expires_in_seven_days():
     expected_min = before + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS) - timedelta(minutes=1)
     expected_max = before + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS) + timedelta(minutes=1)
     assert expected_min <= exp <= expected_max
+
+
+def test_auth_rate_limit_returns_429(monkeypatch, auth_db):
+    from app.auth.rate_limit import clear_auth_rate_limit_state
+
+    clear_auth_rate_limit_state()
+    monkeypatch.setenv("AUTH_RATE_LIMIT_MAX", "2")
+    monkeypatch.setenv("AUTH_RATE_LIMIT_WINDOW_SECONDS", "60")
+    monkeypatch.delenv("AUTH_RATE_LIMIT_DISABLED", raising=False)
+
+    payload = {"email": "missing@example.com", "password": "secret-password"}
+    assert client.post("/api/v1/auth/login", json=payload).status_code == 401
+    assert client.post("/api/v1/auth/login", json=payload).status_code == 401
+    response = client.post("/api/v1/auth/login", json=payload)
+    assert response.status_code == 429
+    assert response.json()["detail"] == "Too many requests"
+
+    clear_auth_rate_limit_state()

@@ -15,6 +15,8 @@ from app.auth.jwt import (
     verify_refresh_token,
 )
 from app.auth.password import hash_password, verify_login_password
+from app.auth.rate_limit import auth_rate_limiter
+from app.auth.user_lookup import find_user_by_email, touch_user_lookup
 from app.auth_schema import (
     LoginRequest,
     LoginResponse,
@@ -26,9 +28,14 @@ from app.auth_schema import (
 from app.database import get_db
 from app.models import User, UserRole
 
-router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
+router = APIRouter(
+    prefix="/api/v1/auth",
+    tags=["auth"],
+    dependencies=[Depends(auth_rate_limiter)],
+)
 
 _INVALID_CREDENTIALS = "Invalid credentials"
+_REGISTRATION_FAILED = "Registration failed"
 _UNAUTHORIZED_HEADERS = {"WWW-Authenticate": "Bearer"}
 DB_DEPENDENCY = Annotated[DBSession, Depends(get_db)]
 
@@ -43,20 +50,23 @@ def _role_enum(role_value: str) -> UserRole:
     response_model=RegisterResponse,
 )
 def register(payload: RegisterRequest, db: DB_DEPENDENCY) -> RegisterResponse:
+    hashed_password = hash_password(payload.password)
+
     existing = (
         db.query(User)
         .filter(User.email == payload.email, User.tenant_id == payload.tenant_id)
         .first()
     )
+    touch_user_lookup(db)
     if existing is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Email already registered",
+            detail=_REGISTRATION_FAILED,
         )
 
     user = User(
         email=payload.email,
-        hashed_password=hash_password(payload.password),
+        hashed_password=hashed_password,
         role=payload.role.value,
         tenant_id=payload.tenant_id,
     )
@@ -69,7 +79,7 @@ def register(payload: RegisterRequest, db: DB_DEPENDENCY) -> RegisterResponse:
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Email already registered",
+            detail=_REGISTRATION_FAILED,
         ) from None
     except Exception:
         db.rollback()
@@ -80,7 +90,7 @@ def register(payload: RegisterRequest, db: DB_DEPENDENCY) -> RegisterResponse:
 
 @router.post("/login", response_model=LoginResponse)
 def login(payload: LoginRequest, db: DB_DEPENDENCY) -> LoginResponse:
-    user = db.query(User).filter(User.email == payload.email).first()
+    user = find_user_by_email(db, payload.email)
     user_hash = user.hashed_password if user is not None else None
     if not verify_login_password(payload.password, user_hash):
         raise HTTPException(
