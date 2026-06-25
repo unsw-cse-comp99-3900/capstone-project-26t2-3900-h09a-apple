@@ -12,7 +12,7 @@ from app.auth.routes import router as auth_router
 from app.database import get_db
 from app.ingestion import ingest_session
 from app.mock_sop_generator import MockSopGenerator
-from app.session_schema import SessionPayload
+from app.session_schema import SessionPayload, SessionStatusResponse
 from app.sop_schema import SopPayload
 from app.storage import get_storage
 
@@ -62,6 +62,56 @@ def create_session(
         "session_id": ingested_session.session_id,
         "job_id": ingested_session.job_id,
     }
+
+
+@app.get(
+    "/api/v1/sessions/{session_id}",
+    response_model=SessionStatusResponse,
+)
+def get_session_status(
+    session_id: UUID,
+    db: DBSession = DB_DEPENDENCY,
+):
+    session = db.query(models.Session).filter(models.Session.id == session_id).first()
+
+    if session is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Session not found",
+        )
+
+    job = (
+        db.query(models.CodificationJob)
+        .filter(models.CodificationJob.session_id == session.id)
+        .order_by(models.CodificationJob.created_at.desc())
+        .first()
+    )
+
+    if job is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Codification job not found",
+        )
+
+    sop = (
+        db.query(models.Sop)
+        .filter(models.Sop.session_id == session.id)
+        .order_by(models.Sop.generated_at.desc())
+        .first()
+    )
+
+    sop_id = (
+        sop.id
+        if job.status == models.CodificationJobStatus.completed.value and sop is not None
+        else None
+    )
+
+    return SessionStatusResponse(
+        session_id=session.id,
+        workflow_name=session.workflow_name,
+        job_status=job.status,
+        sop_id=sop_id,
+    )
 
 
 @app.post(

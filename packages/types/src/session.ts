@@ -21,6 +21,8 @@ export type EventType = 'click' | 'navigation' | 'input' | 'submit' | 'tab_switc
 
 export type SopStatus = 'draft' | 'needs_review' | 'approved' | 'published';
 
+export type CodificationJobStatus = 'pending' | 'processing' | 'completed' | 'failed';
+
 // ---------------------------------------------------------------------------
 // Write DTOs (extension → API)
 // ---------------------------------------------------------------------------
@@ -62,6 +64,11 @@ export interface SessionUploadPayload {
   events: WTEventInput[];
 }
 
+export interface SessionCreateResponse {
+  session_id: string;
+  job_id: string;
+}
+
 // ---------------------------------------------------------------------------
 // Read DTOs (API → FE)
 // ---------------------------------------------------------------------------
@@ -100,6 +107,13 @@ export interface SessionSummary {
 
 export interface SessionDetail extends SessionSummary {
   events: WTEvent[];
+}
+
+export interface SessionStatusResponse {
+  session_id: string;
+  workflow_name: string;
+  job_status: CodificationJobStatus;
+  sop_id?: string | null;
 }
 
 // ---------------------------------------------------------------------------
