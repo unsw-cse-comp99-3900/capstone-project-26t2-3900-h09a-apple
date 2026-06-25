@@ -111,7 +111,7 @@ def register_payload(**overrides) -> dict:
 
 
 def test_register_returns_201_with_user_id_and_role(auth_db):
-    response = client.post("/auth/register", json=register_payload())
+    response = client.post("/api/v1/auth/register", json=register_payload())
 
     assert response.status_code == 201
     body = response.json()
@@ -132,7 +132,7 @@ def test_register_returns_409_for_duplicate_email_in_tenant(auth_db):
         )
     )
 
-    response = client.post("/auth/register", json=register_payload())
+    response = client.post("/api/v1/auth/register", json=register_payload())
 
     assert response.status_code == 409
     assert response.json()["detail"] == "Email already registered"
@@ -140,13 +140,13 @@ def test_register_returns_409_for_duplicate_email_in_tenant(auth_db):
 
 def test_register_returns_409_for_normalized_duplicate_email_in_tenant(auth_db):
     response = client.post(
-        "/auth/register",
+        "/api/v1/auth/register",
         json=register_payload(email="User@Example.COM"),
     )
     assert response.status_code == 201
 
     response = client.post(
-        "/auth/register",
+        "/api/v1/auth/register",
         json=register_payload(email="user@example.com"),
     )
     assert response.status_code == 409
@@ -166,7 +166,7 @@ def test_login_accepts_normalized_email(auth_db):
     )
 
     response = client.post(
-        "/auth/login",
+        "/api/v1/auth/login",
         json={"email": "  User@Example.COM  ", "password": password},
     )
 
@@ -186,7 +186,7 @@ def test_login_returns_tokens_for_valid_credentials(auth_db):
     auth_db.users.append(user)
 
     response = client.post(
-        "/auth/login",
+        "/api/v1/auth/login",
         json={"email": "employee@example.com", "password": password},
     )
 
@@ -216,7 +216,7 @@ def test_login_returns_401_for_wrong_password(auth_db):
     auth_db.users.append(user)
 
     response = client.post(
-        "/auth/login",
+        "/api/v1/auth/login",
         json={"email": "employee@example.com", "password": "wrong-password"},
     )
 
@@ -226,7 +226,7 @@ def test_login_returns_401_for_wrong_password(auth_db):
 
 def test_login_returns_401_for_unknown_email(auth_db):
     response = client.post(
-        "/auth/login",
+        "/api/v1/auth/login",
         json={"email": "missing@example.com", "password": "secret-password"},
     )
 
@@ -245,7 +245,7 @@ def test_refresh_returns_new_access_token(auth_db):
     auth_db.users.append(user)
     refresh_token = generate_refresh_token(user.id, UserRole.reviewer, user.tenant_id)
 
-    response = client.post("/auth/refresh", json={"refresh_token": refresh_token})
+    response = client.post("/api/v1/auth/refresh", json={"refresh_token": refresh_token})
 
     assert response.status_code == 200
     body = response.json()
@@ -268,7 +268,7 @@ def test_refresh_returns_401_for_access_token(auth_db):
     auth_db.users.append(user)
     access_token = generate_token(user.id, UserRole.employee, user.tenant_id)
 
-    response = client.post("/auth/refresh", json={"refresh_token": access_token})
+    response = client.post("/api/v1/auth/refresh", json={"refresh_token": access_token})
 
     assert response.status_code == 401
 
@@ -288,7 +288,7 @@ def test_refresh_returns_401_for_expired_refresh_token():
         algorithm=ALGORITHM,
     )
 
-    response = client.post("/auth/refresh", json={"refresh_token": token})
+    response = client.post("/api/v1/auth/refresh", json={"refresh_token": token})
 
     assert response.status_code == 401
 

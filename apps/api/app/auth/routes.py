@@ -26,7 +26,7 @@ from app.auth_schema import (
 from app.database import get_db
 from app.models import User, UserRole
 
-router = APIRouter(prefix="/auth", tags=["auth"])
+router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
 _INVALID_CREDENTIALS = "Invalid credentials"
 _UNAUTHORIZED_HEADERS = {"WWW-Authenticate": "Bearer"}
