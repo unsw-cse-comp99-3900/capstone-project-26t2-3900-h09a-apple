@@ -35,7 +35,7 @@ If this PR changes the database schema (`models.py` or `alembic/versions/`):
 
 - [ ] New Alembic revision included; `down_revision` is the current `main` head
 - [ ] `models.py` matches the migration; `docs/db-schema.md` updated if the contract changed
-- [ ] `cd apps/api && alembic upgrade head` succeeds on a fresh database (CI also runs this)
+- [ ] `cd apps/api && alembic upgrade head` succeeds on a fresh database (the `api` CI job also runs this on every PR)
 
 Manual verification:
 

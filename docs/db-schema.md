@@ -341,10 +341,12 @@ database. Follow this whenever a ticket touches `models.py` or Postgres.
 3. **No `tenants` table** — `tenant_id` is a plain `UUID` column for row isolation,
    not a foreign key. Dev default: `DEFAULT_TENANT_ID` / `22222222-2222-2222-2222-222222222222`.
 4. **Verify on a fresh DB** — before merge: `alembic upgrade head` on an empty
-   database (local Docker Postgres or CI). CI runs this automatically on every PR.
-5. **Document contract changes** — update this file when table/column semantics
+   database (local Docker Postgres or CI).
+5. **CI** — `alembic upgrade head` runs on every `api` job PR (ephemeral Postgres
+   spun up in `.github/workflows/ci.yml`).
+6. **Document contract changes** — update this file when table/column semantics
    change; keep `packages/types` in sync when API wire format changes.
-6. **Multiple heads** — if two branches both add migrations from the same parent,
+7. **Multiple heads** — if two branches both add migrations from the same parent,
    merge with `alembic merge` or rebase so the chain is linear before merging to
    `main`.
 
