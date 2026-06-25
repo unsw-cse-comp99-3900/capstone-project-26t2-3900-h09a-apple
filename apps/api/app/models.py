@@ -76,9 +76,39 @@ class CodificationJobStatus(str, enum.Enum):
     failed = "failed"
 
 
+class UserRole(str, enum.Enum):
+    employee = "EMPLOYEE"
+    reviewer = "REVIEWER"
+    manager = "MANAGER"
+
+
 def _csv(values: type[enum.Enum]) -> str:
     """Format an Enum as ``'a','b','c'`` for use inside an SQL CHECK clause."""
     return ",".join(f"'{member.value}'" for member in values)
+
+
+# ---------------------------------------------------------------------------
+# users (H09AAPPLE-42)
+# ---------------------------------------------------------------------------
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    email = Column(String(255), nullable=False, unique=True)
+    hashed_password = Column(String(255), nullable=False)
+    role = Column(String(32), nullable=False)
+    tenant_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=text("now()"),
+    )
+
+    __table_args__ = (CheckConstraint(f"role IN ({_csv(UserRole)})", name="ck_users_role"),)
 
 
 # ---------------------------------------------------------------------------
@@ -323,6 +353,7 @@ class Sop(Base):
         nullable=False,
         index=True,
     )
+    tenant_id = Column(UUID(as_uuid=True), nullable=False, index=True)
     title = Column(String(300), nullable=False)
     version = Column(Integer, nullable=False, server_default="1")
     status = Column(
@@ -369,4 +400,6 @@ __all__ = [
     "SopStatus",
     "CodificationJob",
     "CodificationJobStatus",
+    "User",
+    "UserRole",
 ]

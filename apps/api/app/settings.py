@@ -21,3 +21,10 @@ def get_default_tenant_id() -> UUID:
         return UUID(raw_tenant_id)
     except ValueError as exc:
         raise SettingsError("DEFAULT_TENANT_ID must be a valid UUID") from exc
+
+
+def get_secret_key() -> str:
+    secret_key = os.getenv("SECRET_KEY")
+    if not secret_key:
+        raise SettingsError("SECRET_KEY is not configured")
+    return secret_key
