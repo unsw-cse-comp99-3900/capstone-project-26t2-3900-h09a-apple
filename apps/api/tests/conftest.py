@@ -16,3 +16,4 @@ def fast_bcrypt():
         bcrypt__rounds=4,
         deprecated="auto",
     )
+    password_module._DUMMY_HASH = None
