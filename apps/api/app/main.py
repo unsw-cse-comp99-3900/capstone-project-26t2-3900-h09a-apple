@@ -12,7 +12,10 @@ from app.auth.routes import router as auth_router
 from app.database import get_db
 from app.ingestion import ingest_session
 from app.mock_sop_generator import MockSopGenerator
-from app.session_schema import SessionPayload
+from app.session_schema import (
+    SessionPayload,
+    SessionStatusResponse,
+)
 from app.sop_schema import (
     SopDetailPayload,
     SopPayload,
@@ -74,7 +77,7 @@ def create_session(
 )
 def get_session_status(
     session_id: UUID,
-    db: DBSession = DB_DEPENDENCY,
+    db: DBSession = Depends(get_db),
 ):
     session = db.query(models.Session).filter(models.Session.id == session_id).first()
 
