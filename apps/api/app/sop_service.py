@@ -1,19 +1,16 @@
-from uuid import UUID
-
 from sqlalchemy.orm import Session as DBSession
 
 from app import models
-from app.storage import ObjectStorage
+from app.storage import get_storage
 
 
 def resolve_step_screenshot_url(
     source_event_ids: list[str],
     db: DBSession,
-    storage: ObjectStorage,
 ) -> str | None:
     if not source_event_ids:
         return None
-    event_ids = [UUID(event_id) for event_id in source_event_ids]
+    event_ids = [int(event_id) for event_id in source_event_ids]
 
     events = (
         db.query(models.Event)
@@ -32,7 +29,7 @@ def resolve_step_screenshot_url(
 
         if screenshot is None:
             continue
-
+        storage = get_storage()
         return storage.generate_signed_url(screenshot.object_key)
 
     return None

@@ -201,7 +201,6 @@ def generate_sop(
 def get_sop(
     sop_id: UUID,
     db: DBSession = Depends(get_db),
-    storage: ObjectStorage = Depends(get_storage),
 ):
     sop = db.query(models.Sop).filter(models.Sop.id == sop_id).first()
 
@@ -214,7 +213,6 @@ def get_sop(
             screenshot_url=resolve_step_screenshot_url(
                 step["source_event_ids"],
                 db,
-                storage,
             ),
         )
         for step in sop.steps
@@ -226,6 +224,7 @@ def get_sop(
         id=str(sop.id),
         title=sop.title,
         # Mock generator summary is deterministic and not stored in the database.
+        # TODO: Persist summary in the SOP model if it becomes part of the stored contract.
         summary=f"{len(steps)} step workflow",
         version=sop.version,
         generated_at=sop.generated_at,

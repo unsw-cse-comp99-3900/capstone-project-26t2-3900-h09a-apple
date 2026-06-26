@@ -2,6 +2,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import app.main as main_module
+import app.sop_service as sop_service
 from app.database import get_db
 from app.main import app
 from app.storage import get_storage
@@ -192,8 +193,13 @@ def override_get_storage():
 
 
 @pytest.fixture(autouse=True)
-def fake_storage():
+def fake_storage(monkeypatch):
     app.dependency_overrides[get_storage] = override_get_storage
+    monkeypatch.setattr(
+        sop_service,
+        "get_storage",
+        override_get_storage,
+    )
     yield
     app.dependency_overrides.pop(get_storage, None)
 
@@ -464,7 +470,7 @@ def test_get_sop_returns_signed_screenshot_url():
     from uuid import UUID
 
     fake_event = SimpleNamespace(
-        id=UUID("11111111-1111-1111-1111-111111111111"),
+        id=1,
         seq=1,
         screenshot_id=UUID("22222222-2222-2222-2222-222222222222"),
     )
@@ -484,9 +490,7 @@ def test_get_sop_returns_signed_screenshot_url():
                 "order": 1,
                 "title": "Login",
                 "instruction": "Click Login",
-                "source_event_ids": [
-                    "11111111-1111-1111-1111-111111111111",
-                ],
+                "source_event_ids": ["1"],
             }
         ],
         warnings=[],
