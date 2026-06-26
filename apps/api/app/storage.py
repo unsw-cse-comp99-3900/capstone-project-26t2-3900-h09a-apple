@@ -13,8 +13,13 @@ from app.session_schema import ScreenshotInput
 
 
 class ObjectStorage(Protocol):
-    def put_object(self, key: str, body: bytes, content_type: str) -> None:
-        pass
+    def put_object(self, key: str, body: bytes, content_type: str) -> None: ...
+
+    def generate_signed_url(
+        self,
+        key: str,
+        expires: int = 60 * 60 * 24,
+    ) -> str: ...
 
 
 @dataclass(frozen=True)
@@ -67,6 +72,20 @@ class S3ObjectStorage:
             Key=key,
             Body=body,
             ContentType=content_type,
+        )
+
+    def generate_signed_url(
+        self,
+        key: str,
+        expires: int = 60 * 60 * 24,
+    ) -> str:
+        return self.client.generate_presigned_url(
+            ClientMethod="get_object",
+            Params={
+                "Bucket": self.bucket_name,
+                "Key": key,
+            },
+            ExpiresIn=expires,
         )
 
 
