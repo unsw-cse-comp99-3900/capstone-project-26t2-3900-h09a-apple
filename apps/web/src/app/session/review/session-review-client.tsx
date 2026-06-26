@@ -1,8 +1,10 @@
 'use client';
 
 import type { EventType, SessionUploadPayload, WTEventInput } from '@h09a/types';
+import { useRouter } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
+import { createSession } from '@/lib/api';
 import styles from './session-review.module.css';
 
 type SessionReviewClientProps = {
@@ -197,7 +199,40 @@ function describeEvent(event: WTEventInput): string {
   return event.url ?? 'Switched browser tab';
 }
 
+function submitButtonLabel(submitState: SubmitState): string {
+  if (submitState === 'success') {
+    return 'Opening generation status...';
+  }
+
+  if (submitState === 'submitting') {
+    return 'Submitting...';
+  }
+
+  return 'Submit for SOP generation';
+}
+
+function toSubmissionPayload(session: SessionUploadPayload): SessionUploadPayload {
+  return {
+    client_session_id: session.client_session_id,
+    workflow_name: session.workflow_name,
+    recorded_by: session.recorded_by,
+    started_at: session.started_at,
+    stopped_at: session.stopped_at,
+    events: session.events.map((event) => ({
+      type: event.type,
+      target_selector: event.target_selector,
+      target_label: event.target_label,
+      value: event.value,
+      url: event.url,
+      attrs: event.attrs,
+      screenshot_id: event.screenshot_id,
+      timestamp_ms: event.timestamp_ms,
+    })),
+  };
+}
+
 export function SessionReviewClient({ sessionId }: SessionReviewClientProps) {
+  const router = useRouter();
   const [session, setSession] = useState<SessionUploadPayload | null>(null);
   const [loadState, setLoadState] = useState<LoadState>(sessionId ? 'loading' : 'error');
   const [loadMessage, setLoadMessage] = useState(
@@ -259,9 +294,26 @@ export function SessionReviewClient({ sessionId }: SessionReviewClientProps) {
     };
   }, [sessionId]);
 
-  function handleSubmit() {
-    setSubmitState('error');
-    setErrorMessage('Backend submission will be implemented in H09AAPPLE-14.');
+  async function handleSubmit() {
+    if (!session) {
+      return;
+    }
+
+    setSubmitState('submitting');
+    setErrorMessage('');
+
+    try {
+      const createdSession = await createSession(toSubmissionPayload(session));
+      setSubmitState('success');
+      router.push(`/session/${createdSession.session_id}/generating`);
+    } catch (error) {
+      setSubmitState('error');
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : 'Unable to submit this session for SOP generation.',
+      );
+    }
   }
 
   return (
@@ -359,12 +411,16 @@ export function SessionReviewClient({ sessionId }: SessionReviewClientProps) {
         <button
           className={styles.submitButton}
           disabled={
-            isLoading || !session || submitState === 'submitting' || session.events.length === 0
+            isLoading ||
+            !session ||
+            submitState === 'submitting' ||
+            submitState === 'success' ||
+            session.events.length === 0
           }
           type="button"
           onClick={handleSubmit}
         >
-          {submitState === 'submitting' ? 'Submitting...' : 'Submit for SOP generation'}
+          {submitButtonLabel(submitState)}
         </button>
       </footer>
     </main>
