@@ -250,6 +250,74 @@ class FakeDbWithSession(FakeDb):
         return []
 
 
+class FakeDbWithSessionStatus(FakeDb):
+    def __init__(self, session, job=None, sop=None):
+        super().__init__()
+        self.results = [session, job, sop]
+
+    def query(self, model):
+        return self
+
+    def filter(self, *args):
+        return self
+
+    def order_by(self, *args):
+        return self
+
+    def first(self):
+        return self.results.pop(0)
+
+
+def test_get_session_status_returns_completed_sop_id():
+    from types import SimpleNamespace
+
+    session_id = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+    sop_id = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+    fake_session = SimpleNamespace(id=session_id, workflow_name="Login Flow")
+    fake_job = SimpleNamespace(status="completed")
+    fake_sop = SimpleNamespace(id=sop_id)
+    db = FakeDbWithSessionStatus(session=fake_session, job=fake_job, sop=fake_sop)
+
+    app.dependency_overrides[get_db] = lambda: db
+
+    try:
+        response = client.get(f"/api/v1/sessions/{session_id}")
+
+        assert response.status_code == 200
+        assert response.json() == {
+            "session_id": session_id,
+            "workflow_name": "Login Flow",
+            "job_status": "completed",
+            "sop_id": sop_id,
+        }
+    finally:
+        app.dependency_overrides[get_db] = override_get_db
+
+
+def test_get_session_status_returns_failed_with_null_sop_id():
+    from types import SimpleNamespace
+
+    session_id = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+    fake_session = SimpleNamespace(id=session_id, workflow_name="Login Flow")
+    fake_job = SimpleNamespace(status="failed")
+    db = FakeDbWithSessionStatus(session=fake_session, job=fake_job, sop=None)
+
+    app.dependency_overrides[get_db] = lambda: db
+
+    try:
+        response = client.get(f"/api/v1/sessions/{session_id}")
+
+        assert response.status_code == 200
+        assert response.json() == {
+            "session_id": session_id,
+            "workflow_name": "Login Flow",
+            "job_status": "failed",
+            "sop_id": None,
+        }
+    finally:
+        app.dependency_overrides[get_db] = override_get_db
+
+
 def test_generate_sop_returns_201():
     from types import SimpleNamespace
 

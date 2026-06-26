@@ -18,6 +18,13 @@ class EventType(str, Enum):
     tab_switch = "tab_switch"
 
 
+class JobStatus(str, Enum):
+    pending = "pending"
+    processing = "processing"
+    completed = "completed"
+    failed = "failed"
+
+
 # 每个event必须有合法字段
 class WTEventInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -87,3 +94,10 @@ class SessionPayload(BaseModel):
             raise ValueError("event screenshot_id must reference an item in screenshots")
 
         return self
+
+
+class SessionStatusResponse(BaseModel):
+    session_id: UUID
+    workflow_name: str
+    job_status: JobStatus
+    sop_id: UUID | None = None
