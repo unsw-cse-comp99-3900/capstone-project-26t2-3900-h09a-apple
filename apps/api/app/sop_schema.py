@@ -8,6 +8,7 @@ class SopStep(BaseModel):
     order: int = Field(..., ge=1)
     title: str = Field(..., min_length=1)
     instruction: str = Field(..., min_length=1)
+    branch: str | None = None
     source_event_ids: list[str] = Field(default_factory=list)
 
 
