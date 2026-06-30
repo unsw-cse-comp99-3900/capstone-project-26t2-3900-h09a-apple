@@ -144,6 +144,7 @@ export interface SopStep {
   order: number;
   title: string;
   instruction: string;
+  branch?: string | null;
   source_event_ids: string[];
 }
 

@@ -3,9 +3,20 @@ import type {
   SessionCreateResponse,
   SessionStatusResponse,
   SessionUploadPayload,
+  SopDetailPayload,
 } from '@h09a/types';
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000';
+
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
 
 export function apiUrl(path: string): string {
   const trimmed = path.startsWith('/') ? path : `/${path}`;
@@ -82,4 +93,14 @@ export async function retryGenerateSop(sessionId: string): Promise<void> {
   if (!res.ok) {
     throw new Error(await errorMessage(res, 'SOP retry failed'));
   }
+}
+
+export async function getSop(sopId: string): Promise<SopDetailPayload> {
+  const res = await fetch(apiUrl(`/api/v1/sops/${sopId}`), { cache: 'no-store' });
+
+  if (!res.ok) {
+    throw new ApiError(await errorMessage(res, 'Failed to load SOP'), res.status);
+  }
+
+  return res.json();
 }
