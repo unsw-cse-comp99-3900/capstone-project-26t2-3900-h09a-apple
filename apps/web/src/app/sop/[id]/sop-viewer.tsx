@@ -46,7 +46,13 @@ function stripTrailingSentencePunctuation(value: string): string {
 }
 
 function looksLikeUrl(value: string): boolean {
-  return /^(https?:\/\/|www\.|localhost[:/]|[\w-]+\.[\w.-]+)(?:[/:?#]|$)/i.test(value.trim());
+  const trimmed = stripTrailingSentencePunctuation(value.trim());
+
+  if (/^https?:\/\//i.test(trimmed)) {
+    return true;
+  }
+
+  return /^(?:www\.|localhost(?:[:/]|$)|[\w-]+\.[\w.-]+(?:[/:?#]|$))/i.test(trimmed);
 }
 
 function cleanUrlForDisplay(value: string): string {

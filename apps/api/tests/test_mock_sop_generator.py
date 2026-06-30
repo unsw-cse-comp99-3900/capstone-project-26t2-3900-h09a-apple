@@ -36,8 +36,7 @@ def test_generate_single_step():
     assert len(result.steps) == 1
     assert result.steps[0].title == "Example Login"
     assert result.steps[0].instruction == (
-        "Open Example Login.\n"
-        "Enter the required information in the username field."
+        "Open Example Login.\n" "Enter the required information in the username field."
     )
 
     assert isinstance(result, SopPayload)

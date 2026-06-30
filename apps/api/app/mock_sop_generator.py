@@ -30,9 +30,7 @@ class MockSopGenerator(SopGenerator):
         return f"{parsed.netloc}{path}" if path else parsed.netloc
 
     def _label(self, event):
-        label = getattr(event, "target_label", None) or getattr(
-            event, "target_selector", None
-        )
+        label = getattr(event, "target_label", None) or getattr(event, "target_selector", None)
         if isinstance(label, str) and label.strip():
             return label.strip()
         return None
