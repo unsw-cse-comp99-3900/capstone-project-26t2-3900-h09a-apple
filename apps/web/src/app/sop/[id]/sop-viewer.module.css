@@ -101,6 +101,30 @@
   overflow: hidden;
 }
 
+.notFoundCard {
+  padding: 32px;
+  border: 1px solid #dfe4ff;
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at 92% 8%, rgb(117 114 255 / 18%), transparent 34%),
+    linear-gradient(135deg, #ffffff 0%, #f4f6ff 100%);
+  box-shadow: 0 24px 60px rgb(75 86 145 / 12%);
+}
+
+.notFoundCard h1 {
+  margin: 0;
+  color: #17213d;
+  font-size: clamp(34px, 5vw, 54px);
+  letter-spacing: -0.04em;
+}
+
+.notFoundCard p:last-child {
+  max-width: 620px;
+  margin: 14px 0 0;
+  color: #66708f;
+  line-height: 1.65;
+}
+
 .panelHeader {
   display: flex;
   align-items: flex-start;

@@ -3,10 +3,6 @@ import Image from 'next/image';
 import React from 'react';
 import styles from './sop-viewer.module.css';
 
-type SopStepWithBranch = SopStepResponse & {
-  branch?: string | null;
-};
-
 export type SopStepCardProps = {
   stepNumber: number;
   title: string;
@@ -41,7 +37,7 @@ function warningForStep(step: SopStepResponse, warnings: SopWarning[]): string |
 }
 
 function branchForStep(step: SopStepResponse): string | null {
-  const branch = (step as SopStepWithBranch).branch;
+  const branch = step.branch;
   return branch?.trim() ? branch : null;
 }
 
