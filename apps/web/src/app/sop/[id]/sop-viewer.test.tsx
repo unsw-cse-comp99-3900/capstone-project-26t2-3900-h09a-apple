@@ -59,6 +59,24 @@ describe('SopStepCard', () => {
     expect(plainMarkup).not.toContain('Warning');
     expect(plainMarkup).not.toContain('Branch');
   });
+
+  it('moves URL-like titles into a muted subtitle', () => {
+    const markup = renderToStaticMarkup(
+      <SopStepCard
+        stepNumber={1}
+        title="https://example.com/login?redirect=/dashboard"
+        instruction="Open https://example.com/login?redirect=/dashboard."
+        screenshotUrl={null}
+      />,
+    );
+
+    expect(markup).toContain('<h2>Open page</h2>');
+    expect(markup).toContain('example.com/login');
+    expect(markup).toContain('title="https://example.com/login?redirect=/dashboard"');
+    expect(markup).not.toContain(
+      '<h2>https://example.com/login?redirect=/dashboard</h2>',
+    );
+  });
 });
 
 describe('SopViewer', () => {

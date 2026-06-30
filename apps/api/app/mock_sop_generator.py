@@ -1,22 +1,107 @@
+from urllib.parse import urlparse
+
 from app.models import EventType, Session
 from app.sop_generator import SopGenerator
 from app.sop_schema import SopPayload, SopStep, SopWarning
 
 
-class MockSopGenerator(SopGenerator):
-    # Helper
+class MockSopGenerator(SopGenerator+):
+    def _event_attrs(self, event):
+        attrs = getattr(event, "attrs", None)
+        if isinstance(attrs, dict):
+            return attrs
+        return {}
+
+    def _page_title(self, event):
+        title = self._event_attrs(event).get("page_title")
+        if isinstance(title, str) and title.strip():
+            return title.strip()
+        return None
+
+    def _clean_url(self, url):
+        if not url:
+            return None
+
+        parsed = urlparse(url)
+        if not parsed.netloc:
+            return url.strip() or None
+
+        path = parsed.path.rstrip("/")
+        return f"{parsed.netloc}{path}" if path else parsed.netloc
+
+    def _label(self, event):
+        label = getattr(event, "target_label", None) or getattr(
+            event, "target_selector", None
+        )
+        if isinstance(label, str) and label.strip():
+            return label.strip()
+        return None
+
+    def _humanize_type(self, event_type):
+        return str(event_type).replace("_", " ").strip().capitalize()
+
+    def _action_title(self, event):
+        label = self._label(event)
+        event_type = getattr(event, "type", "")
+
+        if event_type == EventType.click.value:
+            return f"Click {label}" if label else "Click the control"
+        if event_type == EventType.input.value:
+            return f"Enter {label}" if label else "Enter information"
+        if event_type == EventType.submit.value:
+            return f"Submit {label}" if label else "Submit the form"
+        if event_type == EventType.tab_switch.value:
+            return "Switch tabs"
+
+        return self._humanize_type(event_type)
+
     def _title(self, index, group):
         for event in group:
-            if event.url:
-                return event.url
+            page_title = self._page_title(event)
+            if page_title:
+                return page_title
+
+        for event in group:
+            if getattr(event, "type", None) != EventType.navigation.value:
+                return self._action_title(event)
+
+        for event in group:
+            cleaned_url = self._clean_url(getattr(event, "url", None))
+            if cleaned_url:
+                return cleaned_url
+
         return f"Step {index + 1}"
+
+    def _instruction_for_event(self, event):
+        event_type = getattr(event, "type", "")
+        label = self._label(event)
+        page_title = self._page_title(event)
+        cleaned_url = self._clean_url(getattr(event, "url", None))
+
+        if event_type == EventType.navigation.value:
+            destination = page_title or cleaned_url or "the page"
+            return f"Open {destination}."
+        if event_type == EventType.click.value:
+            target = label or "the highlighted control"
+            return f"Click {target}."
+        if event_type == EventType.input.value:
+            target = label or "the field"
+            return f"Enter the required information in the {target} field."
+        if event_type == EventType.submit.value:
+            target = label or "the form"
+            return f"Submit {target}."
+        if event_type == EventType.tab_switch.value:
+            target = page_title or cleaned_url or "the next tab"
+            return f"Switch to {target}."
+
+        action = self._humanize_type(event_type).lower() or "continue"
+        target = f" on {label}" if label else ""
+        return f"{action.capitalize()}{target}."
 
     def _instruction(self, group):
         lines = []
         for e in group:
-            label = e.target_label or e.target_selector or ""
-
-            lines.append(f"{e.type} {label}".strip())
+            lines.append(self._instruction_for_event(e))
         return "\n".join(lines)
 
     def _detect_repeat(self, group):

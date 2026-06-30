@@ -193,14 +193,32 @@
 }
 
 .stepCard h2 {
+  display: -webkit-box;
+  overflow: hidden;
   font-size: 24px;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.stepSubtitle {
+  overflow: hidden;
+  margin: 6px 0 0;
+  color: #75809d;
+  font-size: 14px;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .instruction {
+  display: -webkit-box;
+  overflow: hidden;
   margin: 10px 0 0;
   color: #46516f;
   font-size: 16px;
   line-height: 1.65;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 5;
 }
 
 .callout {

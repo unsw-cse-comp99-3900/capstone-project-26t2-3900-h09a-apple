@@ -11,11 +11,11 @@ from app import models
 from app.auth.routes import router as auth_router
 from app.database import get_db
 from app.ingestion import ingest_session
-from app.mock_sop_generator import MockSopGenerator
 from app.session_schema import (
     SessionPayload,
     SessionStatusResponse,
 )
+from app.sop_generator_selector import get_sop_generator
 from app.sop_schema import (
     SopDetailPayload,
     SopPayload,
@@ -148,7 +148,7 @@ def generate_sop(
             detail="SOP already generated",
         )
     try:
-        generator = MockSopGenerator()
+        generator = get_sop_generator()
         payload = generator.generate(session)
 
         sop = models.Sop(
