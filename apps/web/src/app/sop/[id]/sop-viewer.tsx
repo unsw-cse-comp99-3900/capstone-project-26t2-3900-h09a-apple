@@ -98,7 +98,8 @@ function stepDisplayText(title: string, instruction: string) {
     title: titleIsUrl ? 'Open page' : title,
     subtitle: titleIsUrl ? cleanUrlForDisplay(title) : openUrl.subtitle,
     subtitleTitle: titleIsUrl ? stripTrailingSentencePunctuation(title) : openUrl.subtitleTitle,
-    instruction: titleIsUrl && openUrl.instruction === instruction ? 'Open the page.' : openUrl.instruction,
+    instruction:
+      titleIsUrl && openUrl.instruction === instruction ? 'Open the page.' : openUrl.instruction,
   };
 }
 

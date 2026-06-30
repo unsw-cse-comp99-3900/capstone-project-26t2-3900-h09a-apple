@@ -73,9 +73,7 @@ describe('SopStepCard', () => {
     expect(markup).toContain('<h2>Open page</h2>');
     expect(markup).toContain('example.com/login');
     expect(markup).toContain('title="https://example.com/login?redirect=/dashboard"');
-    expect(markup).not.toContain(
-      '<h2>https://example.com/login?redirect=/dashboard</h2>',
-    );
+    expect(markup).not.toContain('<h2>https://example.com/login?redirect=/dashboard</h2>');
   });
 });
 
