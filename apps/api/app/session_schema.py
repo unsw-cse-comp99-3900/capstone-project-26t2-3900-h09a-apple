@@ -9,7 +9,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
-# 规定合法eventtype
+# Allowed event types for ingestion
 class EventType(str, Enum):
     click = "click"
     navigation = "navigation"
@@ -25,7 +25,7 @@ class JobStatus(str, Enum):
     failed = "failed"
 
 
-# 每个event必须有合法字段
+# Required fields for each recorded event
 class WTEventInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
