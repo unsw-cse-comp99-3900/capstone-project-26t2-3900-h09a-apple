@@ -235,9 +235,20 @@ stores only the key.
 
 ### `steps` JSONB shape
 
-The shape must match `SopStep` in `apps/api/app/sop_schema.py` (Pydantic) —
-those two definitions are the same contract from two angles. **Do not diverge
-field names.**
+The shape must match `SopStep` in `apps/api/app/sop_schema.py` (Pydantic) and
+`SopStep` in `packages/types/src/session.ts` — those three definitions are the
+same contract from three angles. **Do not diverge field names.**
+
+| Field              | Type           | Required | Notes                                      |
+| ------------------ | -------------- | -------- | -------------------------------------------- |
+| `order`            | int (≥ 1)      | yes      | step sequence                                |
+| `title`            | string         | yes      | short human-readable phrase, not a raw URL   |
+| `instruction`      | string         | yes      | full sentence describing the action          |
+| `source_event_ids` | string[]       | yes      | event ids from the session (stored as strings) |
+| `branch`           | string \| null | no       | optional conditional branch callout          |
+
+Do **not** use `step_number`, `action`, or `expected_result` — those are not part
+of the locked contract consumed by the API or frontend.
 
 ```json
 [
@@ -246,6 +257,13 @@ field names.**
     "title": "Open the invoices dashboard",
     "instruction": "Click Invoices in the left navigation.",
     "source_event_ids": ["12345", "12346"]
+  },
+  {
+    "order": 2,
+    "title": "Choose approval path",
+    "instruction": "Select the matching approval queue.",
+    "source_event_ids": ["12347"],
+    "branch": "If the amount is over $500, route to manager approval."
   }
 ]
 ```
