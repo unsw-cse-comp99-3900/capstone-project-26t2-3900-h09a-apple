@@ -1,11 +1,14 @@
 function mapBufferedEventToWTEventInput(evt) {
   const payload = evt.payload || {};
+  const pageTitle = typeof payload.title === 'string' ? payload.title.trim() : '';
+
   return {
     type: evt.type.toLowerCase(), // Schema expects lowercase, e.g., 'click'
     target_selector: payload.selector, // Flattened
     target_label: payload.label, // Flattened
     value: payload.value, // Flattened
     url: payload.url, // Flattened
+    attrs: pageTitle ? { page_title: pageTitle } : {},
     timestamp_ms: payload.timestamp || evt.receivedAt || 0,
   };
 }
