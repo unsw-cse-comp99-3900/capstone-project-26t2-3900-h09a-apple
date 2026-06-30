@@ -239,13 +239,13 @@ The shape must match `SopStep` in `apps/api/app/sop_schema.py` (Pydantic) and
 `SopStep` in `packages/types/src/session.ts` — those three definitions are the
 same contract from three angles. **Do not diverge field names.**
 
-| Field              | Type           | Required | Notes                                      |
-| ------------------ | -------------- | -------- | -------------------------------------------- |
-| `order`            | int (≥ 1)      | yes      | step sequence                                |
-| `title`            | string         | yes      | short human-readable phrase, not a raw URL   |
-| `instruction`      | string         | yes      | full sentence describing the action          |
+| Field              | Type           | Required | Notes                                          |
+| ------------------ | -------------- | -------- | ---------------------------------------------- |
+| `order`            | int (≥ 1)      | yes      | step sequence                                  |
+| `title`            | string         | yes      | short human-readable phrase, not a raw URL     |
+| `instruction`      | string         | yes      | full sentence describing the action            |
 | `source_event_ids` | string[]       | yes      | event ids from the session (stored as strings) |
-| `branch`           | string \| null | no       | optional conditional branch callout          |
+| `branch`           | string \| null | no       | optional conditional branch callout            |
 
 Do **not** use `step_number`, `action`, or `expected_result` — those are not part
 of the locked contract consumed by the API or frontend.
