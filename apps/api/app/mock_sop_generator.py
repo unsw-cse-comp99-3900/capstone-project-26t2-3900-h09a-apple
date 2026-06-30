@@ -5,7 +5,7 @@ from app.sop_generator import SopGenerator
 from app.sop_schema import SopPayload, SopStep, SopWarning
 
 
-class MockSopGenerator(SopGenerator+):
+class MockSopGenerator(SopGenerator):
     def _event_attrs(self, event):
         attrs = getattr(event, "attrs", None)
         if isinstance(attrs, dict):
