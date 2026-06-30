@@ -32,6 +32,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    Numeric,
     String,
     Text,
     UniqueConstraint,
@@ -365,6 +366,11 @@ class Sop(Base):
     )
     steps = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
     warnings = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
+    generation_mode = Column(
+        String(32),
+        nullable=False,
+        server_default="llm",
+    )
     generated_at = Column(
         DateTime(timezone=True),
         nullable=False,
@@ -388,6 +394,62 @@ class Sop(Base):
             name="ck_sops_warnings_array",
         ),
         Index("ix_sops_session_status", "session_id", "status"),
+        CheckConstraint(
+            "generation_mode IN ('llm','fallback')",
+            name="ck_sops_generation_mode",
+        ),
+    )
+
+
+class LlmAuditLog(Base):
+    __tablename__ = "llm_audit_log"
+
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    session_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("sessions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    provider = Column(String(64), nullable=False)
+    model = Column(String(128), nullable=False)
+    status = Column(String(32), nullable=False)
+    attempt = Column(Integer, nullable=False)
+    prompt_tokens = Column(Integer)
+    completion_tokens = Column(Integer)
+    latency_ms = Column(Integer, nullable=False)
+    cost_usd = Column(Numeric(12, 8))
+    error_message = Column(Text)
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=text("now()"),
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('success','error')",
+            name="ck_llm_audit_log_status",
+        ),
+        CheckConstraint("attempt >= 1", name="ck_llm_audit_log_attempt_pos"),
+        CheckConstraint(
+            "prompt_tokens IS NULL OR prompt_tokens >= 0",
+            name="ck_llm_audit_log_prompt_tokens_nonneg",
+        ),
+        CheckConstraint(
+            "completion_tokens IS NULL OR completion_tokens >= 0",
+            name="ck_llm_audit_log_completion_tokens_nonneg",
+        ),
+        CheckConstraint("latency_ms >= 0", name="ck_llm_audit_log_latency_nonneg"),
+        CheckConstraint(
+            "cost_usd IS NULL OR cost_usd >= 0",
+            name="ck_llm_audit_log_cost_nonneg",
+        ),
+        Index("ix_llm_audit_log_session_created", "session_id", "created_at"),
     )
 
 
@@ -404,4 +466,5 @@ __all__ = [
     "CodificationJobStatus",
     "User",
     "UserRole",
+    "LlmAuditLog",
 ]

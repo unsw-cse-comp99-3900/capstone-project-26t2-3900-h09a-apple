@@ -27,6 +27,7 @@ class SopPayload(BaseModel):
     summary: str = Field(..., min_length=1)
     steps: list[SopStep] = Field(..., min_length=1)
     warnings: list[SopWarning] = Field(default_factory=list)
+    generation_mode: Literal["llm", "fallback"] = "llm"
 
 
 class SopDetailPayload(BaseModel):

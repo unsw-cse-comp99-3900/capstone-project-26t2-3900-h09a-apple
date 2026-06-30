@@ -1,4 +1,5 @@
 import os
+import time
 from uuid import UUID
 
 from dotenv import load_dotenv
@@ -148,14 +149,18 @@ def generate_sop(
             detail="SOP already generated",
         )
     try:
-        generator = get_sop_generator()
-        payload = generator.generate(session)
+        generator = get_sop_generator(db=db)
 
+        started = time.perf_counter()
+        payload = generator.generate(session)
+        gen_duration_ms = int((time.perf_counter() - started) * 1000)
         sop = models.Sop(
             session_id=session.id,
             title=payload.title,
             steps=[step.model_dump() for step in payload.steps],
             warnings=[warning.model_dump() for warning in payload.warnings],
+            generation_mode=payload.generation_mode,
+            gen_duration_ms=gen_duration_ms,
         )
         db.add(sop)
 

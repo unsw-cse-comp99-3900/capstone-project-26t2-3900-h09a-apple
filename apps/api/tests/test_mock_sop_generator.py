@@ -38,7 +38,7 @@ def test_generate_single_step():
     assert result.steps[0].instruction == (
         "Open Example Login.\n" "Enter the required information in the username field."
     )
-
+    assert result.steps[0].branch is None
     assert isinstance(result, SopPayload)
 
 
