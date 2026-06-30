@@ -1,4 +1,3 @@
-
 from app.llm_sop_generator import LlmSopGenerator
 from app.sop_generator import SopGenerator
 

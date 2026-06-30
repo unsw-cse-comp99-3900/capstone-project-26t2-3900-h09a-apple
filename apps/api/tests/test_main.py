@@ -39,6 +39,7 @@ class TestProvider:
             cost_usd=Decimal("0.001"),
         )
 
+
 class FakeDb:
     def __init__(self):
         self.added = []
@@ -352,6 +353,7 @@ def test_get_session_status_returns_failed_with_null_sop_id():
     finally:
         app.dependency_overrides[get_db] = override_get_db
 
+
 def test_generate_sop_returns_201(monkeypatch):
     from types import SimpleNamespace
 
@@ -371,11 +373,12 @@ def test_generate_sop_returns_201(monkeypatch):
         ],
     )
 
+    monkeypatch.setenv("LLM_PROVIDER", "openai")
     monkeypatch.setattr(
         "app.llm_sop_generator.get_llm_provider",
         lambda: TestProvider(),
     )
-    
+
     db = FakeDbWithSession(
         session=fake_session,
         job=fake_job,
@@ -549,6 +552,8 @@ def test_get_sop_returns_signed_screenshot_url():
 
     finally:
         app.dependency_overrides[get_db] = override_get_db
+
+
 def test_generate_sop_can_use_llm_generator(monkeypatch):
     from types import SimpleNamespace
 
@@ -557,6 +562,7 @@ def test_generate_sop_can_use_llm_generator(monkeypatch):
     class TestProvider:
         name = "openai"
         model = "gpt-4o"
+
         def generate_sop(self, session_payload: dict) -> SopPayload:
             return LlmProviderResult(
                 sop=SopPayload(
@@ -579,6 +585,7 @@ def test_generate_sop_can_use_llm_generator(monkeypatch):
                 cost_usd=Decimal("0.001"),
             )
 
+    monkeypatch.setenv("LLM_PROVIDER", "openai")
     monkeypatch.setattr(
         "app.llm_sop_generator.get_llm_provider",
         lambda: TestProvider(),

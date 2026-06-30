@@ -150,7 +150,7 @@ def generate_sop(
         )
     try:
         generator = get_sop_generator(db=db)
-        
+
         started = time.perf_counter()
         payload = generator.generate(session)
         gen_duration_ms = int((time.perf_counter() - started) * 1000)

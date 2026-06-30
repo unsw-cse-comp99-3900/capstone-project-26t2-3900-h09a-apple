@@ -13,6 +13,7 @@ class FakeDb:
     def add(self, item):
         self.added.append(item)
 
+
 class SuccessfulProvider:
     name = "openai"
     model = "gpt-4o"
@@ -42,7 +43,6 @@ class SuccessfulProvider:
             completion_tokens=20,
             cost_usd=Decimal("0.001"),
         )
-        
 
 
 def test_llm_sop_generator_returns_llm_payload(monkeypatch):
@@ -89,16 +89,16 @@ def test_llm_sop_generator_returns_llm_payload(monkeypatch):
     assert db.added[0].cost_usd == Decimal("0.001")
     assert payload.steps[0].branch == "main"
 
-    
-
     assert event_payload["target_label"] == "Sign in"
     assert event_payload["value"] == "[MASKED]"
     assert event_payload["attrs"] == {"page_title": "Login"}
     assert event_payload["page_title"] == "Login"
 
+
 class FailingProvider:
     name = "openai"
     model = "gpt-4o"
+
     def generate_sop(self, session_payload: dict) -> LlmProviderResult:
         raise RuntimeError("provider failed")
 

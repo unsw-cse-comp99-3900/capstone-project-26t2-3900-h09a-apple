@@ -24,17 +24,18 @@ MODEL_PRICING_USD_PER_1M_TOKENS = {
     },
 }
 
+
 class LlmProviderResult(BaseModel):
     sop: SopPayload
     prompt_tokens: int | None = None
     completion_tokens: int | None = None
     cost_usd: Decimal | None = None
 
+
 class SopLlmProvider(Protocol):
     name: str
 
-    def generate_sop(self, session_payload: dict) -> LlmProviderResult:
-        ...
+    def generate_sop(self, session_payload: dict) -> LlmProviderResult: ...
 
 
 def estimate_cost_usd(
@@ -51,15 +52,7 @@ def estimate_cost_usd(
     if pricing is None:
         return Decimal("0")
 
-    prompt_cost = (
-        Decimal(prompt_tokens or 0)
-        / Decimal(1_000_000)
-        * pricing["input"]
-    )
-    completion_cost = (
-        Decimal(completion_tokens or 0)
-        / Decimal(1_000_000)
-        * pricing["output"]
-    )
+    prompt_cost = Decimal(prompt_tokens or 0) / Decimal(1_000_000) * pricing["input"]
+    completion_cost = Decimal(completion_tokens or 0) / Decimal(1_000_000) * pricing["output"]
 
     return prompt_cost + completion_cost

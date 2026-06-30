@@ -27,6 +27,7 @@ def test_get_llm_provider_rejects_unknown_provider(monkeypatch):
     with pytest.raises(RuntimeError, match="Unsupported LLM_PROVIDER"):
         get_llm_provider()
 
+
 def test_get_llm_provider_can_select_anthropic(monkeypatch):
     monkeypatch.setenv("LLM_PROVIDER", "anthropic")
 

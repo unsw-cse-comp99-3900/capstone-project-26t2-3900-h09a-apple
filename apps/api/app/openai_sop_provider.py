@@ -28,6 +28,7 @@ Session payload:
 {json.dumps(session_payload, default=str)}
 """
 
+
 class OpenAiSopProvider(SopLlmProvider):
     name = "openai"
 

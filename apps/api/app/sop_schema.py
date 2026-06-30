@@ -29,6 +29,7 @@ class SopPayload(BaseModel):
     warnings: list[SopWarning] = Field(default_factory=list)
     generation_mode: Literal["llm", "fallback"] = "llm"
 
+
 class SopDetailPayload(BaseModel):
     id: str
     title: str
@@ -38,4 +39,3 @@ class SopDetailPayload(BaseModel):
 
     steps: list[SopStepResponse]
     warnings: list[SopWarning] = Field(default_factory=list)
-    

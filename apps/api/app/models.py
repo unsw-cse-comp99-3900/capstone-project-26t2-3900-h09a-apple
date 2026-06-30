@@ -400,6 +400,7 @@ class Sop(Base):
         ),
     )
 
+
 class LlmAuditLog(Base):
     __tablename__ = "llm_audit_log"
 
@@ -450,6 +451,7 @@ class LlmAuditLog(Base):
         ),
         Index("ix_llm_audit_log_session_created", "session_id", "created_at"),
     )
+
 
 __all__ = [
     "Base",

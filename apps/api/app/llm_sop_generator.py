@@ -16,7 +16,7 @@ class LlmSopGenerator(SopGenerator):
 
     def generate(self, session: Session) -> SopPayload:
         session_payload = self._build_session_payload(session)
-        
+
         provider = get_llm_provider()
 
         for attempt in range(self.max_retries + 1):
