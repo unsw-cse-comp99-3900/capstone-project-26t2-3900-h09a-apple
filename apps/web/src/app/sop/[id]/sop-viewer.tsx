@@ -41,6 +41,74 @@ function branchForStep(step: SopStepResponse): string | null {
   return branch?.trim() ? branch : null;
 }
 
+function stripTrailingSentencePunctuation(value: string): string {
+  return value.replace(/[.,;:!?]+$/, '');
+}
+
+function looksLikeUrl(value: string): boolean {
+  const trimmed = stripTrailingSentencePunctuation(value.trim());
+
+  if (/^https?:\/\//i.test(trimmed)) {
+    return true;
+  }
+
+  return /^(?:www\.|localhost(?:[:/]|$)|[\w-]+\.[\w.-]+(?:[/:?#]|$))/i.test(trimmed);
+}
+
+function cleanUrlForDisplay(value: string): string {
+  const trimmed = stripTrailingSentencePunctuation(value.trim());
+  const parseable = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+
+  try {
+    const url = new URL(parseable);
+    const path = url.pathname === '/' ? '' : url.pathname.replace(/\/$/, '');
+    return `${url.hostname}${path}`;
+  } catch {
+    return trimmed.split(/[?#]/, 1)[0];
+  }
+}
+
+function splitLeadingOpenUrl(instruction: string): {
+  subtitle: string | null;
+  subtitleTitle: string | null;
+  instruction: string;
+} {
+  const trimmed = instruction.trim();
+  const match = trimmed.match(/^Open\s+(\S+)(?:\s|$)/i);
+
+  if (!match || !looksLikeUrl(match[1])) {
+    return { subtitle: null, subtitleTitle: null, instruction };
+  }
+
+  const rawUrl = match[1];
+  const subtitle = cleanUrlForDisplay(rawUrl);
+  const subtitleTitle = stripTrailingSentencePunctuation(rawUrl);
+  const leadingSentence = `Open ${rawUrl}`;
+  const withoutLeadingOpen = trimmed
+    .slice(leadingSentence.length)
+    .replace(/^[.,;:!?\s]+/, '')
+    .trim();
+
+  return {
+    subtitle,
+    subtitleTitle,
+    instruction: withoutLeadingOpen || instruction,
+  };
+}
+
+function stepDisplayText(title: string, instruction: string) {
+  const titleIsUrl = looksLikeUrl(title);
+  const openUrl = splitLeadingOpenUrl(instruction);
+
+  return {
+    title: titleIsUrl ? 'Open page' : title,
+    subtitle: titleIsUrl ? cleanUrlForDisplay(title) : openUrl.subtitle,
+    subtitleTitle: titleIsUrl ? stripTrailingSentencePunctuation(title) : openUrl.subtitleTitle,
+    instruction:
+      titleIsUrl && openUrl.instruction === instruction ? 'Open the page.' : openUrl.instruction,
+  };
+}
+
 export function SopStepCard({
   stepNumber,
   title,
@@ -49,6 +117,8 @@ export function SopStepCard({
   branch,
   screenshotUrl,
 }: SopStepCardProps) {
+  const display = stepDisplayText(title, instruction);
+
   return (
     <article className={styles.stepCard}>
       <div className={styles.stepContent}>
@@ -60,8 +130,13 @@ export function SopStepCard({
           <div className={styles.stepTopline}>
             <p className={styles.eyebrow}>Step {stepNumber}</p>
           </div>
-          <h2>{title}</h2>
-          <p className={styles.instruction}>{instruction}</p>
+          <h2>{display.title}</h2>
+          {display.subtitle ? (
+            <p className={styles.stepSubtitle} title={display.subtitleTitle ?? display.subtitle}>
+              {display.subtitle}
+            </p>
+          ) : null}
+          <p className={styles.instruction}>{display.instruction}</p>
 
           {warning ? (
             <div className={`${styles.callout} ${styles.warningCallout}`} role="note">

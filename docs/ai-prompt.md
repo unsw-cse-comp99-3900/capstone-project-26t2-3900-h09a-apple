@@ -62,6 +62,14 @@ Each step must include:
 - `instruction`
 - `source_event_ids`
 
+Optional per step:
+
+- `branch` — conditional branch text when the workflow splits (omit or set `null` if N/A)
+
+Do **not** use legacy field names such as `step_number`, `action`, or `expected_result`.
+The canonical contract is `SopStep` in `apps/api/app/sop_schema.py` and `SopStep` in
+`packages/types/src/session.ts`.
+
 ## Evaluation Script
 
 Evaluation script:
@@ -140,7 +148,8 @@ Required JSON structure:
       "order": 1,
       "title": "string",
       "instruction": "string",
-      "source_event_ids": ["string"]
+      "source_event_ids": ["string"],
+      "branch": "string or null"
     }
   ],
   "warnings": []

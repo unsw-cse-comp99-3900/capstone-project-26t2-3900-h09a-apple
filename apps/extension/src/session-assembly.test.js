@@ -66,3 +66,21 @@ test('assembleSession sorts chronologically, deduplicates adjacent events, and f
   assert.equal(firstInput.target_selector, '#in');
   assert.equal(firstInput.value, 'hello');
 });
+
+test('assembleSession carries page title into event attrs for LLM context', () => {
+  const payload = assembleSession(
+    [
+      {
+        type: 'NAVIGATION',
+        payload: {
+          url: 'https://example.com/login',
+          title: '  Example Login  ',
+          timestamp: 1001,
+        },
+      },
+    ],
+    { workflowName: 'Login flow', startedAt: 1000, stoppedAt: 2000 },
+  );
+
+  assert.equal(payload.events[0].attrs.page_title, 'Example Login');
+});

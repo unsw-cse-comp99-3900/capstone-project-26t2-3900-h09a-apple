@@ -28,3 +28,7 @@ def get_secret_key() -> str:
     if not secret_key:
         raise SettingsError("SECRET_KEY is not configured")
     return secret_key
+
+
+def get_llm_provider() -> str:
+    return os.getenv("LLM_PROVIDER", "mock").strip().lower()
