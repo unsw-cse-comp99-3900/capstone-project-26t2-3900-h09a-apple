@@ -1,6 +1,8 @@
-from typing import Protocol
 from decimal import Decimal
+from typing import Protocol
+
 from pydantic import BaseModel
+
 from app.sop_schema import SopPayload
 
 # Pricing snapshot as of 2026-07-01.

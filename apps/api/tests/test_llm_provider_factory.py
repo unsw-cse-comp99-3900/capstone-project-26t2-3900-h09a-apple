@@ -1,8 +1,9 @@
 import pytest
 
-from app.openai_sop_provider import OpenAiSopProvider
-from app.llm_provider_factory import get_llm_provider
 from app.anthropic_sop_provider import AnthropicSopProvider
+from app.llm_provider_factory import get_llm_provider
+from app.openai_sop_provider import OpenAiSopProvider
+
 
 def test_get_llm_provider_defaults_to_openai(monkeypatch):
     monkeypatch.delenv("LLM_PROVIDER", raising=False)

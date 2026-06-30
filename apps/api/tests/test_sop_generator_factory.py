@@ -1,6 +1,6 @@
-import pytest
-from app.sop_generator_factory import get_sop_generator
 from app.llm_sop_generator import LlmSopGenerator
+from app.sop_generator_factory import get_sop_generator
+
 
 def test_get_sop_generator_returns_llm_generator():
     generator = get_sop_generator()

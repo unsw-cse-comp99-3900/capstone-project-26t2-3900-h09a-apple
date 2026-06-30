@@ -1,15 +1,17 @@
+from decimal import Decimal
+
 import pytest
 from fastapi.testclient import TestClient
-from decimal import Decimal
-from app.llm_provider import LlmProviderResult
+
 import app.main as main_module
 import app.sop_service as sop_service
 from app.database import get_db
+from app.llm_provider import LlmProviderResult
 from app.main import app
+from app.sop_schema import SopPayload, SopStep
 from app.storage import get_storage
 
 client = TestClient(app)
-from app.sop_schema import SopPayload, SopStep
 
 
 class TestProvider:

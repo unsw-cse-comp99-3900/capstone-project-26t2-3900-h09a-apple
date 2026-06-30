@@ -1,7 +1,6 @@
-from app import models
-
 import time
 
+from app import models
 from app.llm_provider_factory import get_llm_provider
 from app.mock_sop_generator import MockSopGenerator
 from app.models import Session

@@ -1,6 +1,6 @@
 import os
-from uuid import UUID
 import time
+from uuid import UUID
 
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, status
@@ -25,7 +25,6 @@ from app.sop_schema import (
 )
 from app.sop_service import resolve_step_screenshot_url
 from app.storage import ObjectStorage, get_storage
-
 
 load_dotenv()
 

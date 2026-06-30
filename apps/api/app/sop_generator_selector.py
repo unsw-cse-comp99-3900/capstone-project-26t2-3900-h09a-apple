@@ -1,7 +1,8 @@
+from app.llm_sop_generator import LlmSopGenerator
 from app.mock_sop_generator import MockSopGenerator
 from app.settings import SettingsError, get_llm_provider
 from app.sop_generator import SopGenerator
-from app.llm_sop_generator import LlmSopGenerator
+
 
 def get_sop_generator(db=None) -> SopGenerator:
     provider = get_llm_provider()

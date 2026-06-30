@@ -6,7 +6,6 @@ from openai import OpenAI
 from app.llm_provider import LlmProviderResult, SopLlmProvider, estimate_cost_usd
 from app.sop_schema import SopPayload
 
-
 SYSTEM_PROMPT = """
 You are an SOP generation assistant.
 Return only valid JSON.

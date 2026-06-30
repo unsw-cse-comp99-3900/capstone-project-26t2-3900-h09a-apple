@@ -6,7 +6,6 @@ from anthropic import Anthropic
 from app.llm_provider import LlmProviderResult, SopLlmProvider, estimate_cost_usd
 from app.sop_schema import SopPayload
 
-
 SYSTEM_PROMPT = """
 You are an SOP generation assistant.
 Return a structured SOP by calling the create_sop tool.

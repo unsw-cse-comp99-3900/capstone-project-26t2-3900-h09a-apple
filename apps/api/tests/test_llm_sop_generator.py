@@ -1,9 +1,10 @@
+from decimal import Decimal
 from types import SimpleNamespace
 
+from app.llm_provider import LlmProviderResult
 from app.llm_sop_generator import LlmSopGenerator
 from app.sop_schema import SopPayload, SopStep
-from decimal import Decimal
-from app.llm_provider import LlmProviderResult
+
 
 class FakeDb:
     def __init__(self):

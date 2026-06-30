@@ -1,8 +1,9 @@
 import os
 
+from app.anthropic_sop_provider import AnthropicSopProvider
 from app.llm_provider import SopLlmProvider
 from app.openai_sop_provider import OpenAiSopProvider
-from app.anthropic_sop_provider import AnthropicSopProvider
+
 
 def get_llm_provider() -> SopLlmProvider:
     selected = os.getenv("LLM_PROVIDER", "openai")
