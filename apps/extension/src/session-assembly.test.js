@@ -84,3 +84,78 @@ test('assembleSession carries page title into event attrs for LLM context', () =
 
   assert.equal(payload.events[0].attrs.page_title, 'Example Login');
 });
+
+test('assembleSession carries screenshot ids and screenshot payloads', () => {
+  const screenshot = {
+    id: '33333333-3333-3333-3333-333333333333',
+    data_base64: 'abc123',
+    content_type: 'image/jpeg',
+  };
+  const payload = assembleSession(
+    [
+      {
+        type: 'CLICK',
+        payload: {
+          selector: '#login',
+          label: 'Log in',
+          url: 'https://example.com/login',
+          screenshot_id: screenshot.id,
+          timestamp: 1001,
+        },
+      },
+    ],
+    {
+      workflowName: 'Login flow',
+      startedAt: 1000,
+      stoppedAt: 2000,
+      screenshots: [screenshot],
+    },
+  );
+
+  assert.equal(payload.events[0].screenshot_id, screenshot.id);
+  assert.deepEqual(payload.screenshots, [screenshot]);
+});
+
+test('assembleSession drops screenshots not referenced by any event after dedup', () => {
+  const keptScreenshot = {
+    id: '11111111-1111-1111-1111-111111111111',
+    data_base64: 'kept',
+    content_type: 'image/jpeg',
+  };
+  const orphanScreenshot = {
+    id: '22222222-2222-2222-2222-222222222222',
+    data_base64: 'orphan',
+    content_type: 'image/jpeg',
+  };
+
+  const payload = assembleSession(
+    [
+      {
+        type: 'CLICK',
+        payload: {
+          selector: '#btn',
+          screenshot_id: keptScreenshot.id,
+          timestamp: 1001,
+        },
+      },
+      {
+        type: 'CLICK',
+        payload: {
+          selector: '#btn',
+          screenshot_id: orphanScreenshot.id,
+          timestamp: 1002,
+        },
+      },
+    ],
+    {
+      workflowName: 'Dedup flow',
+      startedAt: 1000,
+      stoppedAt: 2000,
+      screenshots: [keptScreenshot, orphanScreenshot],
+    },
+  );
+
+  assert.equal(payload.event_count, 1);
+  assert.equal(payload.events[0].screenshot_id, keptScreenshot.id);
+  assert.deepEqual(payload.screenshots, [keptScreenshot]);
+});

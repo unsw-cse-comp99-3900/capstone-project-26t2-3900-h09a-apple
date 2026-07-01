@@ -228,6 +228,7 @@ function toSubmissionPayload(session: SessionUploadPayload): SessionUploadPayloa
       screenshot_id: event.screenshot_id,
       timestamp_ms: event.timestamp_ms,
     })),
+    screenshots: session.screenshots,
   };
 }
 

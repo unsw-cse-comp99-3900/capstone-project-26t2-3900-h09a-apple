@@ -10,6 +10,7 @@ function mapBufferedEventToWTEventInput(evt) {
     url: payload.url, // Flattened
     attrs: pageTitle ? { page_title: pageTitle } : {},
     timestamp_ms: payload.timestamp || evt.receivedAt || 0,
+    screenshot_id: payload.screenshot_id || null,
   };
 }
 
@@ -47,13 +48,22 @@ export function assembleSession(events, metadata) {
     deduplicatedEvents.push(current);
   }
 
+  const mappedEvents = deduplicatedEvents.map(mapBufferedEventToWTEventInput);
+  const referencedScreenshotIds = new Set(
+    mappedEvents.map((event) => event.screenshot_id).filter(Boolean),
+  );
+  const screenshots = (metadata.screenshots || []).filter((screenshot) =>
+    referencedScreenshotIds.has(screenshot.id),
+  );
+
   // 3. Assemble and return the structured SessionPayload JSON format
   return {
     client_session_id: metadata.client_session_id || crypto.randomUUID(),
     workflow_name: metadata.workflowName || '',
     started_at: new Date(metadata.startedAt || 0).toISOString(),
     stopped_at: new Date(metadata.stoppedAt || Date.now()).toISOString(),
-    event_count: deduplicatedEvents.length,
-    events: deduplicatedEvents.map(mapBufferedEventToWTEventInput),
+    event_count: mappedEvents.length,
+    events: mappedEvents,
+    screenshots,
   };
 }
