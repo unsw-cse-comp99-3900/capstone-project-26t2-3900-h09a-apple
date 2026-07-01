@@ -38,7 +38,7 @@ function setupPopupDom(recordingState = { status: 'ready', workflowName: '' }) {
         },
       },
       session: {
-        get: (_keys, callback) => callback({ eventBuffer: [] }),
+        get: (_keys, callback) => callback({ eventCount: 0 }),
         set: () => Promise.resolve(),
       },
       onChanged: {
@@ -46,6 +46,9 @@ function setupPopupDom(recordingState = { status: 'ready', workflowName: '' }) {
           storageChangeCallback = callback;
         },
       },
+    },
+    runtime: {
+      sendMessage: (_message) => Promise.resolve({ ok: true }),
     },
     tabs: {
       create: (options) => openedTabs.push(options),
@@ -59,8 +62,8 @@ function setupPopupDom(recordingState = { status: 'ready', workflowName: '' }) {
       return persistedRecordingState;
     },
     markSessionPayloadReady(sessionId) {
-      const storageKey = `session_${sessionId}`;
-      localStorageValues[storageKey] = { client_session_id: sessionId };
+      const storageKey = `sessionReady_${sessionId}`;
+      localStorageValues[storageKey] = true;
       storageChangeCallback(
         { [storageKey]: { newValue: localStorageValues[storageKey] } },
         'local',
@@ -116,7 +119,7 @@ test('review session button is only available after recording is completed', asy
   reviewButton.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
   assert.equal(openedTabs.length, 0);
 
-  // Once the service worker writes session_<id>, Review becomes enabled.
+  // Once the service worker writes sessionReady_<id>, Review becomes enabled.
   const sessionId = getRecordingState().client_session_id;
   markSessionPayloadReady(sessionId);
   assert.equal(reviewButton.disabled, false);

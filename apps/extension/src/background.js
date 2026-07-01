@@ -1,18 +1,30 @@
 import { assembleSession } from './session-assembly.js';
+import {
+  clearActiveSessionBuffers,
+  getActiveSessionBuffers,
+  getSessionPayload,
+  saveActiveSessionBuffers,
+  saveSessionPayload,
+} from './local-db.js';
 
 let writeQueue = Promise.resolve();
 let lastScreenshotAt = 0;
 let lastScreenshot = null;
 
-const SCREENSHOT_THROTTLE_MS = 500;
+const SCREENSHOT_THROTTLE_MS = 2000;
 const SCREENSHOT_FORMAT = 'jpeg';
-const SCREENSHOT_QUALITY = 50;
+const SCREENSHOT_QUALITY = 20;
+const MAX_SCREENSHOTS_PER_SESSION = 25;
 const RECORDED_EVENT_TYPES = new Set(['CLICK', 'NAVIGATION', 'INPUT']);
+const SESSION_SCREENSHOT_SAVE_LIMITS = [25, 10, 0];
 
 function resetSessionBuffers() {
   lastScreenshotAt = 0;
   lastScreenshot = null;
-  return chrome.storage?.session.set({ eventBuffer: [], screenshots: [] });
+  return Promise.all([
+    clearActiveSessionBuffers(),
+    chrome.storage?.session.set({ eventCount: 0 }),
+  ]);
 }
 
 function parseScreenshotDataUrl(dataUrl) {
@@ -25,6 +37,59 @@ function parseScreenshotDataUrl(dataUrl) {
     content_type: match[1],
     data_base64: match[2],
   };
+}
+
+function isQuotaExceededError(error) {
+  return error instanceof Error && /quota/i.test(error.message);
+}
+
+function limitSessionScreenshots(sessionPayload, screenshotLimit) {
+  if (sessionPayload.screenshots.length <= screenshotLimit) {
+    return sessionPayload;
+  }
+
+  const keptScreenshots = sessionPayload.screenshots.slice(0, screenshotLimit);
+  const keptScreenshotIds = new Set(keptScreenshots.map((screenshot) => screenshot.id));
+  const events = sessionPayload.events.map((event) => {
+    if (!event.screenshot_id || keptScreenshotIds.has(event.screenshot_id)) {
+      return event;
+    }
+
+    return {
+      ...event,
+      screenshot_id: null,
+    };
+  });
+
+  return {
+    ...sessionPayload,
+    events,
+    screenshots: keptScreenshots,
+  };
+}
+
+async function saveSessionPayloadWithinQuota(sessionPayload) {
+  let lastError;
+
+  for (const screenshotLimit of SESSION_SCREENSHOT_SAVE_LIMITS) {
+    const payloadToSave = limitSessionScreenshots(sessionPayload, screenshotLimit);
+
+    try {
+      await saveSessionPayload(payloadToSave.client_session_id, payloadToSave);
+      return payloadToSave;
+    } catch (error) {
+      if (!isQuotaExceededError(error)) {
+        throw error;
+      }
+
+      lastError = error;
+      console.warn(
+        `Session payload exceeded local quota with ${payloadToSave.screenshots.length} screenshots.`,
+      );
+    }
+  }
+
+  throw lastError || new Error('Failed to save session payload');
 }
 
 async function getScreenshotForEvent(tab, existingScreenshots = []) {
@@ -42,6 +107,10 @@ async function getScreenshotForEvent(tab, existingScreenshots = []) {
   }
 
   if (!tab?.windowId || !tab?.active) {
+    return { screenshot: null, screenshotId: null };
+  }
+
+  if (existingScreenshots.length >= MAX_SCREENSHOTS_PER_SESSION) {
     return { screenshot: null, screenshotId: null };
   }
 
@@ -76,15 +145,25 @@ async function getScreenshotForEvent(tab, existingScreenshots = []) {
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.type === 'GET_SESSION_PAYLOAD') {
-    const storageKey = `session_${message.sessionId}`;
+  if (message.type === 'RESET_SESSION_BUFFERS') {
+    resetSessionBuffers()
+      .then(() => sendResponse({ ok: true }))
+      .catch((error) => {
+        sendResponse({
+          ok: false,
+          error: error instanceof Error ? error.message : 'Failed to reset session buffers',
+        });
+      });
 
-    chrome.storage.local
-      .get([storageKey])
-      .then((result) => {
+    return true;
+  }
+
+  if (message.type === 'GET_SESSION_PAYLOAD') {
+    getSessionPayload(message.sessionId)
+      .then((session) => {
         sendResponse({
           ok: true,
-          session: result[storageKey] || null,
+          session: session || null,
         });
       })
       .catch((error) => {
@@ -100,10 +179,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (RECORDED_EVENT_TYPES.has(message.type)) {
     writeQueue = writeQueue
       .then(async () => {
-        const result = await chrome.storage.session.get({
-          eventBuffer: [],
-          screenshots: [],
-        });
+        const result = await getActiveSessionBuffers();
 
         const { screenshot, screenshotId } = await getScreenshotForEvent(
           sender.tab,
@@ -121,10 +197,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           receivedAt: Date.now(),
         };
 
-        await chrome.storage.session.set({
-          eventBuffer: [...result.eventBuffer, newEvent],
-          screenshots: screenshot ? [...result.screenshots, screenshot] : result.screenshots,
-        });
+        const eventBuffer = [...result.eventBuffer, newEvent];
+        const screenshots = screenshot ? [...result.screenshots, screenshot] : result.screenshots;
+
+        await saveActiveSessionBuffers({ eventBuffer, screenshots });
+        await chrome.storage.session.set({ eventCount: eventBuffer.length });
 
         console.log('Event buffered in session:', newEvent);
       })
@@ -142,10 +219,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
     if (oldState?.status === 'recording' && newState?.status === 'completed') {
       writeQueue = writeQueue
         .then(async () => {
-          const result = await chrome.storage.session.get({
-            eventBuffer: [],
-            screenshots: [],
-          });
+          const result = await getActiveSessionBuffers();
           const sessionPayload = assembleSession(result.eventBuffer, {
             client_session_id: oldState.client_session_id,
             workflowName: oldState.workflowName,
@@ -153,11 +227,19 @@ chrome.storage.onChanged.addListener((changes, area) => {
             stoppedAt: Date.now(),
             screenshots: result.screenshots,
           });
-          const storageKey = `session_${sessionPayload.client_session_id}`;
+          const readyKey = `sessionReady_${sessionPayload.client_session_id}`;
 
-          await chrome.storage.local.set({ [storageKey]: sessionPayload });
-          await resetSessionBuffers();
-          console.log('Structured session assembled and saved locally:', storageKey);
+          await clearActiveSessionBuffers();
+          const savedPayload = await saveSessionPayloadWithinQuota(sessionPayload);
+          await chrome.storage.local.set({ [readyKey]: true });
+          await chrome.storage?.session.set({ eventCount: 0 });
+          lastScreenshotAt = 0;
+          lastScreenshot = null;
+          console.log(
+            'Structured session assembled and saved locally:',
+            readyKey,
+            `${savedPayload.screenshots.length} screenshots`,
+          );
         })
         .catch((err) => console.error('Failed to assemble session:', err));
     }

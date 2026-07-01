@@ -37,24 +37,24 @@ chrome.storage?.local.get(['recordingState'], (result) => {
 });
 
 // Read the total number of events in session storage and render
-chrome.storage?.session?.get(['eventBuffer'], (result) => {
-  if (result.eventBuffer) {
-    eventCount = result.eventBuffer.length;
+chrome.storage?.session?.get(['eventCount'], (result) => {
+  if (Number.isInteger(result.eventCount)) {
+    eventCount = result.eventCount;
     render();
   }
 });
 
 // Continuously monitor the changes in the number of events during the recording period
 chrome.storage?.onChanged.addListener((changes, area) => {
-  if (area === 'session' && changes.eventBuffer) {
-    eventCount = changes.eventBuffer.newValue?.length || 0;
+  if (area === 'session' && changes.eventCount) {
+    eventCount = changes.eventCount.newValue || 0;
     render();
   }
 
   if (area === 'local' && state.client_session_id) {
-    const storageKey = `session_${state.client_session_id}`;
+    const readyKey = `sessionReady_${state.client_session_id}`;
 
-    if (changes[storageKey]?.newValue) {
+    if (changes[readyKey]?.newValue) {
       reviewSessionReady = true;
       render();
     }
@@ -68,9 +68,9 @@ function checkReviewSessionReady() {
     return;
   }
 
-  const storageKey = `session_${state.client_session_id}`;
-  chrome.storage?.local.get([storageKey], (result) => {
-    reviewSessionReady = Boolean(result[storageKey]);
+  const readyKey = `sessionReady_${state.client_session_id}`;
+  chrome.storage?.local.get([readyKey], (result) => {
+    reviewSessionReady = Boolean(result[readyKey]);
     render();
   });
 }
@@ -124,7 +124,7 @@ workflowNameInput.addEventListener('input', (event) => {
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
   eventCount = 0; // resert event count
-  await chrome.storage?.session?.set({ eventBuffer: [] }); // Clear the previous buffer before starting a new recording
+  await chrome.runtime?.sendMessage({ type: 'RESET_SESSION_BUFFERS' });
   updateState(startRecording(state));
 });
 
