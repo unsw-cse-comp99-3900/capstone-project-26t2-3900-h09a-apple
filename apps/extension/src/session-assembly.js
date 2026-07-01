@@ -10,6 +10,7 @@ function mapBufferedEventToWTEventInput(evt) {
     url: payload.url, // Flattened
     attrs: pageTitle ? { page_title: pageTitle } : {},
     timestamp_ms: payload.timestamp || evt.receivedAt || 0,
+    screenshot_id: payload.screenshot_id || null,
   };
 }
 
@@ -55,5 +56,6 @@ export function assembleSession(events, metadata) {
     stopped_at: new Date(metadata.stoppedAt || Date.now()).toISOString(),
     event_count: deduplicatedEvents.length,
     events: deduplicatedEvents.map(mapBufferedEventToWTEventInput),
+    screenshots: metadata.screenshots || [],
   };
 }

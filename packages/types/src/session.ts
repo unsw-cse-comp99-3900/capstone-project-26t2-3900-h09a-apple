@@ -47,6 +47,14 @@ export interface WTEventInput {
   timestamp_ms: number;
 }
 
+export interface ScreenshotInput {
+  id: string;
+  data_base64: string;
+  content_type: 'image/png' | 'image/jpeg' | 'image/webp';
+  width?: number | null;
+  height?: number | null;
+}
+
 /** Body of POST /sessions when the extension flushes a recording. */
 export interface SessionUploadPayload {
   /** Idempotency key; the extension generates this once per recording. */
@@ -62,6 +70,7 @@ export interface SessionUploadPayload {
   /** ISO-8601 with offset; null while recording is still in progress. */
   stopped_at?: string | null;
   events: WTEventInput[];
+  screenshots?: ScreenshotInput[];
 }
 
 export interface SessionCreateResponse {

@@ -40,6 +40,25 @@ def ingest_session(
         event_count=len(masked_payload.events),
     )
 
+    db.add(session)
+    db.flush()
+
+    if storage is not None:
+        for screenshot in masked_payload.screenshots:
+            uploaded = upload_screenshot(storage, session_id, screenshot)
+            db.add(
+                models.Screenshot(
+                    id=screenshot.id,
+                    session_id=session_id,
+                    object_key=uploaded.object_key,
+                    width=screenshot.width,
+                    height=screenshot.height,
+                    bytes=uploaded.bytes,
+                )
+            )
+
+        db.flush()
+
     sorted_events = sorted(masked_payload.events, key=lambda event: event.timestamp_ms)
     session.events = [
         models.Event(
@@ -62,20 +81,6 @@ def ingest_session(
         status=models.CodificationJobStatus.pending.value,
     )
 
-    db.add(session)
-    if storage is not None:
-        for screenshot in masked_payload.screenshots:
-            uploaded = upload_screenshot(storage, session_id, screenshot)
-            db.add(
-                models.Screenshot(
-                    id=screenshot.id,
-                    session_id=session_id,
-                    object_key=uploaded.object_key,
-                    width=screenshot.width,
-                    height=screenshot.height,
-                    bytes=uploaded.bytes,
-                )
-            )
     db.add(job)
     db.flush()
 

@@ -84,3 +84,34 @@ test('assembleSession carries page title into event attrs for LLM context', () =
 
   assert.equal(payload.events[0].attrs.page_title, 'Example Login');
 });
+
+test('assembleSession carries screenshot ids and screenshot payloads', () => {
+  const screenshot = {
+    id: '33333333-3333-3333-3333-333333333333',
+    data_base64: 'abc123',
+    content_type: 'image/jpeg',
+  };
+  const payload = assembleSession(
+    [
+      {
+        type: 'CLICK',
+        payload: {
+          selector: '#login',
+          label: 'Log in',
+          url: 'https://example.com/login',
+          screenshot_id: screenshot.id,
+          timestamp: 1001,
+        },
+      },
+    ],
+    {
+      workflowName: 'Login flow',
+      startedAt: 1000,
+      stoppedAt: 2000,
+      screenshots: [screenshot],
+    },
+  );
+
+  assert.equal(payload.events[0].screenshot_id, screenshot.id);
+  assert.deepEqual(payload.screenshots, [screenshot]);
+});
