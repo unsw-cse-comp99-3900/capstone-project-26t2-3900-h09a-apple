@@ -6,7 +6,7 @@ let lastScreenshot = null;
 
 const SCREENSHOT_THROTTLE_MS = 500;
 const SCREENSHOT_FORMAT = 'jpeg';
-const SCREENSHOT_QUALITY = 70;
+const SCREENSHOT_QUALITY = 50;
 const RECORDED_EVENT_TYPES = new Set(['CLICK', 'NAVIGATION', 'INPUT']);
 
 function resetSessionBuffers() {
@@ -41,9 +41,11 @@ async function getScreenshotForEvent(tab, existingScreenshots = []) {
     };
   }
 
-  if (!tab?.windowId) {
+  if (!tab?.windowId || !tab?.active) {
     return { screenshot: null, screenshotId: null };
   }
+
+  lastScreenshotAt = now;
 
   try {
     const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, {
@@ -62,7 +64,6 @@ async function getScreenshotForEvent(tab, existingScreenshots = []) {
     };
 
     lastScreenshot = screenshot;
-    lastScreenshotAt = now;
 
     return {
       screenshot,
