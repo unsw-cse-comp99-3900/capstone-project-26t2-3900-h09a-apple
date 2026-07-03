@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from decimal import Decimal
 from types import SimpleNamespace
 
@@ -247,6 +248,7 @@ class FakeDbWithSession(FakeDb):
         job=None,
         events=None,
         screenshot=None,
+        sops=None,
     ):
         super().__init__()
 
@@ -256,6 +258,7 @@ class FakeDbWithSession(FakeDb):
 
         self.events = events or []
         self.screenshot = screenshot
+        self.sops = sops or []
 
         self.current_model = None
 
@@ -287,6 +290,9 @@ class FakeDbWithSession(FakeDb):
     def all(self):
         if self.current_model == main_module.models.Event:
             return self.events
+
+        if self.current_model == main_module.models.Sop:
+            return self.sops
 
         return []
 
@@ -762,3 +768,37 @@ def test_publish_sop_errors(
     finally:
         app.dependency_overrides[get_db] = override_get_db
         app.dependency_overrides.pop(get_current_user, None)
+
+
+def test_list_published_sops():
+    fake_sop = SimpleNamespace(
+        id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        title="Login Flow",
+        status=main_module.models.SopStatus.published.value,
+        published_at=datetime.now(UTC),
+        steps=[{}, {}],
+    )
+
+    db = FakeDbWithSession(
+        sops=[fake_sop],
+    )
+
+    app.dependency_overrides[get_db] = lambda: db
+
+    try:
+        response = client.get("/api/v1/sops?status=published")
+
+        assert response.status_code == 200
+
+        body = response.json()
+
+        assert len(body["sops"]) == 1
+
+        assert body["sops"][0]["id"] == fake_sop.id
+        assert body["sops"][0]["title"] == "Login Flow"
+        assert body["sops"][0]["workflow_category"] is None
+        assert body["sops"][0]["step_count"] == 2
+        assert body["sops"][0]["published_at"] is not None
+
+    finally:
+        app.dependency_overrides[get_db] = override_get_db

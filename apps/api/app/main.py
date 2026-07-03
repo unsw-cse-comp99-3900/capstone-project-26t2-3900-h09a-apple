@@ -22,6 +22,8 @@ from app.session_schema import (
 from app.sop_generator_selector import get_sop_generator
 from app.sop_schema import (
     SopDetailPayload,
+    SopLibraryItem,
+    SopListResponse,
     SopPayload,
     SopPublishResponse,
     SopStepResponse,
@@ -291,4 +293,33 @@ def publish_sop(
         status=sop.status,
         published_at=sop.published_at,
         library_url=f"/library/sops/{sop.id}",
+    )
+
+
+@app.get(
+    "/api/v1/sops",
+    response_model=SopListResponse,
+)
+def list_sops(
+    status: str | None = None,
+    db: DBSession = Depends(get_db),
+):
+    query = db.query(models.Sop)
+
+    if status is not None:
+        query = query.filter(models.Sop.status == status)
+
+    sops = query.all()
+
+    return SopListResponse(
+        sops=[
+            SopLibraryItem(
+                id=str(sop.id),
+                title=sop.title,
+                workflow_category=None,
+                step_count=len(sop.steps),
+                published_at=sop.published_at,
+            )
+            for sop in sops
+        ]
     )

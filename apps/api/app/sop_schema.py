@@ -46,3 +46,15 @@ class SopPublishResponse(BaseModel):
     status: str
     published_at: datetime
     library_url: str
+
+
+class SopLibraryItem(BaseModel):
+    id: str
+    title: str
+    workflow_category: str | None = None
+    step_count: int
+    published_at: datetime
+
+
+class SopListResponse(BaseModel):
+    sops: list[SopLibraryItem]
