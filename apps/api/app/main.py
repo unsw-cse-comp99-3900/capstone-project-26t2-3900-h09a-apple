@@ -278,7 +278,12 @@ def publish_sop(
     sop.status = models.SopStatus.published.value
     sop.published_at = datetime.now(UTC)
 
-    db.commit()
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
     db.refresh(sop)
 
     return SopPublishResponse(
