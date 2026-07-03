@@ -1,5 +1,6 @@
 import os
 import time
+from datetime import UTC, datetime
 from uuid import UUID
 
 from dotenv import load_dotenv
@@ -9,9 +10,11 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as DBSession
 
 from app import models
+from app.auth.deps import get_current_user
 from app.auth.routes import router as auth_router
 from app.database import get_db
 from app.ingestion import ingest_session
+from app.models import User
 from app.session_schema import (
     SessionPayload,
     SessionStatusResponse,
@@ -20,6 +23,7 @@ from app.sop_generator_selector import get_sop_generator
 from app.sop_schema import (
     SopDetailPayload,
     SopPayload,
+    SopPublishResponse,
     SopStepResponse,
     SopWarning,
 )
@@ -235,4 +239,51 @@ def get_sop(
         generated_at=sop.generated_at,
         steps=steps,
         warnings=warnings,
+    )
+
+
+@app.post(
+    "/api/v1/sops/{sop_id}/publish",
+    response_model=SopPublishResponse,
+)
+def publish_sop(
+    sop_id: UUID,
+    db: DBSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    # 403
+    if current_user.role != models.UserRole.reviewer.value:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Reviewer role required",
+        )
+
+    # 404
+    sop = db.query(models.Sop).filter(models.Sop.id == sop_id).first()
+
+    if sop is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="SOP not found",
+        )
+
+    # Returns 422 if SOP not in REVIEWED（approved) state.
+    if sop.status != models.SopStatus.approved.value:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="SOP must be approved before publishing",
+        )
+
+    # Publish
+    sop.status = models.SopStatus.published.value
+    sop.published_at = datetime.now(UTC)
+
+    db.commit()
+    db.refresh(sop)
+
+    return SopPublishResponse(
+        id=str(sop.id),
+        status=sop.status,
+        published_at=sop.published_at,
+        library_url=f"/library/sops/{sop.id}",
     )

@@ -39,3 +39,10 @@ class SopDetailPayload(BaseModel):
 
     steps: list[SopStepResponse]
     warnings: list[SopWarning] = Field(default_factory=list)
+
+
+class SopPublishResponse(BaseModel):
+    id: str
+    status: str
+    published_at: datetime
+    library_url: str
