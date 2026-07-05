@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as DBSession
 
+from app.auth.deps import get_current_user
 from app.auth.jwt import (
     ACCESS_TOKEN_EXPIRE_SECONDS,
     InvalidTokenError,
@@ -20,6 +21,7 @@ from app.auth.user_lookup import find_user_by_email, touch_user_lookup
 from app.auth_schema import (
     LoginRequest,
     LoginResponse,
+    MeResponse,
     RefreshRequest,
     RefreshResponse,
     RegisterRequest,
@@ -104,6 +106,16 @@ def login(payload: LoginRequest, db: DB_DEPENDENCY) -> LoginResponse:
         access_token=generate_token(user.id, role, user.tenant_id),
         refresh_token=generate_refresh_token(user.id, role, user.tenant_id),
         expires_in=ACCESS_TOKEN_EXPIRE_SECONDS,
+    )
+
+
+@router.get("/me", response_model=MeResponse)
+def me(current_user: Annotated[User, Depends(get_current_user)]) -> MeResponse:
+    return MeResponse(
+        id=current_user.id,
+        email=current_user.email,
+        role=_role_enum(current_user.role),
+        tenant_id=current_user.tenant_id,
     )
 
 

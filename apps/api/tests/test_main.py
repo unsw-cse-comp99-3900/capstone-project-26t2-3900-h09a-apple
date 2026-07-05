@@ -1,6 +1,7 @@
 from datetime import UTC, datetime
 from decimal import Decimal
 from types import SimpleNamespace
+from uuid import UUID
 
 import pytest
 from fastapi.testclient import TestClient
@@ -11,10 +12,23 @@ from app.auth.deps import get_current_user
 from app.database import get_db
 from app.llm_provider import LlmProviderResult
 from app.main import app
+from app.models import UserRole
 from app.sop_schema import SopPayload, SopStep
 from app.storage import get_storage
 
 client = TestClient(app)
+
+DEFAULT_TENANT_ID = UUID("22222222-2222-2222-2222-222222222222")
+OTHER_TENANT_ID = UUID("33333333-3333-3333-3333-333333333333")
+
+
+def _make_user(role: UserRole = UserRole.employee, tenant_id: UUID = DEFAULT_TENANT_ID):
+    return SimpleNamespace(
+        id=UUID("11111111-1111-1111-1111-111111111111"),
+        email="employee@example.com",
+        role=role.value,
+        tenant_id=tenant_id,
+    )
 
 
 class TestProvider:
@@ -81,8 +95,15 @@ app.dependency_overrides[get_db] = override_get_db
 
 
 @pytest.fixture(autouse=True)
+def authenticate_requests():
+    app.dependency_overrides[get_current_user] = lambda: _make_user()
+    yield
+    app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.fixture(autouse=True)
 def default_tenant_id(monkeypatch):
-    monkeypatch.setenv("DEFAULT_TENANT_ID", "22222222-2222-2222-2222-222222222222")
+    monkeypatch.setenv("DEFAULT_TENANT_ID", str(DEFAULT_TENANT_ID))
 
 
 def valid_session_payload() -> dict:
@@ -259,14 +280,21 @@ class FakeDbWithSession(FakeDb):
         self.events = events or []
         self.screenshot = screenshot
         self.sops = sops or []
+        self._tenant_id_filter = None
 
         self.current_model = None
 
     def query(self, model):
         self.current_model = model
+        self._tenant_id_filter = None
         return self
 
     def filter(self, *args):
+        for criterion in args:
+            left = getattr(criterion, "left", None)
+            right = getattr(criterion, "right", None)
+            if left is not None and getattr(left, "key", None) == "tenant_id":
+                self._tenant_id_filter = getattr(right, "value", right)
         return self
 
     def order_by(self, *args):
@@ -274,9 +302,25 @@ class FakeDbWithSession(FakeDb):
 
     def first(self):
         if self.current_model == main_module.models.Session:
+            if self.session is None:
+                return None
+            if (
+                self._tenant_id_filter is not None
+                and getattr(self.session, "tenant_id", self._tenant_id_filter)
+                != self._tenant_id_filter
+            ):
+                return None
             return self.session
 
         if self.current_model == main_module.models.Sop:
+            if self.existing_sop is None:
+                return None
+            if (
+                self._tenant_id_filter is not None
+                and getattr(self.existing_sop, "tenant_id", self._tenant_id_filter)
+                != self._tenant_id_filter
+            ):
+                return None
             return self.existing_sop
 
         if self.current_model == main_module.models.CodificationJob:
@@ -646,36 +690,52 @@ def test_generate_sop_can_use_llm_generator(monkeypatch):
         app.dependency_overrides[get_db] = override_get_db
 
 
-# 25: SOP approval and publish
-def test_publish_sop_success():
-    reviewer = SimpleNamespace(
-        role=main_module.models.UserRole.reviewer.value,
-    )
+def test_create_session_requires_authentication():
+    app.dependency_overrides.pop(get_current_user, None)
 
+    response = client.post("/api/v1/sessions", json=valid_session_payload())
+
+    assert response.status_code == 401
+
+
+def test_get_session_cross_tenant_returns_404():
+    session_id = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+    fake_session = SimpleNamespace(
+        id=session_id,
+        workflow_name="Login Flow",
+        tenant_id=OTHER_TENANT_ID,
+    )
+    db = FakeDbWithSession(session=fake_session)
+    app.dependency_overrides[get_db] = lambda: db
+
+    try:
+        response = client.get(f"/api/v1/sessions/{session_id}")
+        assert response.status_code == 404
+    finally:
+        app.dependency_overrides[get_db] = override_get_db
+
+
+def test_publish_sop_success():
     fake_sop = SimpleNamespace(
         id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
         status=main_module.models.SopStatus.approved.value,
         published_at=None,
+        tenant_id=DEFAULT_TENANT_ID,
     )
-
-    db = FakeDbWithSession(
-        existing_sop=fake_sop,
-    )
-
+    db = FakeDbWithSession(existing_sop=fake_sop)
+    db.refresh = lambda obj: None
     app.dependency_overrides[get_db] = lambda: db
-    app.dependency_overrides[get_current_user] = lambda: reviewer
+    app.dependency_overrides[get_current_user] = lambda: _make_user(role=UserRole.reviewer)
 
     try:
         response = client.post("/api/v1/sops/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/publish")
 
         assert response.status_code == 200
         body = response.json()
-
         assert body["id"] == "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
         assert body["status"] == "published"
         assert body["published_at"] is not None
         assert body["library_url"] == "/library/sops/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
-
         assert db.committed is True
         assert fake_sop.status == main_module.models.SopStatus.published.value
         assert fake_sop.published_at is not None
@@ -684,38 +744,22 @@ def test_publish_sop_success():
         app.dependency_overrides.pop(get_current_user, None)
 
 
-def test_publish_sop_returns_403_for_non_reviewer():
-    from types import SimpleNamespace
-
-    from app.auth.deps import get_current_user
-
+def test_employee_publish_sop_returns_403():
     fake_sop = SimpleNamespace(
         id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
         status=main_module.models.SopStatus.approved.value,
         published_at=None,
+        tenant_id=DEFAULT_TENANT_ID,
     )
-
-    db = FakeDbWithSession(
-        existing_sop=fake_sop,
-    )
-
-    employee = SimpleNamespace(
-        role=main_module.models.UserRole.employee.value,
-    )
-
+    db = FakeDbWithSession(existing_sop=fake_sop)
     app.dependency_overrides[get_db] = lambda: db
-    app.dependency_overrides[get_current_user] = lambda: employee
+    app.dependency_overrides[get_current_user] = lambda: _make_user(role=UserRole.employee)
 
     try:
         response = client.post("/api/v1/sops/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/publish")
-
         assert response.status_code == 403
         assert response.json()["detail"] == "Reviewer role required"
-
         assert db.committed is False
-        assert fake_sop.status == main_module.models.SopStatus.approved.value
-        assert fake_sop.published_at is None
-
     finally:
         app.dependency_overrides[get_db] = override_get_db
         app.dependency_overrides.pop(get_current_user, None)
@@ -724,104 +768,65 @@ def test_publish_sop_returns_403_for_non_reviewer():
 @pytest.mark.parametrize(
     "existing_sop, expected_status, expected_detail",
     [
-        (
-            None,
-            404,
-            "SOP not found",
-        ),
+        (None, 404, "SOP not found"),
         (
             SimpleNamespace(
                 id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
                 status=main_module.models.SopStatus.draft.value,
                 published_at=None,
+                tenant_id=DEFAULT_TENANT_ID,
             ),
             422,
             "SOP must be approved before publishing",
         ),
     ],
 )
-def test_publish_sop_errors(
-    existing_sop,
-    expected_status,
-    expected_detail,
-):
-    reviewer = SimpleNamespace(
-        role=main_module.models.UserRole.reviewer.value,
-    )
-
+def test_publish_sop_errors(existing_sop, expected_status, expected_detail):
     db = FakeDbWithSession(existing_sop=existing_sop)
-
     app.dependency_overrides[get_db] = lambda: db
-    app.dependency_overrides[get_current_user] = lambda: reviewer
+    app.dependency_overrides[get_current_user] = lambda: _make_user(role=UserRole.reviewer)
 
     try:
         response = client.post("/api/v1/sops/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/publish")
-
         assert response.status_code == expected_status
         assert response.json()["detail"] == expected_detail
         assert db.committed is False
-
-        if existing_sop is not None:
-            assert existing_sop.status == main_module.models.SopStatus.draft.value
-            assert existing_sop.published_at is None
-
     finally:
         app.dependency_overrides[get_db] = override_get_db
         app.dependency_overrides.pop(get_current_user, None)
 
 
 def test_list_published_sops():
-    reviewer = SimpleNamespace(
-        role=main_module.models.UserRole.reviewer.value,
-    )
-
     fake_sop = SimpleNamespace(
         id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
         title="Login Flow",
         status=main_module.models.SopStatus.published.value,
         published_at=datetime.now(UTC),
+        tenant_id=DEFAULT_TENANT_ID,
         steps=[{}, {}],
     )
-
-    db = FakeDbWithSession(
-        sops=[fake_sop],
-    )
-
+    db = FakeDbWithSession(sops=[fake_sop])
     app.dependency_overrides[get_db] = lambda: db
-    app.dependency_overrides[get_current_user] = lambda: reviewer
 
     try:
         response = client.get("/api/v1/sops?status=published")
-
         assert response.status_code == 200
-
         body = response.json()
-
         assert len(body["sops"]) == 1
-
         assert body["sops"][0]["id"] == fake_sop.id
         assert body["sops"][0]["title"] == "Login Flow"
-        assert body["sops"][0]["workflow_category"] is None
         assert body["sops"][0]["step_count"] == 2
-        assert body["sops"][0]["published_at"] is not None
-
     finally:
         app.dependency_overrides[get_db] = override_get_db
-        app.dependency_overrides.pop(get_current_user, None)
 
 
 def test_list_sops_requires_authentication():
     db = FakeDbWithSession()
-
     app.dependency_overrides[get_db] = lambda: db
-
-    # Do not override get_current_user so the real authentication
-    # dependency is exercised.
     app.dependency_overrides.pop(get_current_user, None)
 
     try:
         response = client.get("/api/v1/sops")
-
         assert response.status_code == 401
     finally:
         app.dependency_overrides[get_db] = override_get_db

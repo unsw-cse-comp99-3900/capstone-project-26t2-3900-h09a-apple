@@ -1,18 +1,28 @@
 from __future__ import annotations
 
-from typing import Annotated
+from collections.abc import Callable
+from typing import Annotated, TypeVar
 from uuid import UUID
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy.orm import Query
 from sqlalchemy.orm import Session as DBSession
 
 from app.auth.jwt import InvalidTokenError, verify_token
 from app.database import get_db
-from app.models import User
+from app.models import User, UserRole
 
 _bearer = HTTPBearer(auto_error=False)
 _UNAUTHORIZED_HEADERS = {"WWW-Authenticate": "Bearer"}
+
+_ROLE_RANK: dict[UserRole, int] = {
+    UserRole.employee: 0,
+    UserRole.reviewer: 1,
+    UserRole.manager: 2,
+}
+
+ModelT = TypeVar("ModelT")
 
 
 def get_current_user(
@@ -45,3 +55,30 @@ def get_current_user(
         )
 
     return user
+
+
+def _role_at_least(user_role: UserRole, minimum_role: UserRole) -> bool:
+    return _ROLE_RANK[user_role] >= _ROLE_RANK[minimum_role]
+
+
+def require_role(minimum_role: UserRole) -> Callable[..., User]:
+    def dependency(
+        current_user: Annotated[User, Depends(get_current_user)],
+    ) -> User:
+        user_role = UserRole(current_user.role)
+        if not _role_at_least(user_role, minimum_role):
+            if minimum_role == UserRole.reviewer:
+                detail = "Reviewer role required"
+            else:
+                detail = f"{minimum_role.value} role or higher required"
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=detail,
+            )
+        return current_user
+
+    return dependency
+
+
+def filter_by_tenant(query: Query[ModelT], model: type[ModelT], tenant_id: UUID) -> Query[ModelT]:
+    return query.filter(model.tenant_id == tenant_id)
