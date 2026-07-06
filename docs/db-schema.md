@@ -44,8 +44,8 @@ sessions ──1:N── events ──0:1── screenshots
     (`to_timestamp(timestamp_ms / 1000.0)`). Stored UTC, presented in the
     session's locale by the FE.
   - All other `timestamptz` columns (`sessions.started_at`, `stopped_at`,
-    `created_at`, `deleted_at`, `ingested_at`, `generated_at`, …) are stored
-    UTC by Postgres.
+    `created_at`, `deleted_at`, `ingested_at`, `generated_at`,
+    `sops.published_at`, …) are stored UTC by Postgres.
   - **Wire format:** every `timestamptz` field MUST be serialised as ISO-8601
     with an explicit UTC offset, e.g. `2026-06-16T12:30:00Z` or
     `2026-06-16T22:30:00+10:00`. Naive strings (no offset) are rejected by
@@ -227,6 +227,7 @@ stores only the key.
 | `steps`           | jsonb        | no   | `'[]'`                                 | **PII-risk** | step text may echo captured data; `jsonb_typeof = 'array'`  |
 | `warnings`        | jsonb        | no   | `'[]'`                                 | —            | matches `SopWarning` in `apps/api/app/sop_schema.py`        |
 | `generated_at`    | timestamptz  | no   | `now()`                                | —            |                                                             |
+| `published_at`    | timestamptz  | yes  | —                                      | —            | null until approved SOP is published                        |
 | `gen_duration_ms` | int          | yes  | —                                      | —            | proves the <60s budget, `>= 0`                              |
 
 **Constraints:** `uq_sops_session_version UNIQUE(session_id, version)`.

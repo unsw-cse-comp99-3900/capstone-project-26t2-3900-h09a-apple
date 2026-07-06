@@ -1,10 +1,13 @@
+from datetime import UTC, datetime
 from decimal import Decimal
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
 
 import app.main as main_module
 import app.sop_service as sop_service
+from app.auth.deps import get_current_user
 from app.database import get_db
 from app.llm_provider import LlmProviderResult
 from app.main import app
@@ -58,6 +61,9 @@ class FakeDb:
 
     def rollback(self):
         self.rolled_back = True
+
+    def refresh(self, obj):
+        pass
 
 
 class FailingDb(FakeDb):
@@ -242,6 +248,7 @@ class FakeDbWithSession(FakeDb):
         job=None,
         events=None,
         screenshot=None,
+        sops=None,
     ):
         super().__init__()
 
@@ -251,6 +258,7 @@ class FakeDbWithSession(FakeDb):
 
         self.events = events or []
         self.screenshot = screenshot
+        self.sops = sops or []
 
         self.current_model = None
 
@@ -282,6 +290,9 @@ class FakeDbWithSession(FakeDb):
     def all(self):
         if self.current_model == main_module.models.Event:
             return self.events
+
+        if self.current_model == main_module.models.Sop:
+            return self.sops
 
         return []
 
@@ -631,5 +642,186 @@ def test_generate_sop_can_use_llm_generator(monkeypatch):
         assert len(audit_logs) == 1
         assert audit_logs[0].status == "success"
 
+    finally:
+        app.dependency_overrides[get_db] = override_get_db
+
+
+# 25: SOP approval and publish
+def test_publish_sop_success():
+    reviewer = SimpleNamespace(
+        role=main_module.models.UserRole.reviewer.value,
+    )
+
+    fake_sop = SimpleNamespace(
+        id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        status=main_module.models.SopStatus.approved.value,
+        published_at=None,
+    )
+
+    db = FakeDbWithSession(
+        existing_sop=fake_sop,
+    )
+
+    app.dependency_overrides[get_db] = lambda: db
+    app.dependency_overrides[get_current_user] = lambda: reviewer
+
+    try:
+        response = client.post("/api/v1/sops/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/publish")
+
+        assert response.status_code == 200
+        body = response.json()
+
+        assert body["id"] == "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+        assert body["status"] == "published"
+        assert body["published_at"] is not None
+        assert body["library_url"] == "/library/sops/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+
+        assert db.committed is True
+        assert fake_sop.status == main_module.models.SopStatus.published.value
+        assert fake_sop.published_at is not None
+    finally:
+        app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+def test_publish_sop_returns_403_for_non_reviewer():
+    from types import SimpleNamespace
+
+    from app.auth.deps import get_current_user
+
+    fake_sop = SimpleNamespace(
+        id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        status=main_module.models.SopStatus.approved.value,
+        published_at=None,
+    )
+
+    db = FakeDbWithSession(
+        existing_sop=fake_sop,
+    )
+
+    employee = SimpleNamespace(
+        role=main_module.models.UserRole.employee.value,
+    )
+
+    app.dependency_overrides[get_db] = lambda: db
+    app.dependency_overrides[get_current_user] = lambda: employee
+
+    try:
+        response = client.post("/api/v1/sops/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/publish")
+
+        assert response.status_code == 403
+        assert response.json()["detail"] == "Reviewer role required"
+
+        assert db.committed is False
+        assert fake_sop.status == main_module.models.SopStatus.approved.value
+        assert fake_sop.published_at is None
+
+    finally:
+        app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.mark.parametrize(
+    "existing_sop, expected_status, expected_detail",
+    [
+        (
+            None,
+            404,
+            "SOP not found",
+        ),
+        (
+            SimpleNamespace(
+                id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+                status=main_module.models.SopStatus.draft.value,
+                published_at=None,
+            ),
+            422,
+            "SOP must be approved before publishing",
+        ),
+    ],
+)
+def test_publish_sop_errors(
+    existing_sop,
+    expected_status,
+    expected_detail,
+):
+    reviewer = SimpleNamespace(
+        role=main_module.models.UserRole.reviewer.value,
+    )
+
+    db = FakeDbWithSession(existing_sop=existing_sop)
+
+    app.dependency_overrides[get_db] = lambda: db
+    app.dependency_overrides[get_current_user] = lambda: reviewer
+
+    try:
+        response = client.post("/api/v1/sops/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/publish")
+
+        assert response.status_code == expected_status
+        assert response.json()["detail"] == expected_detail
+        assert db.committed is False
+
+        if existing_sop is not None:
+            assert existing_sop.status == main_module.models.SopStatus.draft.value
+            assert existing_sop.published_at is None
+
+    finally:
+        app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+def test_list_published_sops():
+    reviewer = SimpleNamespace(
+        role=main_module.models.UserRole.reviewer.value,
+    )
+
+    fake_sop = SimpleNamespace(
+        id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        title="Login Flow",
+        status=main_module.models.SopStatus.published.value,
+        published_at=datetime.now(UTC),
+        steps=[{}, {}],
+    )
+
+    db = FakeDbWithSession(
+        sops=[fake_sop],
+    )
+
+    app.dependency_overrides[get_db] = lambda: db
+    app.dependency_overrides[get_current_user] = lambda: reviewer
+
+    try:
+        response = client.get("/api/v1/sops?status=published")
+
+        assert response.status_code == 200
+
+        body = response.json()
+
+        assert len(body["sops"]) == 1
+
+        assert body["sops"][0]["id"] == fake_sop.id
+        assert body["sops"][0]["title"] == "Login Flow"
+        assert body["sops"][0]["workflow_category"] is None
+        assert body["sops"][0]["step_count"] == 2
+        assert body["sops"][0]["published_at"] is not None
+
+    finally:
+        app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+def test_list_sops_requires_authentication():
+    db = FakeDbWithSession()
+
+    app.dependency_overrides[get_db] = lambda: db
+
+    # Do not override get_current_user so the real authentication
+    # dependency is exercised.
+    app.dependency_overrides.pop(get_current_user, None)
+
+    try:
+        response = client.get("/api/v1/sops")
+
+        assert response.status_code == 401
     finally:
         app.dependency_overrides[get_db] = override_get_db

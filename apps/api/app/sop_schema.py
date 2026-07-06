@@ -39,3 +39,27 @@ class SopDetailPayload(BaseModel):
 
     steps: list[SopStepResponse]
     warnings: list[SopWarning] = Field(default_factory=list)
+
+
+class SopPublishResponse(BaseModel):
+    id: str
+    status: str
+    published_at: datetime
+    library_url: str
+
+
+class SopLibraryItem(BaseModel):
+    id: str
+    title: str
+    workflow_category: str | None = None
+    step_count: int
+    published_at: datetime | None = None
+
+
+class SopListResponse(BaseModel):
+    sops: list[SopLibraryItem]
+
+
+class SopApproveResponse(BaseModel):
+    id: str
+    status: str
