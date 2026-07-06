@@ -14,7 +14,7 @@ Other sections: fill in if relevant, otherwise write N/A or delete the section.
 
 ## Linked card
 
-<!-- Trello card URL or ID, e.g. https://trello.com/c/abcd1234 -->
+<!-- Jira card key, e.g. H09AAPPLE-60 -->
 
 ## How
 

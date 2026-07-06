@@ -84,11 +84,14 @@ jobs:
       - name: Format check
         run: ruff format --check .
 
-      - name: Migrate database
-        run: alembic upgrade head
+      - name: Migrate database (up-down-up)
+        run: |
+          alembic upgrade head
+          alembic downgrade base
+          alembic upgrade head
 
       - name: Test
-        run: pytest
+        run: pytest --cov=app --cov-report=term
 
   extension:
     name: extension
