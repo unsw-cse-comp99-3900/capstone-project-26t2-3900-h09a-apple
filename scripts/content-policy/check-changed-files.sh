@@ -1,21 +1,25 @@
 #!/usr/bin/env bash
-# Fail if added/changed diff lines contain non-ASCII text (English-only policy).
+# Fail if added/changed diff lines contain Chinese or em dash (U+2014).
 set -euo pipefail
 
 base_ref=${1:?usage: check-changed-files.sh <base-ref> [head-ref]}
 head_ref=${2:-HEAD}
 
 python3 - "${base_ref}" "${head_ref}" <<'PY'
+import re
 import subprocess
 import sys
 
+CJK_RE = re.compile(r"[\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF]")
+EM_DASH = "\u2014"
 
-def is_ascii(text: str) -> bool:
-    try:
-        text.encode("ascii")
-        return True
-    except UnicodeEncodeError:
-        return False
+
+def find_violation(text: str) -> str | None:
+    if EM_DASH in text:
+        return "em dash (U+2014)"
+    if CJK_RE.search(text):
+        return "Chinese characters"
+    return None
 
 
 base_ref, head_ref = sys.argv[1], sys.argv[2]
@@ -55,16 +59,17 @@ for path in files:
         if not line.startswith("+") or line.startswith("+++"):
             continue
         content = line[1:]
-        if not is_ascii(content):
-            violations.append(f"{path}: {content.strip()[:120]}")
+        reason = find_violation(content)
+        if reason:
+            violations.append(f"{path} ({reason}): {content.strip()[:120]}")
 
 if violations:
-    print("Non-English (non-ASCII) text found in changed lines:")
+    print("Forbidden content found in changed lines (no Chinese, no em dash):")
     for item in violations[:25]:
         print(f"  - {item}")
     if len(violations) > 25:
         print(f"  ... and {len(violations) - 25} more")
     sys.exit(1)
 
-print(f"Scanned {len(files)} changed file(s); changed lines are English-only (ASCII).")
+print(f"Scanned {len(files)} changed file(s); changed lines pass content policy.")
 PY

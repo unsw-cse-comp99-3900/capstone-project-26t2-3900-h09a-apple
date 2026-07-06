@@ -3,7 +3,7 @@ PR title must follow Conventional Commits AND include H09AAPPLE-XX anywhere, e.g
   ci: tighten gates H09AAPPLE-60
   [H09AAPPLE-60] feat(api): add RBAC middleware
 
-PR title, PR body, and changed lines must be English only (ASCII). CI: content-policy.
+No Chinese or em dash (U+2014) in PR title, body, or changed lines. Other Unicode punctuation is OK. CI: content-policy.
 
 Required sections: Summary, Linked card, Test plan.
 Other sections: fill in if relevant, otherwise write N/A or delete the section.

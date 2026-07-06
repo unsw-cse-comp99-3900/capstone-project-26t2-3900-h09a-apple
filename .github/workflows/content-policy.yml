@@ -13,25 +13,40 @@ jobs:
     name: content-policy
     runs-on: ubuntu-latest
     steps:
-      - name: Require English-only PR title and body
+      - name: Block Chinese and em dash in PR title and body
         uses: actions/github-script@v7
         with:
           script: |
-            const title = context.payload.pull_request.title ?? '';
-            const body = context.payload.pull_request.body ?? '';
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.pull_request.number,
+            });
 
-            function assertAscii(label, text) {
-              if (!/^[\x00-\x7F]*$/.test(text)) {
-                core.setFailed(`${label} must be English only (ASCII).`);
+            const cjk = /[\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF]/;
+            const emDash = /\u2014/;
+
+            function assertContentPolicy(label, text) {
+              const value = text ?? '';
+              if (cjk.test(value)) {
+                core.setFailed(
+                  `${label} must not contain Chinese characters. Other Unicode punctuation is allowed.`,
+                );
+                return;
+              }
+              if (emDash.test(value)) {
+                core.setFailed(
+                  `${label} must not contain em dash (U+2014). Use "--" or "-" instead.`,
+                );
               }
             }
 
-            assertAscii('PR title', title);
-            assertAscii('PR body', body);
+            assertContentPolicy('PR title', pr.title);
+            assertContentPolicy('PR body', pr.body);
 
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Require English-only changed file lines
+      - name: Block Chinese and em dash in changed file lines
         run: bash scripts/content-policy/check-changed-files.sh "origin/${{ github.base_ref }}" HEAD

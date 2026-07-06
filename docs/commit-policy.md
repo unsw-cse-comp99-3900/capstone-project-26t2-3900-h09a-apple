@@ -77,9 +77,16 @@ Enforced by the `pr-title` check:
 - Include a Jira key anywhere in the title, e.g. `H09AAPPLE-60`
 - Follow Conventional Commits (`type: subject` or `[H09AAPPLE-60] type: subject`)
 
-## English-only content (`content-policy`)
+## Content policy (`content-policy`)
 
-The `content-policy` check enforces **English only (ASCII)** on:
+The `content-policy` check blocks only:
+
+- **Chinese characters** (CJK unified ideographs)
+- **Em dash** (Unicode U+2014, the long dash from Word) - use `--` or `-` instead
+
+Other Unicode punctuation (arrows, smart quotes, ellipsis, en dash, etc.) is allowed.
+
+Scope:
 
 - PR **title** and **body**
 - **Added/changed lines** in any changed text file (code, `docs/`, `README.md`, `.github/`, etc.)
