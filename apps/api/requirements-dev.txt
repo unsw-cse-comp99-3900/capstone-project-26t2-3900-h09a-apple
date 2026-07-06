@@ -1,3 +1,4 @@
+# Local development and CI: installs runtime deps from requirements.txt plus test/lint tools.
 -r requirements.txt
 
 pytest==8.3.4

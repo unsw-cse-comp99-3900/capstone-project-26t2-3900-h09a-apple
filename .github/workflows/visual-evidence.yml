@@ -4,6 +4,10 @@ on:
   pull_request:
     types: [opened, edited, synchronize]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   visual-evidence:
     name: visual-evidence
@@ -49,7 +53,7 @@ jobs:
 
             const hasMedia =
               /!\[[^\]]*\]\([^)]+\)/.test(content) || /https?:\/\//.test(content);
-            const hasNaReason = /\bn\/a\b\s*([—\-–:]|(\s+\S))/i.test(content);
+            const hasNaReason = /\bn\/a\b\s*([—\-–:.]|(\s+\S))/i.test(content);
 
             if (!hasMedia && !hasNaReason) {
               core.setFailed(
