@@ -27,6 +27,9 @@ cd ../..
 cp .env.example .env
 cp apps/web/.env.example apps/web/.env.local
 cp apps/api/.env.example apps/api/.env
+
+./scripts/install-githooks.sh   # optional: blocks AI co-author trailers on git commit
+./scripts/install-cursor-hooks.sh   # optional: local Cursor agent git block (not committed)
 ```
 
 Python dependencies:
@@ -195,20 +198,28 @@ Quit `psql` with `\q`.
 
 ## Troubleshooting
 
-| Symptom | Fix |
-|--------|-----|
-| `ArgumentError` / missing `DATABASE_URL` when running Alembic | Create `apps/api/.env` from `apps/api/.env.example`. URL must use `postgresql+psycopg://worktrace:secret@localhost:5432/worktrace` (not `postgresql://` alone). |
-| `ModuleNotFoundError: No module named 'psycopg2'` | Install dev deps: `pip install -r requirements-dev.txt` (uses **psycopg 3**, not `psycopg2-binary`). |
-| `No module named 'anthropic'` (or similar) when running `pnpm dev` | Activate `apps/api/.venv` before `pnpm dev`. |
-| API returns **401** on session submit | Attach a Bearer token from `/api/v1/auth/login` (see auth note above). |
-| Port **3000** or **5432** already in use | Stop the conflicting process or container before starting dev services. |
+| Symptom                                                            | Fix                                                                                                                                                             |
+| ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ArgumentError` / missing `DATABASE_URL` when running Alembic      | Create `apps/api/.env` from `apps/api/.env.example`. URL must use `postgresql+psycopg://worktrace:secret@localhost:5432/worktrace` (not `postgresql://` alone). |
+| `ModuleNotFoundError: No module named 'psycopg2'`                  | Install dev deps: `pip install -r requirements-dev.txt` (uses **psycopg 3**, not `psycopg2-binary`).                                                            |
+| `No module named 'anthropic'` (or similar) when running `pnpm dev` | Activate `apps/api/.venv` before `pnpm dev`.                                                                                                                    |
+| API returns **401** on session submit                              | Attach a Bearer token from `/api/v1/auth/login` (see auth note above).                                                                                          |
+| Port **3000** or **5432** already in use                           | Stop the conflicting process or container before starting dev services.                                                                                         |
+| `commit-policy` CI fails on your PR                                | Remove AI `Co-authored-by` trailers from commits; see [`docs/commit-policy.md`](docs/commit-policy.md).                                                         |
+
+## Commit policy
+
+PRs must not contain AI agent trailers (`Co-authored-by: Cursor`, Copilot, Codex,
+etc.) in commit messages. CI runs the `commit-policy` check; install local hooks
+with `./scripts/install-githooks.sh`. Optional Cursor setup (local only, not in git):
+`./scripts/install-cursor-hooks.sh`. Details: [`docs/commit-policy.md`](docs/commit-policy.md).
 
 ## Branches
 
 - `main` — only updated through PRs that pass CI. After H09AAPPLE-60, enable branch
   protection requiring **1 approval** and green checks: `web`, `api`, `extension`,
-  `pr-title`, and `visual-evidence` (enable `visual-evidence` only after that
-  workflow exists on `main`).
+  `pr-title`, `visual-evidence`, and `commit-policy` (enable `visual-evidence` only
+  after that workflow exists on `main`).
 - `<TICKET-ID>-<kebab-case-card-title>` — one branch per Jira card,
   e.g. `H09AAPPLE-21-dev-ops-set-up-project-monorepo-and-ci-cd-pipeline`.
   Use the branch name Jira generates from the card title; do not shorten by hand.

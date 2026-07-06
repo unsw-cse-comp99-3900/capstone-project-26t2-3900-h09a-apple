@@ -28,6 +28,8 @@ venv/
 .env.*
 !.env.example
 
+.cursor/
+
 .vscode/*
 !.vscode/settings.json
 .idea/
