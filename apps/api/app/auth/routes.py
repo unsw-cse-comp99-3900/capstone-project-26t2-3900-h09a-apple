@@ -52,6 +52,8 @@ def _role_enum(role_value: str) -> UserRole:
     response_model=RegisterResponse,
 )
 def register(payload: RegisterRequest, db: DB_DEPENDENCY) -> RegisterResponse:
+    # TODO: Lock down register - reject client-supplied role/tenant_id; default to
+    # employee + server-derived tenant, or require admin invite (follow-up ticket).
     hashed_password = hash_password(payload.password)
 
     existing = (

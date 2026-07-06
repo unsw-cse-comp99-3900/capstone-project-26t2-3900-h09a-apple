@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Annotated, TypeVar
+from typing import Annotated, Any, Type
 from uuid import UUID
 
 from fastapi import Depends, HTTPException, status
@@ -21,8 +21,6 @@ _ROLE_RANK: dict[UserRole, int] = {
     UserRole.reviewer: 1,
     UserRole.manager: 2,
 }
-
-ModelT = TypeVar("ModelT")
 
 
 def get_current_user(
@@ -76,13 +74,22 @@ def require_role(minimum_role: UserRole) -> Callable[..., User]:
         if not _role_at_least(user_role, minimum_role):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"{minimum_role.value.title()} role or higher required",
+                detail=f"{minimum_role.value} role or higher required",
             )
         return current_user
 
     return dependency
 
 
-def filter_by_tenant(query: Query[ModelT], model: type[ModelT], tenant_id: UUID) -> Query[ModelT]:
-    """Append ``model.tenant_id == tenant_id``; only for models with ``tenant_id`` (Session, Sop)."""
+def filter_by_tenant(
+    query: Query,
+    model: Type[Any],
+    tenant_id: UUID | str,
+) -> Query:
+    """Apply tenant filter. tenant_id must be a UUID or UUID-formatted string."""
+    if isinstance(tenant_id, str):
+        try:
+            tenant_id = UUID(tenant_id)
+        except ValueError as exc:
+            raise ValueError("tenant_id must be a valid UUID") from exc
     return query.filter(model.tenant_id == tenant_id)
