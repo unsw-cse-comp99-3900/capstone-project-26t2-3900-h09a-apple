@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Annotated, Any, Type
+from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import Depends, HTTPException, status
@@ -83,7 +83,7 @@ def require_role(minimum_role: UserRole) -> Callable[..., User]:
 
 def filter_by_tenant(
     query: Query,
-    model: Type[Any],
+    model: type[Any],
     tenant_id: UUID | str,
 ) -> Query:
     """Apply tenant filter. tenant_id must be a UUID or UUID-formatted string."""
