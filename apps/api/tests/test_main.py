@@ -771,6 +771,10 @@ def test_publish_sop_errors(
 
 
 def test_list_published_sops():
+    reviewer = SimpleNamespace(
+        role=main_module.models.UserRole.reviewer.value,
+    )
+
     fake_sop = SimpleNamespace(
         id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
         title="Login Flow",
@@ -784,6 +788,7 @@ def test_list_published_sops():
     )
 
     app.dependency_overrides[get_db] = lambda: db
+    app.dependency_overrides[get_current_user] = lambda: reviewer
 
     try:
         response = client.get("/api/v1/sops?status=published")
@@ -800,5 +805,23 @@ def test_list_published_sops():
         assert body["sops"][0]["step_count"] == 2
         assert body["sops"][0]["published_at"] is not None
 
+    finally:
+        app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+def test_list_sops_requires_authentication():
+    db = FakeDbWithSession()
+
+    app.dependency_overrides[get_db] = lambda: db
+
+    # Do not override get_current_user so the real authentication
+    # dependency is exercised.
+    app.dependency_overrides.pop(get_current_user, None)
+
+    try:
+        response = client.get("/api/v1/sops")
+
+        assert response.status_code == 401
     finally:
         app.dependency_overrides[get_db] = override_get_db

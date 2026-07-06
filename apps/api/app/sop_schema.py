@@ -53,8 +53,13 @@ class SopLibraryItem(BaseModel):
     title: str
     workflow_category: str | None = None
     step_count: int
-    published_at: datetime
+    published_at: datetime | None = None
 
 
 class SopListResponse(BaseModel):
     sops: list[SopLibraryItem]
+
+
+class SopApproveResponse(BaseModel):
+    id: str
+    status: str
