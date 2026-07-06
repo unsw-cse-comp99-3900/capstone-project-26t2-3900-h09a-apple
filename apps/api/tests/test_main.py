@@ -744,6 +744,29 @@ def test_publish_sop_success():
         app.dependency_overrides.pop(get_current_user, None)
 
 
+def test_manager_publish_sop_returns_200():
+    fake_sop = SimpleNamespace(
+        id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        status=main_module.models.SopStatus.approved.value,
+        published_at=None,
+        tenant_id=DEFAULT_TENANT_ID,
+    )
+    db = FakeDbWithSession(existing_sop=fake_sop)
+    db.refresh = lambda obj: None
+    app.dependency_overrides[get_db] = lambda: db
+    app.dependency_overrides[get_current_user] = lambda: _make_user(role=UserRole.manager)
+
+    try:
+        response = client.post("/api/v1/sops/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/publish")
+
+        assert response.status_code == 200
+        assert response.json()["status"] == "published"
+        assert db.committed is True
+    finally:
+        app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides.pop(get_current_user, None)
+
+
 def test_employee_publish_sop_returns_403():
     fake_sop = SimpleNamespace(
         id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
@@ -816,6 +839,17 @@ def test_list_published_sops():
         assert body["sops"][0]["id"] == fake_sop.id
         assert body["sops"][0]["title"] == "Login Flow"
         assert body["sops"][0]["step_count"] == 2
+    finally:
+        app.dependency_overrides[get_db] = override_get_db
+
+
+def test_list_sops_rejects_invalid_status():
+    db = FakeDbWithSession()
+    app.dependency_overrides[get_db] = lambda: db
+
+    try:
+        response = client.get("/api/v1/sops?status=banana")
+        assert response.status_code == 422
     finally:
         app.dependency_overrides[get_db] = override_get_db
 

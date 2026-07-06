@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi import Depends, FastAPI, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as DBSession
@@ -361,16 +361,14 @@ def publish_sop(
     response_model=SopListResponse,
 )
 def list_sops(
-    status: str | None = None,
+    status_filter: models.SopStatus | None = Query(None, alias="status"),
     db: DBSession = Depends(get_db),
     current_user: User = Depends(require_role(UserRole.employee)),
 ):
     query = filter_by_tenant(db.query(models.Sop), models.Sop, current_user.tenant_id)
 
-    if status is None:
-        status = models.SopStatus.published.value
-
-    query = query.filter(models.Sop.status == status)
+    sop_status = (status_filter or models.SopStatus.published).value
+    query = query.filter(models.Sop.status == sop_status)
 
     sops = query.all()
 

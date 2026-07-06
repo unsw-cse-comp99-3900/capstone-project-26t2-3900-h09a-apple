@@ -65,7 +65,14 @@ def require_role(minimum_role: UserRole) -> Callable[..., User]:
     def dependency(
         current_user: Annotated[User, Depends(get_current_user)],
     ) -> User:
-        user_role = UserRole(current_user.role)
+        try:
+            user_role = UserRole(current_user.role)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Invalid user role",
+            ) from None
+
         if not _role_at_least(user_role, minimum_role):
             if minimum_role == UserRole.reviewer:
                 detail = "Reviewer role required"

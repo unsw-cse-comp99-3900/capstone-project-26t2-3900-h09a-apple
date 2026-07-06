@@ -101,3 +101,15 @@ def test_require_role_rejects_insufficient_role():
 
     assert exc_info.value.status_code == 403
     assert exc_info.value.detail == "Reviewer role required"
+
+
+def test_require_role_rejects_invalid_role_in_db():
+    user = _make_user()
+    user.role = "SUPERADMIN"
+    dependency = require_role(UserRole.employee)
+
+    with pytest.raises(HTTPException) as exc_info:
+        dependency(user)
+
+    assert exc_info.value.status_code == 403
+    assert exc_info.value.detail == "Invalid user role"
