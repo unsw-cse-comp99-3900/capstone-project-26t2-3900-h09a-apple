@@ -1,8 +1,9 @@
 <!--
-PR title must follow Conventional Commits AND include H09AAPPLE-XX (English only), e.g.
+PR title must follow Conventional Commits AND include H09AAPPLE-XX anywhere, e.g.
   ci: tighten gates H09AAPPLE-60
   [H09AAPPLE-60] feat(api): add RBAC middleware
-  fix(web): handle empty cors origins H09AAPPLE-12
+
+PR title, PR body, and changed lines must be English only (ASCII). CI: content-policy.
 
 Required sections: Summary, Linked card, Test plan.
 Other sections: fill in if relevant, otherwise write N/A or delete the section.
@@ -10,7 +11,7 @@ Other sections: fill in if relevant, otherwise write N/A or delete the section.
 
 ## Summary
 
-<!-- 1–3 sentences: what this PR changes and why it's needed. Don't list files; the diff already shows them. -->
+<!-- 1-3 sentences: what this PR changes and why it's needed. Don't list files; the diff already shows them. -->
 
 ## Linked card
 
@@ -22,7 +23,7 @@ Other sections: fill in if relevant, otherwise write N/A or delete the section.
 
 ## Test plan
 
-CI gates (these run automatically — tick once they go green):
+CI gates (these run automatically - tick once they go green):
 
 - [ ] `pnpm format:check`
 - [ ] `pnpm --filter @h09a/web lint`
@@ -35,7 +36,7 @@ If this PR changes the database schema (`models.py` or `alembic/versions/`):
 
 - [ ] New Alembic revision included; `down_revision` is the current `main` head
 - [ ] `models.py` matches the migration; `docs/db-schema.md` updated if the contract changed
-- [ ] `cd apps/api && alembic upgrade head` succeeds on a fresh database (CI also runs upgrade → downgrade base → upgrade)
+- [ ] `cd apps/api && alembic upgrade head` succeeds on a fresh database (CI also runs upgrade -> downgrade base -> upgrade)
 
 Manual verification:
 
@@ -50,7 +51,7 @@ Manual verification:
 
 ## Screenshots / video
 
-<!-- Drag-drop screenshots or screen recordings for UI changes. For backend/config/docs PRs write "N/A — <reason>" (bare "N/A" fails CI). -->
+<!-- Drag-drop screenshots or screen recordings for UI changes. For backend/config/docs PRs write "N/A -- <reason>" (bare "N/A" fails CI). -->
 
 ## Notes for reviewer
 

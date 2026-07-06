@@ -34,8 +34,8 @@ cp apps/api/.env.example apps/api/.env
 
 Python dependencies:
 
-- `apps/api/requirements.txt` — runtime API dependencies (FastAPI, SQLAlchemy, psycopg 3, auth, LLM clients).
-- `apps/api/requirements-dev.txt` — extends the above with `pytest`, `pytest-cov`, `httpx`, and `ruff` for local dev and CI.
+- `apps/api/requirements.txt` - runtime API dependencies (FastAPI, SQLAlchemy, psycopg 3, auth, LLM clients).
+- `apps/api/requirements-dev.txt` - extends the above with `pytest`, `pytest-cov`, `httpx`, and `ruff` for local dev and CI.
 
 ## Database setup for manual testing
 
@@ -216,11 +216,11 @@ with `./scripts/install-githooks.sh`. Optional Cursor setup (local only, not in 
 
 ## Branches
 
-- `main` — only updated through PRs that pass CI. After H09AAPPLE-60, enable branch
+- `main` - only updated through PRs that pass CI. After H09AAPPLE-60, enable branch
   protection requiring **1 approval** and green checks: `web`, `api`, `extension`,
   `pr-title`, `visual-evidence`, and `commit-policy` (enable `visual-evidence` only
   after that workflow exists on `main`).
-- `<TICKET-ID>-<kebab-case-card-title>` — one branch per Jira card,
+- `<TICKET-ID>-<kebab-case-card-title>` - one branch per Jira card,
   e.g. `H09AAPPLE-21-dev-ops-set-up-project-monorepo-and-ci-cd-pipeline`.
   Use the branch name Jira generates from the card title; do not shorten by hand.
   Created when work on a card starts, deleted after the PR is merged.

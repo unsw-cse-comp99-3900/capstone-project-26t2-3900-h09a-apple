@@ -37,7 +37,7 @@ jobs:
             if (content === null) {
               core.setFailed(
                 'PR body is missing a "## Screenshots / video" section. ' +
-                  'Add screenshots, a video link, or "N/A — <reason>".',
+                  'Add screenshots, a video link, or "N/A -- <reason>".',
               );
               return;
             }
@@ -46,18 +46,18 @@ jobs:
             if (!content) {
               core.setFailed(
                 'The "## Screenshots / video" section is empty. ' +
-                  'Add screenshots, a video link, or "N/A — <reason>".',
+                  'Add screenshots, a video link, or "N/A -- <reason>".',
               );
               return;
             }
 
             const hasMedia =
               /!\[[^\]]*\]\([^)]+\)/.test(content) || /https?:\/\//.test(content);
-            const hasNaReason = /\bn\/a\b\s*([—\-–:.]|(\s+\S))/i.test(content);
+            const hasNaReason = /\bn\/a\b\s*(--|[-:.]|(\s+\S))/i.test(content);
 
             if (!hasMedia && !hasNaReason) {
               core.setFailed(
                 'Fill in "## Screenshots / video" with screenshots, a video link, ' +
-                  'or an explicit "N/A — <reason>".',
+                  'or an explicit "N/A -- <reason>".',
               );
             }

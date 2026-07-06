@@ -1,0 +1,37 @@
+name: Content Policy
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  content-policy:
+    name: content-policy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require English-only PR title and body
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = context.payload.pull_request.title ?? '';
+            const body = context.payload.pull_request.body ?? '';
+
+            function assertAscii(label, text) {
+              if (!/^[\x00-\x7F]*$/.test(text)) {
+                core.setFailed(`${label} must be English only (ASCII).`);
+              }
+            }
+
+            assertAscii('PR title', title);
+            assertAscii('PR body', body);
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Require English-only changed file lines
+        run: bash scripts/content-policy/check-changed-files.sh "origin/${{ github.base_ref }}" HEAD

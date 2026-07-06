@@ -13,7 +13,7 @@ jobs:
     name: pr-title
     runs-on: ubuntu-latest
     steps:
-      - name: Require Jira key and English-only title
+      - name: Require Jira key in title
         uses: actions/github-script@v7
         with:
           script: |
@@ -24,11 +24,6 @@ jobs:
                 'PR title must include a Jira key (e.g. H09AAPPLE-60). ' +
                   'Examples: "ci: tighten gates H09AAPPLE-60" or "[H09AAPPLE-60] ci: tighten gates".',
               );
-              return;
-            }
-
-            if (/[\u4e00-\u9fff]/.test(title)) {
-              core.setFailed('PR title must not contain Chinese characters.');
             }
 
       - uses: amannn/action-semantic-pull-request@v5

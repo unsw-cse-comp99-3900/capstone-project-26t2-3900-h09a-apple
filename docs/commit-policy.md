@@ -22,7 +22,7 @@ and the same rules apply in CI and local hooks.
 
 - Using an IDE with inline AI suggestions **without** adding AI co-author trailers.
 - Human pair programming, unless you enable strict mode (below).
-- PR descriptions, comments, or code style — only **commit message bodies** in the PR.
+- PR descriptions, comments, or code style - only **commit message bodies** in the PR.
 
 ## Enforcement layers
 
@@ -67,7 +67,7 @@ Not enabled in CI by default.
 
 ## Branch protection
 
-After H09AAPPLE-60, add `commit-policy` to required checks alongside
+After H09AAPPLE-60, add `commit-policy` and `content-policy` to required checks alongside
 `web`, `api`, `extension`, `pr-title`, and `visual-evidence`.
 
 ## PR title rules
@@ -76,4 +76,13 @@ Enforced by the `pr-title` check:
 
 - Include a Jira key anywhere in the title, e.g. `H09AAPPLE-60`
 - Follow Conventional Commits (`type: subject` or `[H09AAPPLE-60] type: subject`)
-- No Chinese characters in the title (description/body may use any language)
+
+## English-only content (`content-policy`)
+
+The `content-policy` check enforces **English only (ASCII)** on:
+
+- PR **title** and **body**
+- **Added/changed lines** in any changed text file (code, `docs/`, `README.md`, `.github/`, etc.)
+
+It scans the **diff** only (not unchanged lines). Binary files are skipped. Typical
+runtime: a few seconds plus checkout.
