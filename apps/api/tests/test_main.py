@@ -781,7 +781,7 @@ def test_employee_publish_sop_returns_403():
     try:
         response = client.post("/api/v1/sops/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/publish")
         assert response.status_code == 403
-        assert response.json()["detail"] == "Reviewer role required"
+        assert response.json()["detail"] == "Reviewer role or higher required"
         assert db.committed is False
     finally:
         app.dependency_overrides[get_db] = override_get_db

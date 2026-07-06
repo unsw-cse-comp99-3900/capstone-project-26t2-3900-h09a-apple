@@ -100,7 +100,7 @@ def test_require_role_rejects_insufficient_role():
         dependency(user)
 
     assert exc_info.value.status_code == 403
-    assert exc_info.value.detail == "Reviewer role required"
+    assert exc_info.value.detail == "Reviewer role or higher required"
 
 
 def test_require_role_rejects_invalid_role_in_db():

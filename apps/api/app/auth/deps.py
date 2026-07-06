@@ -74,13 +74,9 @@ def require_role(minimum_role: UserRole) -> Callable[..., User]:
             ) from None
 
         if not _role_at_least(user_role, minimum_role):
-            if minimum_role == UserRole.reviewer:
-                detail = "Reviewer role required"
-            else:
-                detail = f"{minimum_role.value} role or higher required"
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=detail,
+                detail=f"{minimum_role.value.title()} role or higher required",
             )
         return current_user
 
@@ -88,4 +84,5 @@ def require_role(minimum_role: UserRole) -> Callable[..., User]:
 
 
 def filter_by_tenant(query: Query[ModelT], model: type[ModelT], tenant_id: UUID) -> Query[ModelT]:
+    """Append ``model.tenant_id == tenant_id``; only for models with ``tenant_id`` (Session, Sop)."""
     return query.filter(model.tenant_id == tenant_id)
