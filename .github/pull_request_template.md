@@ -1,8 +1,8 @@
 <!--
-PR title must follow Conventional Commits, e.g.
-  feat(web): add login page
-  fix(api): handle empty cors origins
-  chore(devops): bump turbo to v2.4
+PR title must follow Conventional Commits AND include H09AAPPLE-XX (English only), e.g.
+  ci: tighten gates H09AAPPLE-60
+  [H09AAPPLE-60] feat(api): add RBAC middleware
+  fix(web): handle empty cors origins H09AAPPLE-12
 
 Required sections: Summary, Linked card, Test plan.
 Other sections: fill in if relevant, otherwise write N/A or delete the section.

@@ -69,3 +69,11 @@ Not enabled in CI by default.
 
 After H09AAPPLE-60, add `commit-policy` to required checks alongside
 `web`, `api`, `extension`, `pr-title`, and `visual-evidence`.
+
+## PR title rules
+
+Enforced by the `pr-title` check:
+
+- Include a Jira key anywhere in the title, e.g. `H09AAPPLE-60`
+- Follow Conventional Commits (`type: subject` or `[H09AAPPLE-60] type: subject`)
+- No Chinese characters in the title (description/body may use any language)
