@@ -1,10 +1,12 @@
 from __future__ import annotations
 
-from typing import Annotated
+from collections.abc import Callable
+from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy.orm import Query
 from sqlalchemy.orm import Session as DBSession
 
 from app.auth.jwt import InvalidTokenError, verify_token
@@ -13,6 +15,12 @@ from app.models import User, UserRole
 
 _bearer = HTTPBearer(auto_error=False)
 _UNAUTHORIZED_HEADERS = {"WWW-Authenticate": "Bearer"}
+
+_ROLE_RANK: dict[UserRole, int] = {
+    UserRole.employee: 0,
+    UserRole.reviewer: 1,
+    UserRole.manager: 2,
+}
 
 
 def get_current_user(
@@ -47,14 +55,41 @@ def get_current_user(
     return user
 
 
-def require_role(required_role: UserRole):
-    def dependency(current_user: User = Depends(get_current_user)) -> User:
-        if current_user.role != required_role.value:
+def _role_at_least(user_role: UserRole, minimum_role: UserRole) -> bool:
+    return _ROLE_RANK[user_role] >= _ROLE_RANK[minimum_role]
+
+
+def require_role(minimum_role: UserRole) -> Callable[..., User]:
+    def dependency(
+        current_user: Annotated[User, Depends(get_current_user)],
+    ) -> User:
+        try:
+            user_role = UserRole(current_user.role)
+        except ValueError:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"{required_role.value} role required",
-            )
+                detail="Invalid user role",
+            ) from None
 
+        if not _role_at_least(user_role, minimum_role):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"{minimum_role.value} role or higher required",
+            )
         return current_user
 
     return dependency
+
+
+def filter_by_tenant(
+    query: Query,
+    model: type[Any],
+    tenant_id: UUID | str,
+) -> Query:
+    """Apply tenant filter. tenant_id must be a UUID or UUID-formatted string."""
+    if isinstance(tenant_id, str):
+        try:
+            tenant_id = UUID(tenant_id)
+        except ValueError as exc:
+            raise ValueError("tenant_id must be a valid UUID") from exc
+    return query.filter(model.tenant_id == tenant_id)

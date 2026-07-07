@@ -21,9 +21,9 @@ def test_transcribe_feedback_requires_auth():
     assert response.status_code == 401
 
 
-def test_transcribe_feedback_requires_employee_role():
+def test_transcribe_feedback_rejects_invalid_role():
     app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(
-        role=UserRole.reviewer.value
+        role="INVALID_ROLE"
     )
 
     try:

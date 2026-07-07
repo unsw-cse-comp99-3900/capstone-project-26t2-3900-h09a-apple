@@ -346,3 +346,33 @@ def test_auth_rate_limit_returns_429(monkeypatch, auth_db):
     assert response.json()["detail"] == "Too many requests"
 
     clear_auth_rate_limit_state()
+
+
+def test_auth_me_returns_current_user(auth_db):
+    user = User(
+        id=UUID("11111111-1111-1111-1111-111111111111"),
+        email="employee@example.com",
+        hashed_password=hash_password("secret-password"),
+        role=UserRole.employee.value,
+        tenant_id=TENANT_ID,
+    )
+    auth_db.users.append(user)
+    token = generate_token(user.id, UserRole.employee, user.tenant_id)
+
+    response = client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["id"] == str(user.id)
+    assert body["email"] == user.email
+    assert body["role"] == user.role
+    assert body["tenant_id"] == str(user.tenant_id)
+
+
+def test_auth_me_returns_401_without_token():
+    response = client.get("/api/v1/auth/me")
+
+    assert response.status_code == 401
