@@ -32,6 +32,7 @@ from app.sop_schema import (
 )
 from app.sop_service import resolve_step_screenshot_url
 from app.storage import ObjectStorage, get_storage
+from app.feedback_routes import router as feedback_router
 
 load_dotenv()
 
@@ -47,7 +48,7 @@ app.add_middleware(
 )
 
 app.include_router(auth_router)
-
+app.include_router(feedback_router)
 
 @app.get("/health")
 def health() -> dict[str, str]:
