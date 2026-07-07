@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from sqlalchemy.orm import Session as DBSession
 
 from app import models
 from app.pii import mask_session_payload
 from app.session_schema import SessionPayload
-from app.settings import get_default_tenant_id
 from app.storage import ObjectStorage, upload_screenshot
 
 
@@ -22,7 +21,9 @@ class IngestedSession:
 def ingest_session(
     payload: SessionPayload,
     db: DBSession,
+    tenant_id: UUID,
     storage: ObjectStorage | None = None,
+    recorded_by: UUID | None = None,
 ) -> IngestedSession:
     masked_payload = mask_session_payload(payload)
     session_id = uuid4()
@@ -31,8 +32,8 @@ def ingest_session(
     session = models.Session(
         id=session_id,
         client_session_id=masked_payload.client_session_id,
-        tenant_id=get_default_tenant_id(),
-        recorded_by=masked_payload.recorded_by,
+        tenant_id=tenant_id,
+        recorded_by=recorded_by,
         workflow_name=masked_payload.workflow_name,
         status=models.SessionStatus.submitted.value,
         started_at=masked_payload.started_at,
