@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session as DBSession
 
 from app.auth.jwt import InvalidTokenError, verify_token
 from app.database import get_db
-from app.models import User
+from app.models import User, UserRole
 
 _bearer = HTTPBearer(auto_error=False)
 _UNAUTHORIZED_HEADERS = {"WWW-Authenticate": "Bearer"}
@@ -45,3 +45,15 @@ def get_current_user(
         )
 
     return user
+
+def require_role(required_role: UserRole):
+    def dependency(current_user: User = Depends(get_current_user)) -> User:
+        if current_user.role != required_role.value:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"{required_role.value} role required",
+            )
+        
+        return current_user
+
+    return dependency
