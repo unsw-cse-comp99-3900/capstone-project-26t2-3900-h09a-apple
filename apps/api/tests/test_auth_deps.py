@@ -4,7 +4,7 @@ import pytest
 from fastapi import HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
 
-from app.auth.deps import get_current_user
+from app.auth.deps import get_current_user, require_role
 from app.auth.jwt import generate_token
 from app.models import User, UserRole
 
@@ -82,3 +82,20 @@ def test_get_current_user_raises_401_for_invalid_token():
         get_current_user(credentials, db)
 
     assert exc_info.value.status_code == 401
+
+def test_require_role_returns_user_when_role_matches():
+    user = _make_user()
+    dependency = require_role(UserRole.employee)
+
+    assert dependency(user) is user
+
+
+def test_require_role_raises_403_when_role_does_not_match():
+    user = _make_user()
+    user.role = UserRole.reviewer.value
+    dependency = require_role(UserRole.employee)
+
+    with pytest.raises(HTTPException) as exc_info:
+        dependency(user)
+
+    assert exc_info.value.status_code == 403
