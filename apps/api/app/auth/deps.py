@@ -46,6 +46,7 @@ def get_current_user(
 
     return user
 
+
 def require_role(required_role: UserRole):
     def dependency(current_user: User = Depends(get_current_user)) -> User:
         if current_user.role != required_role.value:
@@ -53,7 +54,7 @@ def require_role(required_role: UserRole):
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"{required_role.value} role required",
             )
-        
+
         return current_user
 
     return dependency

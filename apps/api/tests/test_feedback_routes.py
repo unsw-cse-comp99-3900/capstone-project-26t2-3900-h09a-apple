@@ -67,6 +67,7 @@ def test_transcribe_feedback_returns_transcript(monkeypatch):
     finally:
         app.dependency_overrides.pop(get_current_user, None)
 
+
 def test_transcribe_feedback_returns_413_for_long_audio(monkeypatch):
     from fastapi import HTTPException, status
 

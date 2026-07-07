@@ -83,6 +83,7 @@ def test_get_current_user_raises_401_for_invalid_token():
 
     assert exc_info.value.status_code == 401
 
+
 def test_require_role_returns_user_when_role_matches():
     user = _make_user()
     dependency = require_role(UserRole.employee)
