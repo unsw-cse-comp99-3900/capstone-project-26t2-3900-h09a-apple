@@ -1,8 +1,9 @@
 <!--
-PR title must follow Conventional Commits, e.g.
-  feat(web): add login page
-  fix(api): handle empty cors origins
-  chore(devops): bump turbo to v2.4
+PR title must follow Conventional Commits AND include H09AAPPLE-XX anywhere, e.g.
+  ci: tighten gates H09AAPPLE-60
+  [H09AAPPLE-60] feat(api): add RBAC middleware
+
+No Chinese or em dash (U+2014) in PR title, body, or changed lines. Other Unicode punctuation is OK. CI: content-policy.
 
 Required sections: Summary, Linked card, Test plan.
 Other sections: fill in if relevant, otherwise write N/A or delete the section.
@@ -10,11 +11,11 @@ Other sections: fill in if relevant, otherwise write N/A or delete the section.
 
 ## Summary
 
-<!-- 1–3 sentences: what this PR changes and why it's needed. Don't list files; the diff already shows them. -->
+<!-- 1-3 sentences: what this PR changes and why it's needed. Don't list files; the diff already shows them. -->
 
 ## Linked card
 
-<!-- Trello card URL or ID, e.g. https://trello.com/c/abcd1234 -->
+<!-- Jira card key, e.g. H09AAPPLE-60 -->
 
 ## How
 
@@ -22,7 +23,7 @@ Other sections: fill in if relevant, otherwise write N/A or delete the section.
 
 ## Test plan
 
-CI gates (these run automatically — tick once they go green):
+CI gates (these run automatically - tick once they go green):
 
 - [ ] `pnpm format:check`
 - [ ] `pnpm --filter @h09a/web lint`
@@ -35,7 +36,7 @@ If this PR changes the database schema (`models.py` or `alembic/versions/`):
 
 - [ ] New Alembic revision included; `down_revision` is the current `main` head
 - [ ] `models.py` matches the migration; `docs/db-schema.md` updated if the contract changed
-- [ ] `cd apps/api && alembic upgrade head` succeeds on a fresh database (the `api` CI job also runs this on every PR)
+- [ ] `cd apps/api && alembic upgrade head` succeeds on a fresh database (CI also runs upgrade -> downgrade base -> upgrade)
 
 Manual verification:
 
@@ -50,7 +51,7 @@ Manual verification:
 
 ## Screenshots / video
 
-<!-- Drag-drop screenshots or screen recordings for UI changes. Write N/A for backend / config / docs PRs. -->
+<!-- Drag-drop screenshots or screen recordings for UI changes. For backend/config/docs PRs write "N/A -- <reason>" (bare "N/A" fails CI). -->
 
 ## Notes for reviewer
 
