@@ -22,9 +22,7 @@ def test_transcribe_feedback_requires_auth():
 
 
 def test_transcribe_feedback_rejects_invalid_role():
-    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(
-        role="INVALID_ROLE"
-    )
+    app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(role="INVALID_ROLE")
 
     try:
         response = client.post(
