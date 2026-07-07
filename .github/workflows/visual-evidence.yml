@@ -1,0 +1,63 @@
+name: Visual Evidence
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  visual-evidence:
+    name: visual-evidence
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const body = context.payload.pull_request.body ?? '';
+
+            function extractSection(markdown, title) {
+              const pattern = new RegExp(
+                `^##\\s+${title.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}\\s*$`,
+                'im',
+              );
+              const start = markdown.search(pattern);
+              if (start === -1) {
+                return null;
+              }
+
+              const afterHeading = markdown.slice(start).replace(pattern, '').trimStart();
+              const next = afterHeading.search(/^## /m);
+              return (next === -1 ? afterHeading : afterHeading.slice(0, next)).trim();
+            }
+
+            let content = extractSection(body, 'Screenshots / video');
+            if (content === null) {
+              core.setFailed(
+                'PR body is missing a "## Screenshots / video" section. ' +
+                  'Add screenshots, a video link, or "N/A -- <reason>".',
+              );
+              return;
+            }
+
+            content = content.replace(/<!--[\s\S]*?-->/g, '').trim();
+            if (!content) {
+              core.setFailed(
+                'The "## Screenshots / video" section is empty. ' +
+                  'Add screenshots, a video link, or "N/A -- <reason>".',
+              );
+              return;
+            }
+
+            const hasMedia =
+              /!\[[^\]]*\]\([^)]+\)/.test(content) || /https?:\/\//.test(content);
+            const hasNaReason = /\bn\/a\b\s*(--|[-:.]|(\s+\S))/i.test(content);
+
+            if (!hasMedia && !hasNaReason) {
+              core.setFailed(
+                'Fill in "## Screenshots / video" with screenshots, a video link, ' +
+                  'or an explicit "N/A -- <reason>".',
+              );
+            }
