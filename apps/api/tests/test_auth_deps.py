@@ -4,7 +4,7 @@ import pytest
 from fastapi import HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
 
-from app.auth.deps import get_current_user
+from app.auth.deps import filter_by_tenant, get_current_user, require_role
 from app.auth.jwt import generate_token
 from app.models import User, UserRole
 
@@ -82,3 +82,50 @@ def test_get_current_user_raises_401_for_invalid_token():
         get_current_user(credentials, db)
 
     assert exc_info.value.status_code == 401
+
+
+def test_require_role_allows_higher_role():
+    user = _make_user()
+    user.role = UserRole.manager.value
+    dependency = require_role(UserRole.employee)
+
+    assert dependency(user) is user
+
+
+def test_require_role_rejects_insufficient_role():
+    user = _make_user()
+    dependency = require_role(UserRole.reviewer)
+
+    with pytest.raises(HTTPException) as exc_info:
+        dependency(user)
+
+    assert exc_info.value.status_code == 403
+    assert exc_info.value.detail == f"{UserRole.reviewer.value} role or higher required"
+
+
+def test_require_role_rejects_invalid_role_in_db():
+    user = _make_user()
+    user.role = "SUPERADMIN"
+    dependency = require_role(UserRole.employee)
+
+    with pytest.raises(HTTPException) as exc_info:
+        dependency(user)
+
+    assert exc_info.value.status_code == 403
+    assert exc_info.value.detail == "Invalid user role"
+
+
+def test_filter_by_tenant_accepts_uuid_string():
+    tenant_id = UUID("22222222-2222-2222-2222-222222222222")
+    query = FakeQuery(None)
+
+    result = filter_by_tenant(query, User, str(tenant_id))
+
+    assert result is query
+
+
+def test_filter_by_tenant_rejects_invalid_uuid_string():
+    query = FakeQuery(None)
+
+    with pytest.raises(ValueError, match="tenant_id must be a valid UUID"):
+        filter_by_tenant(query, User, "not-a-uuid")
