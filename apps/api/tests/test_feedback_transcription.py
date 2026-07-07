@@ -1,8 +1,7 @@
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
-from fastapi import HTTPException, UploadFile
+from fastapi import HTTPException
 
 from app import feedback_transcription as transcription
 

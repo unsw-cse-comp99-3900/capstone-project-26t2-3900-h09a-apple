@@ -13,6 +13,7 @@ from app import models
 from app.auth.deps import get_current_user
 from app.auth.routes import router as auth_router
 from app.database import get_db
+from app.feedback_routes import router as feedback_router
 from app.ingestion import ingest_session
 from app.models import User
 from app.session_schema import (
@@ -32,7 +33,6 @@ from app.sop_schema import (
 )
 from app.sop_service import resolve_step_screenshot_url
 from app.storage import ObjectStorage, get_storage
-from app.feedback_routes import router as feedback_router
 
 load_dotenv()
 
