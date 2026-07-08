@@ -1,0 +1,52 @@
+name: Content Policy
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  content-policy:
+    name: content-policy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Block Chinese and em dash in PR title and body
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.pull_request.number,
+            });
+
+            const cjk = /[\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF]/;
+            const emDash = /\u2014/;
+
+            function assertContentPolicy(label, text) {
+              const value = text ?? '';
+              if (cjk.test(value)) {
+                core.setFailed(
+                  `${label} must not contain Chinese characters. Other Unicode punctuation is allowed.`,
+                );
+                return;
+              }
+              if (emDash.test(value)) {
+                core.setFailed(
+                  `${label} must not contain em dash (U+2014). Use "--" or "-" instead.`,
+                );
+              }
+            }
+
+            assertContentPolicy('PR title', pr.title);
+            assertContentPolicy('PR body', pr.body);
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Block Chinese and em dash in changed file lines
+        run: bash scripts/content-policy/check-changed-files.sh "origin/${{ github.base_ref }}" HEAD

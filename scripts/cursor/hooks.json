@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "hooks": {
+    "beforeShellExecution": [
+      {
+        "command": "scripts/cursor/block-git-commit-push.sh",
+        "matcher": "git\\s+(commit|push)",
+        "failClosed": false
+      }
+    ]
+  }
+}

@@ -54,3 +54,10 @@ class RefreshRequest(BaseModel):
 class RefreshResponse(BaseModel):
     access_token: str
     expires_in: int
+
+
+class MeResponse(BaseModel):
+    id: UUID
+    email: NormalizedEmail
+    role: UserRole
+    tenant_id: UUID

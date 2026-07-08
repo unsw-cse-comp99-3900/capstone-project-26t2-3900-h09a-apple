@@ -1,0 +1,19 @@
+# Forbidden patterns in commit messages (extended regex, one per line).
+# Used by scripts/commit-policy and CI commit-policy workflow.
+# See docs/commit-policy.md
+
+Co-authored-by:[[:space:]]*Cursor
+cursoragent@cursor\.com
+Co-authored-by:.*cursoragent
+Co-authored-by:.*[Cc]opilot
+copilot@github\.com
+Co-authored-by:.*[Cc]odex
+Co-authored-by:.*OpenAI
+Co-authored-by:.*ChatGPT
+Co-authored-by:.*[Cc]laude
+Co-authored-by:.*[Aa]nthropic
+Co-authored-by:.*[Dd]evin
+Co-authored-by:.*[Aa]ider
+Co-authored-by:.*[Gg]emini
+Co-authored-by:.*[Cc]odeium
+Co-authored-by:.*[Tt]abnine

@@ -376,13 +376,10 @@ class Sop(Base):
         nullable=False,
         server_default=text("now()"),
     )
-
-    # Add published_at field for Sprint2-25
     published_at = Column(
         DateTime(timezone=True),
         nullable=True,
     )
-
     gen_duration_ms = Column(Integer)
 
     session = relationship("Session", back_populates="sops")
