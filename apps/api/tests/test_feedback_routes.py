@@ -76,7 +76,7 @@ def test_transcribe_feedback_returns_413_for_long_audio(monkeypatch):
     async def fake_transcribe_upload(audio):
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail="Audio must be 30 seconds or shorter",
+            detail="Audio must be 60 seconds or shorter",
         )
 
     monkeypatch.setattr(feedback_routes, "transcribe_upload", fake_transcribe_upload)
@@ -88,6 +88,6 @@ def test_transcribe_feedback_returns_413_for_long_audio(monkeypatch):
         )
 
         assert response.status_code == 413
-        assert response.json()["detail"] == "Audio must be 30 seconds or shorter"
+        assert response.json()["detail"] == "Audio must be 60 seconds or shorter"
     finally:
         app.dependency_overrides.pop(get_current_user, None)
