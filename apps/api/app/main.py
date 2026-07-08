@@ -1,20 +1,23 @@
 import os
 import time
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from uuid import UUID
 
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi import Depends, FastAPI, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as DBSession
 
 from app import models
-from app.auth.deps import get_current_user
+from app.auth.deps import filter_by_tenant, require_role
 from app.auth.routes import router as auth_router
 from app.database import get_db
+from app.feedback_routes import router as feedback_router
+from app.feedback_transcription import preload_whisper_model
 from app.ingestion import ingest_session
-from app.models import User
+from app.models import User, UserRole
 from app.session_schema import (
     SessionPayload,
     SessionStatusResponse,
@@ -35,7 +38,14 @@ from app.storage import ObjectStorage, get_storage
 
 load_dotenv()
 
-app = FastAPI(title="H09A Apple API")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    preload_whisper_model()
+    yield
+
+
+app = FastAPI(title="H09A Apple API", lifespan=lifespan)
 
 cors_origins = [o.strip() for o in os.getenv("API_CORS_ORIGINS", "").split(",") if o.strip()]
 app.add_middleware(
@@ -47,6 +57,7 @@ app.add_middleware(
 )
 
 app.include_router(auth_router)
+app.include_router(feedback_router)
 
 
 @app.get("/health")
@@ -59,9 +70,16 @@ def create_session(
     payload: SessionPayload,
     db: DBSession = Depends(get_db),
     storage: ObjectStorage = Depends(get_storage),
+    current_user: User = Depends(require_role(UserRole.employee)),
 ) -> dict[str, str]:
     try:
-        ingested_session = ingest_session(payload, db, storage if payload.screenshots else None)
+        ingested_session = ingest_session(
+            payload,
+            db,
+            tenant_id=current_user.tenant_id,
+            storage=storage if payload.screenshots else None,
+            recorded_by=current_user.id,
+        )
         db.commit()
     except IntegrityError as exc:
         db.rollback()
@@ -86,8 +104,13 @@ def create_session(
 def get_session_status(
     session_id: UUID,
     db: DBSession = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.employee)),
 ):
-    session = db.query(models.Session).filter(models.Session.id == session_id).first()
+    session = (
+        filter_by_tenant(db.query(models.Session), models.Session, current_user.tenant_id)
+        .filter(models.Session.id == session_id)
+        .first()
+    )
 
     if session is None:
         raise HTTPException(
@@ -109,7 +132,7 @@ def get_session_status(
         )
 
     sop = (
-        db.query(models.Sop)
+        filter_by_tenant(db.query(models.Sop), models.Sop, current_user.tenant_id)
         .filter(models.Sop.session_id == session.id)
         .order_by(models.Sop.generated_at.desc())
         .first()
@@ -137,9 +160,13 @@ def get_session_status(
 def generate_sop(
     session_id: UUID,
     db: DBSession = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.employee)),
 ):
-    # find session
-    session = db.query(models.Session).filter(models.Session.id == session_id).first()
+    session = (
+        filter_by_tenant(db.query(models.Session), models.Session, current_user.tenant_id)
+        .filter(models.Session.id == session_id)
+        .first()
+    )
 
     if session is None:
         raise HTTPException(
@@ -147,8 +174,11 @@ def generate_sop(
             detail="Session not found",
         )
 
-    # prevent duplicate SOP generation
-    existing = db.query(models.Sop).filter(models.Sop.session_id == session_id).first()
+    existing = (
+        filter_by_tenant(db.query(models.Sop), models.Sop, current_user.tenant_id)
+        .filter(models.Sop.session_id == session_id)
+        .first()
+    )
 
     if existing:
         raise HTTPException(
@@ -163,6 +193,7 @@ def generate_sop(
         gen_duration_ms = int((time.perf_counter() - started) * 1000)
         sop = models.Sop(
             session_id=session.id,
+            tenant_id=current_user.tenant_id,
             title=payload.title,
             steps=[step.model_dump() for step in payload.steps],
             warnings=[warning.model_dump() for warning in payload.warnings],
@@ -171,7 +202,6 @@ def generate_sop(
         )
         db.add(sop)
 
-        # update job status
         job = (
             db.query(models.CodificationJob)
             .filter(
@@ -213,8 +243,13 @@ def generate_sop(
 def get_sop(
     sop_id: UUID,
     db: DBSession = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.employee)),
 ):
-    sop = db.query(models.Sop).filter(models.Sop.id == sop_id).first()
+    sop = (
+        filter_by_tenant(db.query(models.Sop), models.Sop, current_user.tenant_id)
+        .filter(models.Sop.id == sop_id)
+        .first()
+    )
 
     if sop is None:
         raise HTTPException(status_code=404, detail="SOP not found")
@@ -235,8 +270,6 @@ def get_sop(
     return SopDetailPayload(
         id=str(sop.id),
         title=sop.title,
-        # Mock generator summary is deterministic and not stored in the database.
-        # TODO: Persist summary in the SOP model if it becomes part of the stored contract.
         summary=f"{len(steps)} step workflow",
         version=sop.version,
         generated_at=sop.generated_at,
@@ -249,17 +282,13 @@ def get_sop(
 def approve_sop(
     sop_id: UUID,
     db: DBSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_role(UserRole.reviewer)),
 ):
-    # 403
-    if current_user.role != models.UserRole.reviewer.value:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Reviewer role required",
-        )
-
-    # 404
-    sop = db.query(models.Sop).filter(models.Sop.id == sop_id).first()
+    sop = (
+        filter_by_tenant(db.query(models.Sop), models.Sop, current_user.tenant_id)
+        .filter(models.Sop.id == sop_id)
+        .first()
+    )
 
     if sop is None:
         raise HTTPException(
@@ -267,7 +296,6 @@ def approve_sop(
             detail="SOP not found",
         )
 
-    # 422
     if sop.status not in (
         models.SopStatus.draft.value,
         models.SopStatus.needs_review.value,
@@ -277,7 +305,6 @@ def approve_sop(
             detail="SOP must be draft or needs_review before approval",
         )
 
-    # approve
     sop.status = models.SopStatus.approved.value
 
     try:
@@ -301,17 +328,13 @@ def approve_sop(
 def publish_sop(
     sop_id: UUID,
     db: DBSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_role(UserRole.reviewer)),
 ):
-    # 403
-    if current_user.role != models.UserRole.reviewer.value:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Reviewer role required",
-        )
-
-    # 404
-    sop = db.query(models.Sop).filter(models.Sop.id == sop_id).first()
+    sop = (
+        filter_by_tenant(db.query(models.Sop), models.Sop, current_user.tenant_id)
+        .filter(models.Sop.id == sop_id)
+        .first()
+    )
 
     if sop is None:
         raise HTTPException(
@@ -319,14 +342,12 @@ def publish_sop(
             detail="SOP not found",
         )
 
-    # Returns 422 if SOP not in REVIEWED（approved) state.
     if sop.status != models.SopStatus.approved.value:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="SOP must be approved before publishing",
         )
 
-    # Publish
     sop.status = models.SopStatus.published.value
     sop.published_at = datetime.now(UTC)
 
@@ -351,18 +372,14 @@ def publish_sop(
     response_model=SopListResponse,
 )
 def list_sops(
-    status: str | None = None,
+    status_filter: models.SopStatus | None = Query(None, alias="status"),
     db: DBSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_role(UserRole.employee)),
 ):
-    query = db.query(models.Sop)
+    query = filter_by_tenant(db.query(models.Sop), models.Sop, current_user.tenant_id)
 
-    # Default to published SOPs when no status filter is provided.
-    # This prevents unpublished SOPs from being returned by default.
-    if status is None:
-        status = models.SopStatus.published.value
-
-    query = query.filter(models.Sop.status == status)
+    sop_status = (status_filter or models.SopStatus.published).value
+    query = query.filter(models.Sop.status == sop_status)
 
     sops = query.all()
 

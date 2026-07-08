@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from app.ingestion import ingest_session
 from app.models import CodificationJobStatus, SessionStatus
 from app.session_schema import SessionPayload
@@ -15,9 +17,9 @@ class FakeDb:
         self.flushed = True
 
 
-def test_ingest_session_adds_session_and_sorted_masked_events(monkeypatch):
-    monkeypatch.setenv("DEFAULT_TENANT_ID", "22222222-2222-2222-2222-222222222222")
+def test_ingest_session_adds_session_and_sorted_masked_events():
     db = FakeDb()
+    tenant_id = UUID("22222222-2222-2222-2222-222222222222")
 
     payload = SessionPayload.model_validate(
         {
@@ -39,7 +41,7 @@ def test_ingest_session_adds_session_and_sorted_masked_events(monkeypatch):
         }
     )
 
-    result = ingest_session(payload, db)
+    result = ingest_session(payload, db, tenant_id=tenant_id)
     session = db.added[0]
     job = db.added[1]
 
