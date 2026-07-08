@@ -2,8 +2,14 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { JSDOM } from 'jsdom';
+import { CONSENT_STORAGE_KEY, CONSENT_TERMS_VERSION } from './consent.js';
 
-// Builds a popup-like DOM and stubs the Chrome extension APIs used by popup.js
+const acceptedConsent = {
+  accepted: true,
+  version: CONSENT_TERMS_VERSION,
+  acceptedAt: '2026-07-01T00:00:00.000Z',
+};
+
 function setupPopupDom(recordingState = { status: 'ready', workflowName: '' }) {
   const popupHtml = readFileSync(new URL('./popup.html', import.meta.url), 'utf-8');
   const dom = new JSDOM(popupHtml, {
@@ -11,7 +17,9 @@ function setupPopupDom(recordingState = { status: 'ready', workflowName: '' }) {
   });
   const openedTabs = [];
   let persistedRecordingState = recordingState;
-  let localStorageValues = {};
+  let localStorageValues = {
+    [CONSENT_STORAGE_KEY]: acceptedConsent,
+  };
   let storageChangeCallback = () => {};
 
   globalThis.window = dom.window;
@@ -30,11 +38,12 @@ function setupPopupDom(recordingState = { status: 'ready', workflowName: '' }) {
 
           callback(result);
         },
-        set: (value) => {
+        set: (value, callback = () => {}) => {
           if (value.recordingState) {
             persistedRecordingState = value.recordingState;
           }
           localStorageValues = { ...localStorageValues, ...value };
+          callback();
         },
       },
       session: {

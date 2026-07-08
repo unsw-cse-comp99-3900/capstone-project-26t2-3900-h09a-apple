@@ -1,3 +1,10 @@
+const CONSENT_STORAGE_KEY = 'dataCaptureConsent';
+const CONSENT_TERMS_VERSION = '2026-07-01';
+
+function isConsentCurrent(consent) {
+  return consent?.accepted === true && consent.version === CONSENT_TERMS_VERSION;
+}
+
 // Placeholder for page event capture in later recorder tickets.
 const WORKTRACE_PAGE_MESSAGE_SOURCE = 'worktrace-web';
 const WORKTRACE_EXTENSION_MESSAGE_SOURCE = 'worktrace-extension';
@@ -132,13 +139,25 @@ if (chrome.storage?.local) {
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area === 'local') {
       if (changes.recordingState) {
-        // Whenever the recording is turned on, we need to capture the current page user is on.
         const newStatus = changes.recordingState.newValue?.status === 'recording';
         if (newStatus && !isRecording) {
-          // Transitioning from off to on
-          isRecording = true;
-          lastUrl = ''; // Reset deduplication to allow capturing the baseline page
-          recordNavigation(); // Capture the exact page URL where the recording started
+          chrome.storage.local.get([CONSENT_STORAGE_KEY], (result) => {
+            const consent = result[CONSENT_STORAGE_KEY] ?? null;
+            if (!isConsentCurrent(consent)) {
+              isRecording = false;
+              chrome.storage?.local.set({
+                recordingState: {
+                  ...changes.recordingState.newValue,
+                  status: 'ready',
+                },
+              });
+              return;
+            }
+
+            isRecording = true;
+            lastUrl = '';
+            recordNavigation();
+          });
         } else {
           isRecording = newStatus;
         }
