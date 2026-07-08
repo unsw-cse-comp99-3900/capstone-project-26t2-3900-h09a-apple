@@ -23,8 +23,10 @@ def get_whisper_model():
 
     return _model
 
+
 def preload_whisper_model() -> None:
     get_whisper_model()
+
 
 def get_audio_duration_seconds(wav_path: Path) -> float:
     result = run_audio_command(
@@ -85,6 +87,7 @@ async def transcribe_upload(audio: UploadFile) -> dict[str, Any]:
         input_path.unlink(missing_ok=True)
         wav_path.unlink(missing_ok=True)
 
+
 def run_audio_command(args: list[str], text: bool = False) -> subprocess.CompletedProcess:
     try:
         return subprocess.run(
@@ -103,7 +106,8 @@ def run_audio_command(args: list[str], text: bool = False) -> subprocess.Complet
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid or unsupported audio file",
         ) from exc
-    
+
+
 def transcribe_audio_file(input_path: Path, wav_path: Path) -> dict[str, Any]:
     input_duration = get_audio_duration_seconds(input_path)
 

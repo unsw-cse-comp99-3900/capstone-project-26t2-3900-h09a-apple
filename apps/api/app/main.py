@@ -38,10 +38,12 @@ from app.storage import ObjectStorage, get_storage
 
 load_dotenv()
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     preload_whisper_model()
     yield
+
 
 app = FastAPI(title="H09A Apple API", lifespan=lifespan)
 

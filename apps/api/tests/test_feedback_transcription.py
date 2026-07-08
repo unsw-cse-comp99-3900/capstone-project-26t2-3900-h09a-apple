@@ -82,6 +82,7 @@ async def test_transcribe_upload_rejects_audio_longer_than_30_seconds(monkeypatc
 
     assert exc_info.value.status_code == 413
 
+
 def test_run_audio_command_returns_400_for_invalid_audio(monkeypatch):
     def fake_run(*args, **kwargs):
         raise subprocess.CalledProcessError(
@@ -98,6 +99,7 @@ def test_run_audio_command_returns_400_for_invalid_audio(monkeypatch):
     assert exc_info.value.status_code == 400
     assert exc_info.value.detail == "Invalid or unsupported audio file"
 
+
 def test_run_audio_command_returns_500_when_ffmpeg_missing(monkeypatch):
     def fake_run(*args, **kwargs):
         raise FileNotFoundError("ffmpeg not found")
@@ -110,6 +112,7 @@ def test_run_audio_command_returns_500_when_ffmpeg_missing(monkeypatch):
     assert exc_info.value.status_code == 500
     assert exc_info.value.detail == "ffmpeg/ffprobe not installed on server"
 
+
 def test_get_audio_duration_returns_400_for_invalid_duration(monkeypatch):
     class FakeResult:
         stdout = "not-a-number"
@@ -121,6 +124,7 @@ def test_get_audio_duration_returns_400_for_invalid_duration(monkeypatch):
 
     assert exc_info.value.status_code == 400
     assert exc_info.value.detail == "Invalid or unsupported audio file"
+
 
 def test_transcribe_audio_file_rejects_long_input_before_conversion(monkeypatch):
     convert_called = False
