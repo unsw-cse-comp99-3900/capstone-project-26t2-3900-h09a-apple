@@ -1,5 +1,6 @@
 import os
 import time
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -13,6 +14,8 @@ from app import models
 from app.auth.deps import filter_by_tenant, require_role
 from app.auth.routes import router as auth_router
 from app.database import get_db
+from app.feedback_routes import router as feedback_router
+from app.feedback_transcription import preload_whisper_model
 from app.ingestion import ingest_session
 from app.models import User, UserRole
 from app.session_schema import (
@@ -35,7 +38,14 @@ from app.storage import ObjectStorage, get_storage
 
 load_dotenv()
 
-app = FastAPI(title="H09A Apple API")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    preload_whisper_model()
+    yield
+
+
+app = FastAPI(title="H09A Apple API", lifespan=lifespan)
 
 cors_origins = [o.strip() for o in os.getenv("API_CORS_ORIGINS", "").split(",") if o.strip()]
 app.add_middleware(
@@ -47,6 +57,7 @@ app.add_middleware(
 )
 
 app.include_router(auth_router)
+app.include_router(feedback_router)
 
 
 @app.get("/health")
