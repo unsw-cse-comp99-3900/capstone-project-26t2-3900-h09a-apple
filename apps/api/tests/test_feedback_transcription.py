@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import pytest
+import subprocess
 from fastapi import HTTPException
 
 from app import feedback_transcription as transcription
@@ -80,3 +81,60 @@ async def test_transcribe_upload_rejects_audio_longer_than_30_seconds(monkeypatc
         await transcription.transcribe_upload(FakeUploadFile())
 
     assert exc_info.value.status_code == 413
+
+def test_run_audio_command_returns_400_for_invalid_audio(monkeypatch):
+    def fake_run(*args, **kwargs):
+        raise subprocess.CalledProcessError(
+            returncode=1,
+            cmd=["ffmpeg"],
+            stderr=b"invalid audio",
+        )
+
+    monkeypatch.setattr(transcription.subprocess, "run", fake_run)
+
+    with pytest.raises(HTTPException) as exc_info:
+        transcription.run_audio_command(["ffmpeg", "-i", "bad.webm"])
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail == "Invalid or unsupported audio file"
+
+def test_run_audio_command_returns_500_when_ffmpeg_missing(monkeypatch):
+    def fake_run(*args, **kwargs):
+        raise FileNotFoundError("ffmpeg not found")
+
+    monkeypatch.setattr(transcription.subprocess, "run", fake_run)
+
+    with pytest.raises(HTTPException) as exc_info:
+        transcription.run_audio_command(["ffmpeg", "-version"])
+
+    assert exc_info.value.status_code == 500
+    assert exc_info.value.detail == "ffmpeg/ffprobe not installed on server"
+
+def test_get_audio_duration_returns_400_for_invalid_duration(monkeypatch):
+    class FakeResult:
+        stdout = "not-a-number"
+
+    monkeypatch.setattr(transcription, "run_audio_command", lambda *args, **kwargs: FakeResult())
+
+    with pytest.raises(HTTPException) as exc_info:
+        transcription.get_audio_duration_seconds(Path("audio.wav"))
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail == "Invalid or unsupported audio file"
+
+def test_transcribe_audio_file_rejects_long_input_before_conversion(monkeypatch):
+    convert_called = False
+
+    monkeypatch.setattr(transcription, "get_audio_duration_seconds", lambda path: 31.0)
+
+    def fake_convert_to_wav(input_path, output_path):
+        nonlocal convert_called
+        convert_called = True
+
+    monkeypatch.setattr(transcription, "convert_to_wav", fake_convert_to_wav)
+
+    with pytest.raises(HTTPException) as exc_info:
+        transcription.transcribe_audio_file(Path("input.webm"), Path("output.wav"))
+
+    assert exc_info.value.status_code == 413
+    assert convert_called is False

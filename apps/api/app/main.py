@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 from dotenv import load_dotenv
+from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.exc import IntegrityError
@@ -33,10 +34,16 @@ from app.sop_schema import (
 )
 from app.sop_service import resolve_step_screenshot_url
 from app.storage import ObjectStorage, get_storage
+from app.feedback_transcription import preload_whisper_model
 
 load_dotenv()
 
-app = FastAPI(title="H09A Apple API")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    preload_whisper_model()
+    yield
+
+app = FastAPI(title="H09A Apple API", lifespan=lifespan)
 
 cors_origins = [o.strip() for o in os.getenv("API_CORS_ORIGINS", "").split(",") if o.strip()]
 app.add_middleware(

@@ -18,4 +18,4 @@ async def transcribe_feedback(
     current_user: Annotated[User, Depends(require_role(UserRole.employee))],
 ) -> TranscribeResponse:
     result = await transcribe_upload(audio)
-    return TranscribeResponse.model_validate(result)
+    return TranscribeResponse(**result)
