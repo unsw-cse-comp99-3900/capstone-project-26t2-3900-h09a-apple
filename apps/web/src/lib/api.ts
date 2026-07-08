@@ -4,6 +4,7 @@ import type {
   SessionStatusResponse,
   SessionUploadPayload,
   SopDetailPayload,
+  SopListResponse,
 } from '@h09a/types';
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000';
@@ -100,6 +101,21 @@ export async function getSop(sopId: string): Promise<SopDetailPayload> {
 
   if (!res.ok) {
     throw new ApiError(await errorMessage(res, 'Failed to load SOP'), res.status);
+  }
+
+  return res.json();
+}
+
+export async function getPublishedSops(): Promise<SopListResponse> {
+  const res = await fetch(apiUrl('/api/v1/sops?status=published'), {
+    cache: 'no-store',
+  });
+
+  if (!res.ok) {
+    throw new ApiError(
+      await errorMessage(res, 'Failed to load SOP library'),
+      res.status,
+    );
   }
 
   return res.json();
