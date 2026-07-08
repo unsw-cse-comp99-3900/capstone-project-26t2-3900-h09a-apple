@@ -1,5 +1,11 @@
 import type { SopListResponse } from '@h09a/types';
 // import { getPublishedSops } from '@/lib/api';
+import LibraryClient from './LibraryClient';
+import styles from './library.module.css';
+
+type Props = {
+  searchParams: Promise<{ search?: string }>;
+};
 
 const mockData: SopListResponse = {
   sops: [
@@ -24,55 +30,27 @@ const mockData: SopListResponse = {
       step_count: 4,
       published_at: '2026-07-03T09:15:00Z',
     },
+    {
+      id: '4',
+      title: 'Submit Weekly Timesheet',
+      workflow_category: null,
+      step_count: 4,
+      published_at: '2026-07-03T09:16:00Z',
+    },
   ],
 };
 
-export default async function LibraryPage() {
+export default async function LibraryPage({ searchParams }: Props) {
   // TODO(H09AAPPLE-44):
-  // Replace mock data with getPublishedSops() once frontend
-  // authentication is available.
+  // Replace mock data with getPublishedSops() once frontend authentication is available.
   // const data = await getPublishedSops();
 
   const data = mockData;
+  const { search = '' } = await searchParams;
 
   return (
-    <main className="mx-auto max-w-6xl p-8">
-      <h1 className="mb-6 text-3xl font-bold">SOP Library</h1>
-
-      {data.sops.length === 0 ? (
-        <div className="rounded-lg border p-8 text-center">
-          <h2 className="mb-2 text-xl font-semibold">
-            No published SOPs yet.
-          </h2>
-          <p className="text-gray-500">
-            Record your first workflow.
-          </p>
-        </div>
-      ) : (
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {data.sops.map((sop) => (
-            <div
-              key={sop.id}
-              className="rounded-lg border p-5 shadow-sm transition hover:shadow-md"
-            >
-              <h2 className="mb-3 text-lg font-semibold">
-                {sop.title}
-              </h2>
-
-              <p className="text-sm text-gray-600">
-                {sop.step_count} steps
-              </p>
-
-              <p className="mt-2 text-sm text-gray-600">
-                Published{' '}
-                {sop.published_at
-                  ? new Date(sop.published_at).toLocaleDateString()
-                  : '-'}
-              </p>
-            </div>
-          ))}
-        </div>
-      )}
+    <main className={styles.pageShell}>
+      <LibraryClient sops={data.sops} initialSearch={search} />
     </main>
   );
 }
