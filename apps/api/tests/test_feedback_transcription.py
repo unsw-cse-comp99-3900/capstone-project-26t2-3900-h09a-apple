@@ -1,7 +1,7 @@
+import subprocess
 from pathlib import Path
 
 import pytest
-import subprocess
 from fastapi import HTTPException
 
 from app import feedback_transcription as transcription
