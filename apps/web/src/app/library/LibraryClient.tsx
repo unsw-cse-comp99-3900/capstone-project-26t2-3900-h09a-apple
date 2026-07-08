@@ -33,9 +33,7 @@ export default function LibraryClient({ sops, initialSearch }: Props) {
     const keyword = search.trim().toLowerCase();
     if (!keyword) return sops;
 
-    return sops.filter((sop) =>
-      sop.title.toLowerCase().includes(keyword)
-    );
+    return sops.filter((sop) => sop.title.toLowerCase().includes(keyword));
   }, [search, sops]);
 
   return (

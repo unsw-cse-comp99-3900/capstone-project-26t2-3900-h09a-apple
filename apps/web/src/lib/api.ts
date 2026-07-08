@@ -112,10 +112,7 @@ export async function getPublishedSops(): Promise<SopListResponse> {
   });
 
   if (!res.ok) {
-    throw new ApiError(
-      await errorMessage(res, 'Failed to load SOP library'),
-      res.status,
-    );
+    throw new ApiError(await errorMessage(res, 'Failed to load SOP library'), res.status);
   }
 
   return res.json();
