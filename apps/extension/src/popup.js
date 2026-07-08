@@ -8,11 +8,7 @@ import {
   stopRecording,
 } from './recording-state.js';
 import { WEB_APP_BASE_URL } from './config.js';
-import {
-  isConsentCurrent,
-  readDataCaptureConsent,
-  saveDataCaptureConsent,
-} from './consent.js';
+import { isConsentCurrent, readDataCaptureConsent, saveDataCaptureConsent } from './consent.js';
 
 const form = document.querySelector('#recordingForm');
 const workflowNameInput = document.querySelector('#workflowName');

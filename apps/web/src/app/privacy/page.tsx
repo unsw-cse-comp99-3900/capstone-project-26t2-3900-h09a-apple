@@ -4,7 +4,14 @@ import { CONSENT_COPY, CONSENT_TERMS_VERSION } from '@/lib/consent/constants';
 
 export default function PrivacyPage() {
   return (
-    <main style={{ maxWidth: 720, margin: '0 auto', padding: '2rem 1rem', fontFamily: 'Inter, system-ui, sans-serif' }}>
+    <main
+      style={{
+        maxWidth: 720,
+        margin: '0 auto',
+        padding: '2rem 1rem',
+        fontFamily: 'Inter, system-ui, sans-serif',
+      }}
+    >
       <h1>Privacy and data capture</h1>
       <p style={{ color: '#5f6b8f', lineHeight: 1.65 }}>
         Product copy for WorkTrace AI. Final legal text will be provided separately.

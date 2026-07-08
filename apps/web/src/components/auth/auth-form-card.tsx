@@ -11,7 +11,14 @@ type AuthFormCardProps = {
   termsNotice?: ReactNode;
 };
 
-export function AuthFormCard({ title, lead, notice, children, footer, termsNotice }: AuthFormCardProps) {
+export function AuthFormCard({
+  title,
+  lead,
+  notice,
+  children,
+  footer,
+  termsNotice,
+}: AuthFormCardProps) {
   return (
     <>
       <h1>{title}</h1>

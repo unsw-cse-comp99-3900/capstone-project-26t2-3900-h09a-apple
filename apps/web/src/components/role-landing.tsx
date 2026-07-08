@@ -15,7 +15,11 @@ export function RoleLanding({ title, role, children }: RoleLandingProps) {
   const { user, loading, logout } = useCurrentUser();
 
   if (loading) {
-    return <main><p>Loading session...</p></main>;
+    return (
+      <main>
+        <p>Loading session...</p>
+      </main>
+    );
   }
 
   return (

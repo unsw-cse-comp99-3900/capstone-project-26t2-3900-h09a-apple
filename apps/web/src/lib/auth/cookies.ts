@@ -1,9 +1,6 @@
 import type { NextResponse } from 'next/server';
 
-import {
-  ACCESS_TOKEN_COOKIE,
-  REFRESH_TOKEN_COOKIE,
-} from '@/lib/auth/constants';
+import { ACCESS_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE } from '@/lib/auth/constants';
 
 const SECURE = process.env.NODE_ENV === 'production';
 
@@ -30,7 +27,11 @@ export function setAuthCookies(
   });
 }
 
-export function setAccessCookie(response: NextResponse, accessToken: string, expiresIn: number): void {
+export function setAccessCookie(
+  response: NextResponse,
+  accessToken: string,
+  expiresIn: number,
+): void {
   response.cookies.set(ACCESS_TOKEN_COOKIE, accessToken, {
     httpOnly: true,
     secure: SECURE,

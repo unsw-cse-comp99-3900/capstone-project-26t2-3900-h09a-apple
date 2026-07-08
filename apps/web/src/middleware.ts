@@ -13,12 +13,15 @@ const PUBLIC_PATHS = new Set(['/login', '/register']);
 const PROTECTED_PREFIXES = ['/library', '/review', '/dashboard', '/session', '/sop'];
 
 function isProtectedPath(pathname: string): boolean {
-  return PROTECTED_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+  return PROTECTED_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  );
 }
 
 function isAuthenticated(request: NextRequest): boolean {
   return Boolean(
-    request.cookies.get(ACCESS_TOKEN_COOKIE)?.value || request.cookies.get(REFRESH_TOKEN_COOKIE)?.value,
+    request.cookies.get(ACCESS_TOKEN_COOKIE)?.value ||
+    request.cookies.get(REFRESH_TOKEN_COOKIE)?.value,
   );
 }
 

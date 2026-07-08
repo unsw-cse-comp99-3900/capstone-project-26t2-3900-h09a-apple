@@ -39,7 +39,10 @@ export async function POST(request: Request): Promise<NextResponse> {
   });
 
   if (!loginResponse.ok) {
-    return NextResponse.json({ detail: 'Registration succeeded but login failed' }, { status: 500 });
+    return NextResponse.json(
+      { detail: 'Registration succeeded but login failed' },
+      { status: 500 },
+    );
   }
 
   const payload = (await loginResponse.json()) as LoginResponse;

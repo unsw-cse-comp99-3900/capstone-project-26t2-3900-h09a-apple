@@ -14,10 +14,11 @@ export function roleLandingPath(role: UserRole): string {
 }
 
 export function backendBaseUrl(): string {
-  return (process.env.API_BASE_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000').replace(
-    /\/$/,
-    '',
-  );
+  return (
+    process.env.API_BASE_URL ??
+    process.env.NEXT_PUBLIC_API_BASE_URL ??
+    'http://localhost:8000'
+  ).replace(/\/$/, '');
 }
 
 export function defaultTenantId(): string {

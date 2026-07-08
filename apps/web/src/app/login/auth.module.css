@@ -179,10 +179,7 @@
   align-items: center;
   justify-content: center;
   width: 100%;
-  padding:
-    clamp(1.25rem, 3vh, 2rem)
-    clamp(1.5rem, 4vw, 2.5rem)
-    clamp(2rem, 5vh, 3rem);
+  padding: clamp(1.25rem, 3vh, 2rem) clamp(1.5rem, 4vw, 2.5rem) clamp(2rem, 5vh, 3rem);
 }
 
 .formCardSurface {
@@ -264,7 +261,9 @@
   color: #17213d;
   font: inherit;
   font-weight: 400;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
 .field .inputWrap input {
@@ -292,7 +291,9 @@
   font-weight: 700;
   cursor: pointer;
   box-shadow: 0 14px 28px rgb(104 112 232 / 24%);
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
 .button:hover:not(:disabled) {
@@ -427,10 +428,7 @@
   .formPanelInner {
     align-items: stretch;
     justify-content: flex-start;
-    padding:
-      1.25rem
-      var(--auth-panel-padding-inline)
-      1.5rem;
+    padding: 1.25rem var(--auth-panel-padding-inline) 1.5rem;
   }
 
   .formCardSurface,

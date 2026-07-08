@@ -37,17 +37,14 @@ export function WalkthroughConsentButton({ onReady }: WalkthroughConsentButtonPr
 
   function handleDeclined() {
     setModalOpen(false);
-    setBlockedMessage('Walkthrough capture stays disabled until you accept the data capture agreement.');
+    setBlockedMessage(
+      'Walkthrough capture stays disabled until you accept the data capture agreement.',
+    );
   }
 
   return (
     <>
-      <button
-        type="button"
-        className={styles.button}
-        disabled={!ready}
-        onClick={handleLaunchClick}
-      >
+      <button type="button" className={styles.button} disabled={!ready} onClick={handleLaunchClick}>
         Start walkthrough capture
       </button>
       {blockedMessage ? <p className={styles.blocked}>{blockedMessage}</p> : null}

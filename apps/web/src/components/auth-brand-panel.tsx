@@ -44,8 +44,8 @@ export function AuthBrandPanel() {
 
         <h2 className={styles.brandTitle}>Turn real workflows into living SOPs.</h2>
         <p className={styles.brandLead}>
-          Capture browser tasks, review each step, and generate editable SOP drafts for
-          onboarding and process improvement.
+          Capture browser tasks, review each step, and generate editable SOP drafts for onboarding
+          and process improvement.
         </p>
 
         <ul className={styles.featureList}>

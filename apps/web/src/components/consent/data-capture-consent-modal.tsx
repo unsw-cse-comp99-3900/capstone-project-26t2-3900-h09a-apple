@@ -19,7 +19,11 @@ type DataCaptureConsentModalProps = {
   onDeclined: () => void;
 };
 
-export function DataCaptureConsentModal({ open, onAccepted, onDeclined }: DataCaptureConsentModalProps) {
+export function DataCaptureConsentModal({
+  open,
+  onAccepted,
+  onDeclined,
+}: DataCaptureConsentModalProps) {
   const [declined, setDeclined] = useState(false);
 
   useEffect(() => {
@@ -58,7 +62,11 @@ export function DataCaptureConsentModal({ open, onAccepted, onDeclined }: DataCa
               {CONSENT_COPY.declineBody}
             </p>
             <div className={styles.actions}>
-              <button type="button" className={styles.secondaryButton} onClick={() => setDeclined(false)}>
+              <button
+                type="button"
+                className={styles.secondaryButton}
+                onClick={() => setDeclined(false)}
+              >
                 Review agreement
               </button>
               <button type="button" className={styles.primaryButton} onClick={onDeclined}>
@@ -68,7 +76,9 @@ export function DataCaptureConsentModal({ open, onAccepted, onDeclined }: DataCa
           </>
         ) : (
           <>
-            <p className={styles.eyebrow}>{CONSENT_COPY.versionLabel} {CONSENT_TERMS_VERSION}</p>
+            <p className={styles.eyebrow}>
+              {CONSENT_COPY.versionLabel} {CONSENT_TERMS_VERSION}
+            </p>
             <h2 id="consent-title">{CONSENT_COPY.title}</h2>
             <p id="consent-description" className={styles.body}>
               {CONSENT_COPY.intro}

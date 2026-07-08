@@ -17,20 +17,20 @@ should look once built.
   700, 800.
 - **Fallback stack**: `Inter, system-ui, sans-serif`.
 - Base page font (outside styled panels) falls back to `system-ui,
-  sans-serif` per `globals.css`. Pages that do not opt into the Inter stack
+sans-serif` per `globals.css`. Pages that do not opt into the Inter stack
   should still add it for consistency.
 
 **Size scale in use** (do not introduce new sizes without a reason):
 
-| Use | Size |
-|---|---|
-| Page hero `h1` | `clamp(34px, 5vw, 54px)`, weight 800, letter-spacing `-0.04em` |
-| Panel heading (`h2`) | `28px`, weight 800 |
-| Card heading | `24px` |
-| Body / instruction text | `16px`, line-height `1.65` |
-| Secondary/meta text | `13px` to `14px` |
-| Eyebrow / label (uppercase) | `12px`, weight 800, letter-spacing `0.14em`, uppercase |
-| Badge / pill text | `12px` to `13px`, weight 700 to 800 |
+| Use                         | Size                                                           |
+| --------------------------- | -------------------------------------------------------------- |
+| Page hero `h1`              | `clamp(34px, 5vw, 54px)`, weight 800, letter-spacing `-0.04em` |
+| Panel heading (`h2`)        | `28px`, weight 800                                             |
+| Card heading                | `24px`                                                         |
+| Body / instruction text     | `16px`, line-height `1.65`                                     |
+| Secondary/meta text         | `13px` to `14px`                                               |
+| Eyebrow / label (uppercase) | `12px`, weight 800, letter-spacing `0.14em`, uppercase         |
+| Badge / pill text           | `12px` to `13px`, weight 700 to 800                            |
 
 ## 2. Colour palette
 
@@ -58,23 +58,23 @@ gradient (`#756eff` to `#45c7a7`).
 
 ### Text colours
 
-| Token | Hex | Use |
-|---|---|---|
-| Primary text | `#17213d` | headings, body copy, card values |
-| Secondary text | `#66708f` / `#5f6b8f` | lead paragraphs, descriptions |
-| Muted text | `#75809d` / `#69748f` / `#7a849e` | captions, timestamps, labels |
-| Field label | `#334065` | form field labels |
-| Link | `#5b63d9` | footer/inline links |
+| Token          | Hex                               | Use                              |
+| -------------- | --------------------------------- | -------------------------------- |
+| Primary text   | `#17213d`                         | headings, body copy, card values |
+| Secondary text | `#66708f` / `#5f6b8f`             | lead paragraphs, descriptions    |
+| Muted text     | `#75809d` / `#69748f` / `#7a849e` | captions, timestamps, labels     |
+| Field label    | `#334065`                         | form field labels                |
+| Link           | `#5b63d9`                         | footer/inline links              |
 
 ### Surface & border
 
-| Token | Hex | Use |
-|---|---|---|
-| Card background | `#ffffff` | default card surface |
-| Soft background gradient | `linear-gradient(135deg, #ffffff 0%, #f4f6ff 100%)` | hero panels |
-| Border (default) | `#e2e6f6` / `#dfe4f2` / `#e5e8f4` | card borders |
-| Border (accent-tinted) | `#dfe4ff` / `#cbd5ff` / `#d7ddf5` | hero/pill/input borders |
-| Pill background | `#f5f6ff` / `#f5f7fc` | status pills, tag chips |
+| Token                    | Hex                                                 | Use                     |
+| ------------------------ | --------------------------------------------------- | ----------------------- |
+| Card background          | `#ffffff`                                           | default card surface    |
+| Soft background gradient | `linear-gradient(135deg, #ffffff 0%, #f4f6ff 100%)` | hero panels             |
+| Border (default)         | `#e2e6f6` / `#dfe4f2` / `#e5e8f4`                   | card borders            |
+| Border (accent-tinted)   | `#dfe4ff` / `#cbd5ff` / `#d7ddf5`                   | hero/pill/input borders |
+| Pill background          | `#f5f6ff` / `#f5f7fc`                               | status pills, tag chips |
 
 ### Dark brand panel (login/register left panel)
 
@@ -94,13 +94,13 @@ Panel text: `#f5f7ff` (headings), `rgb(226 230 255 / 88%)` (lead copy),
 
 ### Status colours
 
-| State | Text | Background | Border |
-|---|---|---|---|
-| Loading / info | `#4b58c5` | `#f5f6ff` | `#cbd5ff` |
-| Success / loaded | `#27785f` | `#f1fbf7` | `#bfe3d5` |
-| Error | `#983452` / `#b4234a` | `#fff4f7` | `#f1bfd0` |
-| Warning callout | `#744f10` | `#fff8e6` | `#f0cf84` |
-| Branch/decision callout | `#4a3aa3` | `#f6f3ff` | `#d6ccff` |
+| State                   | Text                  | Background | Border    |
+| ----------------------- | --------------------- | ---------- | --------- |
+| Loading / info          | `#4b58c5`             | `#f5f6ff`  | `#cbd5ff` |
+| Success / loaded        | `#27785f`             | `#f1fbf7`  | `#bfe3d5` |
+| Error                   | `#983452` / `#b4234a` | `#fff4f7`  | `#f1bfd0` |
+| Warning callout         | `#744f10`             | `#fff8e6`  | `#f0cf84` |
+| Branch/decision callout | `#4a3aa3`             | `#f6f3ff`  | `#d6ccff` |
 
 Disabled buttons: text `#a4abc0`, background `#eceef5`, no shadow.
 
@@ -151,15 +151,15 @@ libraries. Both pages share the same split-panel layout, brand copy, form
 card surface, and security line. SSO provider buttons are intentionally
 omitted until H09AAPPLE-62.
 
-| Component | Spec | Source |
-|---|---|---|
-| **Logo mark** | `42px` square, radius `11px`, brand gradient fill (`#756eff` to `#6882e8`), white workflow line-icon centred. Sits left of the "WorkTrace AI" wordmark. | `auth-brand-panel.tsx`, `.logoMark` |
-| **Eyebrow badge (pill)** | Above the brand headline. Pill shape (`999px` radius), translucent violet fill tuned for the dark panel, sparkle icon plus label (`12px`, weight 600). | `.eyebrowBadge` |
-| **Feature list icon chips** | Each bullet uses a `34px` square chip on the dark panel with title (`14px`) and description (`13px`). | `.featureItem`, `.featureChip` |
-| **Form card surface** | White card on the right panel: `20px` radius, `#e2e6f6` border, `0 18px 48px rgb(85 94 145 / 10%)` shadow, `28px` padding. Wraps heading, form, links, and security line. | `.formCardSurface`, `auth-form-card.tsx` |
-| **Input icon prefixes** | Email and password fields show a `17px` line-icon inside the input, left-aligned at `13px`, colour `#75809d`. Input padding-left `40px`. | `.inputWrap`, `.inputIcon`, `.inputWithIcon` |
-| **Security line** | Inside the form card: `Enterprise security · PII auto-masked · Tenant-isolated` (`12.5px`, muted text, top border). | `.securityLine` |
-| **Form-panel footer** | Below the card: `© 2026 WorkTrace AI · Privacy · Terms · Status`. Links use the muted-link colour (`#69748f`, hover `#5b63d9`). | `auth-form-footer.tsx`, `.formMetaFooter` |
+| Component                   | Spec                                                                                                                                                                      | Source                                       |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| **Logo mark**               | `42px` square, radius `11px`, brand gradient fill (`#756eff` to `#6882e8`), white workflow line-icon centred. Sits left of the "WorkTrace AI" wordmark.                   | `auth-brand-panel.tsx`, `.logoMark`          |
+| **Eyebrow badge (pill)**    | Above the brand headline. Pill shape (`999px` radius), translucent violet fill tuned for the dark panel, sparkle icon plus label (`12px`, weight 600).                    | `.eyebrowBadge`                              |
+| **Feature list icon chips** | Each bullet uses a `34px` square chip on the dark panel with title (`14px`) and description (`13px`).                                                                     | `.featureItem`, `.featureChip`               |
+| **Form card surface**       | White card on the right panel: `20px` radius, `#e2e6f6` border, `0 18px 48px rgb(85 94 145 / 10%)` shadow, `28px` padding. Wraps heading, form, links, and security line. | `.formCardSurface`, `auth-form-card.tsx`     |
+| **Input icon prefixes**     | Email and password fields show a `17px` line-icon inside the input, left-aligned at `13px`, colour `#75809d`. Input padding-left `40px`.                                  | `.inputWrap`, `.inputIcon`, `.inputWithIcon` |
+| **Security line**           | Inside the form card: `Enterprise security · PII auto-masked · Tenant-isolated` (`12.5px`, muted text, top border).                                                       | `.securityLine`                              |
+| **Form-panel footer**       | Below the card: `© 2026 WorkTrace AI · Privacy · Terms · Status`. Links use the muted-link colour (`#69748f`, hover `#5b63d9`).                                           | `auth-form-footer.tsx`, `.formMetaFooter`    |
 
 Icons follow the stroke style used elsewhere in the app: `stroke-width 1.9`,
 round linecap/linejoin (see `session-review.module.css` `.eventIcon svg`).

@@ -13,12 +13,14 @@ export function WalkthroughConsentGate() {
     <section className={styles.section}>
       <h2>Walkthrough capture</h2>
       <p>
-        Launch a guided walkthrough from the web app once consent is accepted. Recording still starts
-        from the WorkTrace extension popup.
+        Launch a guided walkthrough from the web app once consent is accepted. Recording still
+        starts from the WorkTrace extension popup.
       </p>
       <WalkthroughConsentButton
         onReady={() =>
-          setReadyMessage('Consent recorded. Walkthrough capture entry will connect here in H09AAPPLE-58.')
+          setReadyMessage(
+            'Consent recorded. Walkthrough capture entry will connect here in H09AAPPLE-58.',
+          )
         }
       />
       {readyMessage ? <p className={styles.ready}>{readyMessage}</p> : null}
