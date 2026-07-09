@@ -84,3 +84,4 @@ Run migrations during deployment before starting the FastAPI server:
 
 ```bash
 alembic upgrade head
+```
