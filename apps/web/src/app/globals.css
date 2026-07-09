@@ -10,3 +10,10 @@ main {
   margin: 0 auto;
   padding: 2rem 1rem;
 }
+
+/* Full-bleed pages (auth shell, session review, etc.) opt out via a module class on <main>. */
+main[class] {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}

@@ -1,0 +1,105 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgb(20 16 47 / 52%);
+}
+
+.modal {
+  width: min(100%, 520px);
+  max-height: min(90vh, 720px);
+  overflow: auto;
+  padding: 28px;
+  border: 1px solid #dfe4ff;
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at 92% 8%, rgb(117 114 255 / 12%), transparent 34%),
+    linear-gradient(180deg, #ffffff 0%, #f4f6ff 100%);
+  box-shadow: 0 24px 60px rgb(75 86 145 / 18%);
+  color: #17213d;
+  font-family: Inter, system-ui, sans-serif;
+}
+
+.eyebrow {
+  margin: 0 0 8px;
+  color: #6d76a8;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.modal h2 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+
+.body {
+  margin: 12px 0 0;
+  color: #5f6b8f;
+  font-size: 15px;
+  line-height: 1.65;
+}
+
+.list {
+  display: grid;
+  gap: 10px;
+  margin: 16px 0 0;
+  padding-left: 18px;
+  color: #334065;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.meta {
+  margin: 16px 0 0;
+  color: #75809d;
+  font-size: 13px;
+}
+
+.meta a {
+  color: #5b63d9;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.meta a:hover {
+  text-decoration: underline;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.primaryButton,
+.secondaryButton {
+  min-height: 42px;
+  padding: 0 16px;
+  border-radius: 12px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.primaryButton {
+  border: 0;
+  color: #fff;
+  background: linear-gradient(135deg, #756eff, #6882e8);
+  box-shadow: 0 12px 28px rgb(95 105 220 / 24%);
+}
+
+.secondaryButton {
+  border: 1px solid #d7ddf5;
+  color: #334065;
+  background: #fff;
+}

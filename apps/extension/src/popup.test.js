@@ -2,8 +2,14 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { JSDOM } from 'jsdom';
+import { CONSENT_STORAGE_KEY, CONSENT_TERMS_VERSION } from './consent.js';
 
-// Builds a popup-like DOM and stubs the Chrome extension APIs used by popup.js
+const acceptedConsent = {
+  accepted: true,
+  version: CONSENT_TERMS_VERSION,
+  acceptedAt: '2026-07-01T00:00:00.000Z',
+};
+
 function setupPopupDom(recordingState = { status: 'ready', workflowName: '' }) {
   const popupHtml = readFileSync(new URL('./popup.html', import.meta.url), 'utf-8');
   const dom = new JSDOM(popupHtml, {
@@ -11,7 +17,9 @@ function setupPopupDom(recordingState = { status: 'ready', workflowName: '' }) {
   });
   const openedTabs = [];
   let persistedRecordingState = recordingState;
-  let localStorageValues = {};
+  let localStorageValues = {
+    [CONSENT_STORAGE_KEY]: acceptedConsent,
+  };
   let storageChangeCallback = () => {};
 
   globalThis.window = dom.window;
@@ -30,11 +38,12 @@ function setupPopupDom(recordingState = { status: 'ready', workflowName: '' }) {
 
           callback(result);
         },
-        set: (value) => {
+        set: (value, callback = () => {}) => {
           if (value.recordingState) {
             persistedRecordingState = value.recordingState;
           }
           localStorageValues = { ...localStorageValues, ...value };
+          callback();
         },
       },
       session: {
@@ -125,4 +134,68 @@ test('review session button is only available after recording is completed', asy
   reviewButton.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
   assert.equal(openedTabs.length, 1);
   assert.match(openedTabs[0].url, /\/session\/review\?id=/);
+});
+
+test('accepting consent does not auto-start recording', async () => {
+  const popupHtml = readFileSync(new URL('./popup.html', import.meta.url), 'utf-8');
+  const dom = new JSDOM(popupHtml, {
+    url: 'chrome-extension://worktrace/popup.html',
+  });
+  let persistedRecordingState = { status: 'ready', workflowName: '' };
+  let localStorageValues = {};
+
+  globalThis.window = dom.window;
+  globalThis.document = dom.window.document;
+  globalThis.chrome = {
+    storage: {
+      local: {
+        get: (keys, callback) => {
+          const result = { recordingState: persistedRecordingState };
+          for (const key of keys) {
+            if (key in localStorageValues) {
+              result[key] = localStorageValues[key];
+            }
+          }
+          callback(result);
+        },
+        set: (value, callback = () => {}) => {
+          if (value.recordingState) {
+            persistedRecordingState = value.recordingState;
+          }
+          localStorageValues = { ...localStorageValues, ...value };
+          callback();
+        },
+      },
+      session: {
+        get: (_keys, callback) => callback({ eventBuffer: [] }),
+        set: () => Promise.resolve(),
+      },
+      onChanged: { addListener: () => {} },
+    },
+    tabs: { create: () => {} },
+  };
+
+  await import(`./popup.js?test=${crypto.randomUUID()}`);
+
+  const workflowNameInput = dom.window.document.querySelector('#workflowName');
+  const startButton = dom.window.document.querySelector('#startButton');
+  const consentOverlay = dom.window.document.querySelector('#consentOverlay');
+  const consentAcceptButton = dom.window.document.querySelector('#consentAcceptButton');
+  const statusText = dom.window.document.querySelector('#statusText');
+  const form = dom.window.document.querySelector('#recordingForm');
+
+  workflowNameInput.value = 'Refund workflow';
+  workflowNameInput.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+  assert.equal(startButton.disabled, false);
+
+  form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
+  await flushPromises();
+  assert.equal(consentOverlay.hidden, false);
+  assert.equal(statusText.textContent, 'Ready');
+
+  consentAcceptButton.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+  await flushPromises();
+  assert.equal(consentOverlay.hidden, true);
+  assert.equal(statusText.textContent, 'Ready');
+  assert.equal(persistedRecordingState.status, 'ready');
 });

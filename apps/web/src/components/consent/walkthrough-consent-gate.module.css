@@ -1,0 +1,25 @@
+.section {
+  margin-top: 24px;
+  padding: 20px;
+  border: 1px solid #dfe4ff;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #ffffff 0%, #f5f7ff 100%);
+}
+
+.section h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.section p {
+  margin: 8px 0 0;
+  color: #5f6b8f;
+  line-height: 1.55;
+}
+
+.ready {
+  margin: 12px 0 0;
+  color: #27785f;
+  font-size: 14px;
+  line-height: 1.5;
+}
