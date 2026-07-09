@@ -46,37 +46,41 @@ homepage should load.
 Update `NEXT_PUBLIC_API_BASE_URL` in Vercel project settings to point at the
 real backend URL. Vercel rebuilds previews automatically on the next push.
 
-## Backend - AWS App Runner
+## Backend - AWS ECS Fargate
 
-The FastAPI backend (`apps/api`) is deployed to AWS App Runner. App Runner builds from the GitHub monorepo and redeploys on merges to `main`.
-
-Production backend URL: TBD
-Health check: `GET /api/v1/health`
+The FastAPI backend (`apps/api`) is deployed as a Docker container on AWS ECS
+Fargate. The original target was AWS App Runner, but App Runner is unavailable
+for this AWS account because AWS no longer accepts new App Runner customers.
+ECS Fargate is the replacement backend container service.
 
 Production backend URL: TBD  
 Health check: `GET /api/v1/health`
 
 ### AWS services
 
-- AWS App Runner: FastAPI backend (`apps/api`)
+- Application Load Balancer: public backend entrypoint
+- ECS Fargate Service: FastAPI backend
+- ECR: backend Docker image
 - AWS RDS PostgreSQL: application database
 - pgvector: enabled with `CREATE EXTENSION IF NOT EXISTS vector`
 - AWS S3: screenshot object storage
 - AWS Secrets Manager: database credentials and API secrets
-- AWS CloudWatch: App Runner logs and health alarms
+- AWS CloudWatch: ECS task logs and health alarms
 
-### App Runner environment variables
+### ECS environment variables
 
 Do not commit real secret values to the repository.
 
 - `DATABASE_URL`
 - `SECRET_KEY`
+- `API_CORS_ORIGINS`
 - `OPENAI_API_KEY`
+- `OPENAI_MODEL`
 - `S3_BUCKET_NAME`
-- `S3_REGION`
+- `S3_REGION_NAME`
 - `S3_ACCESS_KEY_ID`
 - `S3_SECRET_ACCESS_KEY`
-- `CORS_ORIGINS`
+- `S3_ENDPOINT_URL` only needed for local MinIO or non-AWS S3-compatible storage
 
 ### Database migrations
 
