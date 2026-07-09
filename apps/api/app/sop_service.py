@@ -10,7 +10,9 @@ from app.sop_schema import WalkthroughPayload, WalkthroughStep
 from app.storage import get_storage
 
 SIGNED_URL_EXPIRY_SECONDS = 60 * 60 * 24
-
+DEFAULT_STEP_ESTIMATE_SECONDS = 5
+MAX_EVENT_GAP_SECONDS = 30
+MAX_STEP_ESTIMATE_SECONDS = 60
 
 class WalkthroughDataError(Exception):
     """Published SOP data cannot be converted into a walkthrough payload."""
@@ -164,6 +166,20 @@ def build_walkthrough_payload(sop: models.Sop, db: DBSession) -> WalkthroughPayl
             db,
         )
 
+        raw_time_estimate = step.get("time_estimate")
+        try:
+            time_estimate = int(raw_time_estimate) if raw_time_estimate is not None else None
+        except (TypeError, ValueError):
+            time_estimate = None
+
+        if time_estimate is None or time_estimate > MAX_STEP_ESTIMATE_SECONDS:
+            time_estimate = resolve_step_time_estimate(
+                source_event_ids,
+                db,
+                sop.session_id,
+                sop.tenant_id,
+            )
+
         if not css_selector and not xpath:
             raise WalkthroughDataError(
                 f"Step {step['order']} is missing css_selector and xpath",
@@ -176,7 +192,7 @@ def build_walkthrough_payload(sop: models.Sop, db: DBSession) -> WalkthroughPayl
                 css_selector=css_selector,
                 xpath=xpath,
                 screenshot_url=screenshot_url,
-                time_estimate=step.get("time_estimate"),
+                time_estimate=time_estimate,
                 screenshot_highlight=screenshot_highlight,
             )
         )
@@ -250,14 +266,27 @@ def resolve_step_time_estimate(
 ) -> int | None:
     events = _load_ordered_events(source_event_ids, session_id, tenant_id, db)
 
-    timestamps = [
+    timestamps = sorted(
         int(event.timestamp_ms)
         for event in events
         if getattr(event, "timestamp_ms", None) is not None
-    ]
+    )
 
     if not timestamps:
         return None
 
-    duration_seconds = ceil((max(timestamps) - min(timestamps)) / 1000)
-    return max(1, duration_seconds)
+    if len(timestamps) == 1:
+        return DEFAULT_STEP_ESTIMATE_SECONDS
+
+    active_ms = 0
+    max_gap_ms = MAX_EVENT_GAP_SECONDS * 1000
+
+    for previous, current in zip(timestamps, timestamps[1:]):
+        gap_ms = current - previous
+        if 0 <= gap_ms <= max_gap_ms:
+            active_ms += gap_ms
+
+    if active_ms <= 0:
+        return DEFAULT_STEP_ESTIMATE_SECONDS
+
+    return min(MAX_STEP_ESTIMATE_SECONDS, max(1, ceil(active_ms / 1000)))

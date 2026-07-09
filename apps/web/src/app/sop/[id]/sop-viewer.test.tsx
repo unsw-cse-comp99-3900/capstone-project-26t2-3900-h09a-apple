@@ -63,6 +63,42 @@ describe('SopStepCard', () => {
     expect(plainMarkup).not.toContain('Branch');
   });
 
+  it('formats estimated time in seconds and minutes', () => {
+    const secondsMarkup = renderToStaticMarkup(
+      <SopStepCard
+        stepNumber={1}
+        title="Short step"
+        instruction="Do a quick action."
+        screenshotUrl={null}
+        timeEstimate={45}
+      />,
+    );
+
+    const exactMinuteMarkup = renderToStaticMarkup(
+      <SopStepCard
+        stepNumber={2}
+        title="Minute step"
+        instruction="Do a longer action."
+        screenshotUrl={null}
+        timeEstimate={60}
+      />,
+    );
+
+    const mixedMarkup = renderToStaticMarkup(
+      <SopStepCard
+        stepNumber={3}
+        title="Mixed step"
+        instruction="Do a longer action."
+        screenshotUrl={null}
+        timeEstimate={75}
+      />,
+    );
+
+    expect(secondsMarkup).toContain('Estimated time: 45s');
+    expect(exactMinuteMarkup).toContain('Estimated time: 1m');
+    expect(mixedMarkup).toContain('Estimated time: 1m 15s');
+  });
+
   it('moves URL-like titles into a muted subtitle', () => {
     const markup = renderToStaticMarkup(
       <SopStepCard

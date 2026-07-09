@@ -2,6 +2,7 @@ import type { SopDetailPayload, SopStepResponse, SopWarning } from '@h09a/types'
 import Image from 'next/image';
 import React from 'react';
 import styles from './sop-viewer.module.css';
+import { formatTimeEstimate } from '@/lib/time-estimate';
 
 export type SopStepCardProps = {
   stepNumber: number;
@@ -152,7 +153,9 @@ export function SopStepCard({
           <p className={styles.instruction}>{display.instruction}</p>
 
           {timeEstimate != null ? (
-            <p className={styles.timeEstimate}>Estimated time: {timeEstimate}s</p>
+            <p className={styles.timeEstimate}>
+              Estimated time: {formatTimeEstimate(timeEstimate)}
+            </p>
           ) : null}
 
           {warning ? (
