@@ -73,9 +73,9 @@ async def test_transcribe_upload_returns_transcript_and_deletes_temp_files(monke
 
 
 @pytest.mark.anyio
-async def test_transcribe_upload_rejects_audio_longer_than_30_seconds(monkeypatch):
+async def test_transcribe_upload_rejects_audio_longer_than_60_seconds(monkeypatch):
     monkeypatch.setattr(transcription, "convert_to_wav", lambda input_path, output_path: None)
-    monkeypatch.setattr(transcription, "get_audio_duration_seconds", lambda wav_path: 31.0)
+    monkeypatch.setattr(transcription, "get_audio_duration_seconds", lambda wav_path: 61.0)
 
     with pytest.raises(HTTPException) as exc_info:
         await transcription.transcribe_upload(FakeUploadFile())
@@ -129,7 +129,7 @@ def test_get_audio_duration_returns_400_for_invalid_duration(monkeypatch):
 def test_transcribe_audio_file_rejects_long_input_before_conversion(monkeypatch):
     convert_called = False
 
-    monkeypatch.setattr(transcription, "get_audio_duration_seconds", lambda path: 31.0)
+    monkeypatch.setattr(transcription, "get_audio_duration_seconds", lambda path: 61.0)
 
     def fake_convert_to_wav(input_path, output_path):
         nonlocal convert_called

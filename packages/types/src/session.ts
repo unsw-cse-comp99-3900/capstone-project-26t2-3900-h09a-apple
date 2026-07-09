@@ -247,3 +247,17 @@ export interface SopLibraryItem {
 export interface SopListResponse {
   sops: SopLibraryItem[];
 }
+
+/** Mirrors `WalkthroughStep` in `apps/api/app/sop_schema.py`. */
+export interface WalkthroughStep {
+  step_number: number;
+  instruction: string;
+  css_selector?: string | null;
+  xpath?: string | null;
+  screenshot_url?: string | null;
+}
+
+/** Response returned by GET /api/v1/sops/{id}/walkthrough. */
+export interface WalkthroughPayload {
+  steps: WalkthroughStep[];
+}
