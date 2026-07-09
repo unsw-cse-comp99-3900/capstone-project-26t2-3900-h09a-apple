@@ -5,7 +5,7 @@ type Props = {
   searchParams: Promise<{ search?: string }>;
 };
 
-export default async function LibraryPage() {
+export default async function LibraryPage({ searchParams }: Props) {
   return (
     <main className={styles.pageShell}>
       <LibraryClient />
