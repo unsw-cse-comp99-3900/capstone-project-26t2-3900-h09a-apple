@@ -19,9 +19,20 @@ export class ApiError extends Error {
   }
 }
 
+function redirectToLogin(): void {
+  if (typeof window !== 'undefined') {
+    window.location.href = '/login';
+  }
+}
+
 export function apiUrl(path: string): string {
   const trimmed = path.startsWith('/') ? path : `/${path}`;
   return `${BASE_URL.replace(/\/$/, '')}${trimmed}`;
+}
+
+function proxyUrl(path: string): string {
+  const trimmed = path.replace(/^\/api\/v1\//, '');
+  return `/api/backend/${trimmed}`;
 }
 
 async function errorMessage(res: Response, fallback: string): Promise<string> {
@@ -52,6 +63,20 @@ async function errorMessage(res: Response, fallback: string): Promise<string> {
   return `${fallback}: ${res.status}`;
 }
 
+async function authedFetch(path: string, init?: RequestInit): Promise<Response> {
+  const response = await fetch(proxyUrl(path), {
+    ...init,
+    cache: 'no-store',
+  });
+
+  if (response.status === 401) {
+    redirectToLogin();
+    throw new ApiError('Not authenticated', 401);
+  }
+
+  return response;
+}
+
 export async function getHealth(): Promise<HealthResponse> {
   const res = await fetch(apiUrl('/health'), { cache: 'no-store' });
   if (!res.ok) {
@@ -61,7 +86,7 @@ export async function getHealth(): Promise<HealthResponse> {
 }
 
 export async function createSession(payload: SessionUploadPayload): Promise<SessionCreateResponse> {
-  const res = await fetch(apiUrl('/api/v1/sessions'), {
+  const res = await authedFetch('/api/v1/sessions', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -77,7 +102,7 @@ export async function createSession(payload: SessionUploadPayload): Promise<Sess
 }
 
 export async function getSessionStatus(sessionId: string): Promise<SessionStatusResponse> {
-  const res = await fetch(apiUrl(`/api/v1/sessions/${sessionId}`), { cache: 'no-store' });
+  const res = await authedFetch(`/api/v1/sessions/${sessionId}`);
 
   if (!res.ok) {
     throw new Error(await errorMessage(res, 'Session status failed'));
@@ -87,7 +112,7 @@ export async function getSessionStatus(sessionId: string): Promise<SessionStatus
 }
 
 export async function retryGenerateSop(sessionId: string): Promise<void> {
-  const res = await fetch(apiUrl(`/api/v1/sessions/${sessionId}/generate-sop`), {
+  const res = await authedFetch(`/api/v1/sessions/${sessionId}/generate-sop`, {
     method: 'POST',
   });
 
@@ -97,7 +122,7 @@ export async function retryGenerateSop(sessionId: string): Promise<void> {
 }
 
 export async function getSop(sopId: string): Promise<SopDetailPayload> {
-  const res = await fetch(apiUrl(`/api/v1/sops/${sopId}`), { cache: 'no-store' });
+  const res = await authedFetch(`/api/v1/sops/${sopId}`);
 
   if (!res.ok) {
     throw new ApiError(await errorMessage(res, 'Failed to load SOP'), res.status);

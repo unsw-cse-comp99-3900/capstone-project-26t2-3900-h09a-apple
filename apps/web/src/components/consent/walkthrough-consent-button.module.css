@@ -1,0 +1,24 @@
+.button {
+  margin-top: 16px;
+  padding: 0.82rem 1rem;
+  border: 0;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #756eff, #6882e8);
+  color: #fff;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 14px 28px rgb(104 112 232 / 24%);
+}
+
+.button:disabled {
+  opacity: 0.72;
+  cursor: wait;
+}
+
+.blocked {
+  margin: 10px 0 0;
+  color: #983452;
+  font-size: 14px;
+  line-height: 1.5;
+}
