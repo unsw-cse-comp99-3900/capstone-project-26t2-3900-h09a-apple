@@ -38,6 +38,7 @@ from app.sop_service import (
     WalkthroughDataError,
     build_walkthrough_payload,
     resolve_step_screenshot_url,
+    resolve_step_screenshot_highlight,
 )
 from app.storage import ObjectStorage, get_storage
 
@@ -264,10 +265,15 @@ def get_sop(
         SopStepResponse(
             **step,
             screenshot_url=resolve_step_screenshot_url(
-                step["source_event_ids"],
+                step.get("source_event_ids", []),
                 db,
                 sop.session_id,
                 current_user.tenant_id,
+            ),
+            screenshot_highlight=resolve_step_screenshot_highlight(
+                step.get("source_event_ids", []),
+                db,
+                sop.session_id,
             ),
         )
         for step in sop.steps

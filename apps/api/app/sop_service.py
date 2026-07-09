@@ -92,7 +92,7 @@ def _resolve_step_metadata(
     session_id: UUID,
     tenant_id: UUID,
     db: DBSession,
-) -> tuple[str | None, str | None, str | None]:
+) -> tuple[str | None, str | None, str | None, dict | None]:
     css_selector = None
     xpath = None
     screenshot_url = None
