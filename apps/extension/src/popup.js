@@ -33,7 +33,6 @@ let state = createRecordingState();
 let eventCount = 0;
 let reviewSessionReady = false;
 let consentRecord = null;
-let pendingRecordingStart = false;
 
 chrome.storage?.local.get(['recordingState'], (result) => {
   if (result.recordingState) {
@@ -152,7 +151,6 @@ form.addEventListener('submit', async (event) => {
   event.preventDefault();
 
   if (!isConsentCurrent(consentRecord)) {
-    pendingRecordingStart = true;
     showConsentModal();
     return;
   }
@@ -160,29 +158,20 @@ form.addEventListener('submit', async (event) => {
   await beginRecording();
 });
 
-consentAcceptButton.addEventListener('click', async () => {
-  saveDataCaptureConsent(async (record) => {
+consentAcceptButton.addEventListener('click', () => {
+  saveDataCaptureConsent((record) => {
     consentRecord = record;
     hideConsentModal();
-
-    if (pendingRecordingStart) {
-      pendingRecordingStart = false;
-      await beginRecording();
-      return;
-    }
-
     render();
   });
 });
 
 consentDeclineButton.addEventListener('click', () => {
-  pendingRecordingStart = false;
   consentDeclineMessage.hidden = false;
 });
 
 consentOverlay.addEventListener('click', (event) => {
   if (event.target === consentOverlay) {
-    pendingRecordingStart = false;
     hideConsentModal();
     render();
   }
