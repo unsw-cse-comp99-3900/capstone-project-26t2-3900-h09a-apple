@@ -1198,6 +1198,70 @@ def test_get_sop_walkthrough_returns_422_when_step_has_no_selector():
         app.dependency_overrides[get_db] = override_get_db
 
 
+def test_get_sop_walkthrough_returns_422_when_step_is_missing_instruction():
+    fake_sop = _walkthrough_sop(
+        steps=[
+            {
+                "order": 1,
+                "title": "Missing instruction",
+                "source_event_ids": ["1"],
+            }
+        ],
+    )
+    db = FakeDbWithSession(existing_sop=fake_sop)
+    app.dependency_overrides[get_db] = lambda: db
+
+    try:
+        response = client.get(f"/api/v1/sops/{WALKTHROUGH_SOP_ID}/walkthrough")
+        assert response.status_code == 422
+        assert "missing instruction" in response.json()["detail"]
+    finally:
+        app.dependency_overrides[get_db] = override_get_db
+
+
+def test_get_sop_walkthrough_returns_422_when_step_has_empty_instruction():
+    fake_sop = _walkthrough_sop(
+        steps=[
+            {
+                "order": 1,
+                "title": "Empty instruction",
+                "instruction": "   ",
+                "source_event_ids": ["1"],
+            }
+        ],
+    )
+    db = FakeDbWithSession(existing_sop=fake_sop)
+    app.dependency_overrides[get_db] = lambda: db
+
+    try:
+        response = client.get(f"/api/v1/sops/{WALKTHROUGH_SOP_ID}/walkthrough")
+        assert response.status_code == 422
+        assert "empty instruction" in response.json()["detail"]
+    finally:
+        app.dependency_overrides[get_db] = override_get_db
+
+
+def test_get_sop_walkthrough_returns_422_when_step_is_missing_order():
+    fake_sop = _walkthrough_sop(
+        steps=[
+            {
+                "title": "Missing order",
+                "instruction": "Do something.",
+                "source_event_ids": ["1"],
+            }
+        ],
+    )
+    db = FakeDbWithSession(existing_sop=fake_sop)
+    app.dependency_overrides[get_db] = lambda: db
+
+    try:
+        response = client.get(f"/api/v1/sops/{WALKTHROUGH_SOP_ID}/walkthrough")
+        assert response.status_code == 422
+        assert "missing order" in response.json()["detail"]
+    finally:
+        app.dependency_overrides[get_db] = override_get_db
+
+
 def test_get_sop_walkthrough_returns_xpath_only_step():
     fake_event = SimpleNamespace(
         id=1,

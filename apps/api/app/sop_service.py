@@ -143,6 +143,15 @@ def build_walkthrough_payload(sop: models.Sop, db: DBSession) -> WalkthroughPayl
     steps: list[WalkthroughStep] = []
 
     for step in sop.steps:
+        if "order" not in step:
+            raise WalkthroughDataError("Step is missing order")
+        if "instruction" not in step:
+            raise WalkthroughDataError(f"Step {step['order']} is missing instruction")
+
+        instruction = step["instruction"]
+        if not isinstance(instruction, str) or not instruction.strip():
+            raise WalkthroughDataError(f"Step {step['order']} has empty instruction")
+
         source_event_ids = step.get("source_event_ids", [])
         css_selector, xpath, screenshot_url = _resolve_step_metadata(
             source_event_ids,
@@ -159,7 +168,7 @@ def build_walkthrough_payload(sop: models.Sop, db: DBSession) -> WalkthroughPayl
         steps.append(
             WalkthroughStep(
                 step_number=step["order"],
-                instruction=step["instruction"],
+                instruction=instruction,
                 css_selector=css_selector,
                 xpath=xpath,
                 screenshot_url=screenshot_url,
