@@ -115,12 +115,12 @@ def _resolve_step_metadata(
                     tenant_id,
                     db,
                 )
-
-        if css_selector and xpath and screenshot_url:
-            break
         
         if screenshot_highlight is None:
             screenshot_highlight = _extract_screenshot_highlight(getattr(event, "attrs", None))
+
+        if css_selector and xpath and screenshot_url and screenshot_highlight:
+            break
     return css_selector, xpath, screenshot_url, screenshot_highlight
 
 
@@ -184,10 +184,10 @@ def _extract_screenshot_highlight(attrs: dict | None) -> dict | None:
     if not isinstance(attrs, dict):
         return None
 
-    highlight = _extract_screenshot_highlight(attrs)
-    if highlight is not None:
-        return highlight
-
+    target_rect = attrs.get("target_rect")
+    if not isinstance(target_rect, dict):
+        return None
+    
     try:
         x = float(target_rect["x"])
         y = float(target_rect["y"])
@@ -211,16 +211,20 @@ def _extract_screenshot_highlight(attrs: dict | None) -> dict | None:
     }
 
 def resolve_step_screenshot_highlight(
-    source_event_ids,
-    db,
-    session_id,
-):
+    source_event_ids: list[str],
+    db: DBSession,
+    session_id: UUID,
+) -> dict | None:
+    event_ids = _parse_event_ids(source_event_ids)
+    if not event_ids:
+        return None
+
     try:
         events = (
             db.query(models.Event)
             .filter(
                 models.Event.session_id == session_id,
-                models.Event.id.in_(source_event_ids),
+                models.Event.id.in_(event_ids),
             )
             .order_by(models.Event.seq.asc())
             .all()
@@ -229,12 +233,8 @@ def resolve_step_screenshot_highlight(
         return None
 
     for event in events:
-        attrs = getattr(event, "attrs", None)
-        if not isinstance(attrs, dict):
-            continue
-
-        target_rect = attrs.get("target_rect")
-        if isinstance(target_rect, dict):
-            return target_rect
+        highlight = _extract_screenshot_highlight(getattr(event, "attrs", None))
+        if highlight is not None:
+            return highlight
 
     return None

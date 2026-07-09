@@ -601,6 +601,16 @@ def test_get_sop_returns_signed_screenshot_url():
         seq=1,
         session_id=WALKTHROUGH_SESSION_ID,
         screenshot_id=UUID("22222222-2222-2222-2222-222222222222"),
+        attrs={
+            "target_rect": {
+                "x": 10,
+                "y": 20,
+                "width": 120,
+                "height": 40,
+                "viewport_width": 1440,
+                "viewport_height": 900,
+            },
+        },
     )
 
     fake_screenshot = SimpleNamespace(
@@ -643,6 +653,14 @@ def test_get_sop_returns_signed_screenshot_url():
         body = response.json()
 
         assert body["steps"][0]["screenshot_url"] == "https://signed.example/screenshots/login.png"
+        assert body["steps"][0]["screenshot_highlight"] == {
+            "x": 10,
+            "y": 20,
+            "width": 120,
+            "height": 40,
+            "viewport_width": 1440,
+            "viewport_height": 900,
+        }
         assert body["steps"][0]["time_estimate"] == 5
     finally:
         app.dependency_overrides[get_db] = override_get_db
