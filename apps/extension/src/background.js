@@ -1,4 +1,5 @@
 import { assembleSession } from './session-assembly.js';
+import { clearStoredAuthTokens, redeemHandoffCode } from './auth.js';
 
 let writeQueue = Promise.resolve();
 let lastScreenshotAt = 0;
@@ -76,6 +77,36 @@ async function getScreenshotForEvent(tab, existingScreenshots = []) {
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type === 'EXTENSION_HANDOFF') {
+    redeemHandoffCode(message.code)
+      .then(() => {
+        sendResponse({ ok: true });
+      })
+      .catch((error) => {
+        sendResponse({
+          ok: false,
+          error: error instanceof Error ? error.message : 'Failed to redeem handoff code',
+        });
+      });
+
+    return true;
+  }
+
+  if (message.type === 'EXTENSION_LOGOUT') {
+    clearStoredAuthTokens()
+      .then(() => {
+        sendResponse({ ok: true });
+      })
+      .catch((error) => {
+        sendResponse({
+          ok: false,
+          error: error instanceof Error ? error.message : 'Failed to clear extension auth',
+        });
+      });
+
+    return true;
+  }
+
   if (message.type === 'GET_SESSION_PAYLOAD') {
     const storageKey = `session_${message.sessionId}`;
 

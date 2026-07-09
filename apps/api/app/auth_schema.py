@@ -61,3 +61,14 @@ class MeResponse(BaseModel):
     email: NormalizedEmail
     role: UserRole
     tenant_id: UUID
+
+
+class ExtensionHandoffCreateResponse(BaseModel):
+    code: str
+    expires_in: int
+
+
+class ExtensionHandoffRedeemRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    code: str = Field(min_length=1)

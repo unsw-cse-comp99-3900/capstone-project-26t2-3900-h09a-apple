@@ -376,3 +376,103 @@ def test_auth_me_returns_401_without_token():
     response = client.get("/api/v1/auth/me")
 
     assert response.status_code == 401
+
+
+def test_extension_handoff_mint_requires_auth():
+    response = client.post("/api/v1/auth/extension-handoff")
+
+    assert response.status_code == 401
+
+
+def test_extension_handoff_mint_returns_code(auth_db):
+    from app.auth.handoff_store import clear_handoff_store
+
+    clear_handoff_store()
+    user = User(
+        id=UUID("11111111-1111-1111-1111-111111111111"),
+        email="employee@example.com",
+        hashed_password=hash_password("secret-password"),
+        role=UserRole.employee.value,
+        tenant_id=TENANT_ID,
+    )
+    auth_db.users.append(user)
+    token = generate_token(user.id, UserRole.employee, user.tenant_id)
+
+    response = client.post(
+        "/api/v1/auth/extension-handoff",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["code"]
+    assert body["expires_in"] == 60
+
+
+def test_extension_handoff_redeem_returns_tokens(auth_db):
+    from app.auth.handoff_store import clear_handoff_store, create_handoff_code
+
+    clear_handoff_store()
+    user = User(
+        id=UUID("11111111-1111-1111-1111-111111111111"),
+        email="employee@example.com",
+        hashed_password=hash_password("secret-password"),
+        role=UserRole.employee.value,
+        tenant_id=TENANT_ID,
+    )
+    auth_db.users.append(user)
+    code = create_handoff_code(user.id)
+
+    response = client.post("/api/v1/auth/extension-handoff/redeem", json={"code": code})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["access_token"]
+    assert body["refresh_token"]
+    assert body["expires_in"] == ACCESS_TOKEN_EXPIRE_SECONDS
+
+
+def test_extension_handoff_redeem_rejects_reused_code(auth_db):
+    from app.auth.handoff_store import clear_handoff_store, create_handoff_code
+
+    clear_handoff_store()
+    user = User(
+        id=UUID("11111111-1111-1111-1111-111111111111"),
+        email="employee@example.com",
+        hashed_password=hash_password("secret-password"),
+        role=UserRole.employee.value,
+        tenant_id=TENANT_ID,
+    )
+    auth_db.users.append(user)
+    code = create_handoff_code(user.id)
+
+    first = client.post("/api/v1/auth/extension-handoff/redeem", json={"code": code})
+    second = client.post("/api/v1/auth/extension-handoff/redeem", json={"code": code})
+
+    assert first.status_code == 200
+    assert second.status_code == 401
+
+
+def test_extension_handoff_redeem_rejects_expired_code(auth_db):
+    from datetime import UTC, datetime, timedelta
+
+    from app.auth.handoff_store import HandoffEntry, _store, clear_handoff_store
+
+    clear_handoff_store()
+    user = User(
+        id=UUID("11111111-1111-1111-1111-111111111111"),
+        email="employee@example.com",
+        hashed_password=hash_password("secret-password"),
+        role=UserRole.employee.value,
+        tenant_id=TENANT_ID,
+    )
+    auth_db.users.append(user)
+    code = "expired-code"
+    _store[code] = HandoffEntry(
+        user_id=user.id,
+        expires_at=datetime.now(UTC) - timedelta(seconds=1),
+    )
+
+    response = client.post("/api/v1/auth/extension-handoff/redeem", json={"code": code})
+
+    assert response.status_code == 401

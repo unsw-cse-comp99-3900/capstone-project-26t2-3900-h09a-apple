@@ -8,6 +8,12 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as DBSession
 
 from app.auth.deps import get_current_user
+from app.auth.handoff_store import (
+    HANDOFF_CODE_EXPIRE_SECONDS,
+    HandoffCodeError,
+    create_handoff_code,
+    redeem_handoff_code,
+)
 from app.auth.jwt import (
     ACCESS_TOKEN_EXPIRE_SECONDS,
     InvalidTokenError,
@@ -19,6 +25,8 @@ from app.auth.password import hash_password, verify_login_password
 from app.auth.rate_limit import auth_rate_limiter
 from app.auth.user_lookup import find_user_by_email, touch_user_lookup
 from app.auth_schema import (
+    ExtensionHandoffCreateResponse,
+    ExtensionHandoffRedeemRequest,
     LoginRequest,
     LoginResponse,
     MeResponse,
@@ -118,6 +126,43 @@ def me(current_user: Annotated[User, Depends(get_current_user)]) -> MeResponse:
         email=current_user.email,
         role=_role_enum(current_user.role),
         tenant_id=current_user.tenant_id,
+    )
+
+
+@router.post("/extension-handoff", response_model=ExtensionHandoffCreateResponse)
+def create_extension_handoff(
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> ExtensionHandoffCreateResponse:
+    code = create_handoff_code(current_user.id)
+    return ExtensionHandoffCreateResponse(code=code, expires_in=HANDOFF_CODE_EXPIRE_SECONDS)
+
+
+@router.post("/extension-handoff/redeem", response_model=LoginResponse)
+def redeem_extension_handoff(
+    payload: ExtensionHandoffRedeemRequest, db: DB_DEPENDENCY
+) -> LoginResponse:
+    try:
+        user_id = redeem_handoff_code(payload.code)
+    except HandoffCodeError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired handoff code",
+            headers=_UNAUTHORIZED_HEADERS,
+        ) from None
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired handoff code",
+            headers=_UNAUTHORIZED_HEADERS,
+        )
+
+    role = _role_enum(user.role)
+    return LoginResponse(
+        access_token=generate_token(user.id, role, user.tenant_id),
+        refresh_token=generate_refresh_token(user.id, role, user.tenant_id),
+        expires_in=ACCESS_TOKEN_EXPIRE_SECONDS,
     )
 
 
