@@ -58,12 +58,12 @@ Health check: `GET /api/v1/health`
 
 ### AWS services
 
-- AWS App Runner — FastAPI backend (`apps/api`)
-- AWS RDS PostgreSQL — application database
-- pgvector — enabled with `CREATE EXTENSION IF NOT EXISTS vector`
-- AWS S3 — screenshot object storage
-- AWS Secrets Manager — database credentials and API secrets
-- AWS CloudWatch — App Runner logs and health alarms
+- AWS App Runner: FastAPI backend (`apps/api`)
+- AWS RDS PostgreSQL: application database
+- pgvector: enabled with `CREATE EXTENSION IF NOT EXISTS vector`
+- AWS S3: screenshot object storage
+- AWS Secrets Manager: database credentials and API secrets
+- AWS CloudWatch: App Runner logs and health alarms
 
 ### App Runner environment variables
 
