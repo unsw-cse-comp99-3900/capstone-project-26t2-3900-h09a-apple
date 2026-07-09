@@ -3,20 +3,40 @@
 import { useEffect, useMemo, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import type { SopLibraryItem } from '@h09a/types';
+
+import { getPublishedSops } from '@/lib/api';
+
 import SopCard from './SopCard';
 import EmptyState from './EmptyState';
 import styles from './library.module.css';
+import { useCurrentUser } from '@/contexts/auth-context';
 
-type Props = {
-  sops: SopLibraryItem[];
-  initialSearch: string;
-};
-
-// Client side title search with URL sync.
-export default function LibraryClient({ sops, initialSearch }: Props) {
+// Client-side SOP library with authenticated data loading.
+export default function LibraryClient() {
   const router = useRouter();
   const pathname = usePathname();
-  const [search, setSearch] = useState(initialSearch);
+  const { user, logout } = useCurrentUser();
+
+  const [search, setSearch] = useState('');
+
+  const [sops, setSops] = useState<SopLibraryItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const data = await getPublishedSops();
+        setSops(data.sops);
+      } catch {
+        setError('Failed to load SOP library.');
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    void load();
+  }, []);
 
   useEffect(() => {
     const params = new URLSearchParams();
@@ -26,24 +46,68 @@ export default function LibraryClient({ sops, initialSearch }: Props) {
     }
 
     const query = params.toString();
-    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+
+    router.replace(query ? `${pathname}?${query}` : pathname, {
+      scroll: false,
+    });
   }, [search, pathname, router]);
 
   const filtered = useMemo(() => {
     const keyword = search.trim().toLowerCase();
-    if (!keyword) return sops;
 
-    return sops.filter((sop) => sop.title.toLowerCase().includes(keyword));
+    if (!keyword) {
+      return sops;
+    }
+
+    return sops.filter((sop) =>
+      sop.title.toLowerCase().includes(keyword),
+    );
   }, [search, sops]);
+
+  if (loading) {
+    return (
+      <div className={styles.container}>
+        <p className={styles.count}>Loading procedures...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className={styles.container}>
+        <p className={styles.count}>{error}</p>
+      </div>
+    );
+  }
 
   return (
     <div className={styles.container}>
       <div className={styles.hero}>
-        <p className={styles.eyebrow}>Internal reference</p>
-        <h1 className={styles.title}>SOP Library</h1>
-        <p className={styles.subtitle}>
-          Every procedure your team has recorded, ready to open and follow step by step.
-        </p>
+        <div>
+          <p className={styles.eyebrow}>Internal reference</p>
+
+          <h1 className={styles.title}>SOP Library</h1>
+
+          <p className={styles.subtitle}>
+            Every procedure your team has recorded, ready to open and follow
+            step by step.
+          </p>
+        </div>
+
+        <div className={styles.userPanel}>
+          <div>
+            <p className={styles.userEmail}>{user?.email}</p>
+            <p className={styles.userRole}>{user?.role}</p>
+          </div>
+
+          <button
+            type="button"
+            className={styles.logoutButton}
+            onClick={() => void logout()}
+          >
+            Log out
+          </button>
+        </div>
       </div>
 
       <div className={styles.drawer}>

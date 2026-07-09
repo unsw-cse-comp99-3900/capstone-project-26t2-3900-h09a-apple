@@ -132,12 +132,13 @@ export async function getSop(sopId: string): Promise<SopDetailPayload> {
 }
 
 export async function getPublishedSops(): Promise<SopListResponse> {
-  const res = await fetch(apiUrl('/api/v1/sops?status=published'), {
-    cache: 'no-store',
-  });
+  const res = await authedFetch('/api/v1/sops?status=published');
 
   if (!res.ok) {
-    throw new ApiError(await errorMessage(res, 'Failed to load SOP library'), res.status);
+    throw new ApiError(
+      await errorMessage(res, 'Failed to load SOP library'),
+      res.status,
+    );
   }
 
   return res.json();
