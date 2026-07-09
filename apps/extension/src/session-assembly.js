@@ -8,7 +8,10 @@ function mapBufferedEventToWTEventInput(evt) {
     target_label: payload.label, // Flattened
     value: payload.value, // Flattened
     url: payload.url, // Flattened
-    attrs: pageTitle ? { page_title: pageTitle } : {},
+    attrs: {
+      ...(pageTitle ? { page_title: pageTitle } : {}),
+      ...(payload.target_rect ? { target_rect: payload.target_rect } : {}),
+    },
     timestamp_ms: payload.timestamp || evt.receivedAt || 0,
     screenshot_id: payload.screenshot_id || null,
   };

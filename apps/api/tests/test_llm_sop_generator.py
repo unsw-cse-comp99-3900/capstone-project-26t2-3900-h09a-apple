@@ -65,6 +65,7 @@ def test_llm_sop_generator_returns_llm_payload(monkeypatch):
                 value="[MASKED]",
                 url="https://example.com/login",
                 attrs={"page_title": "Login"},
+                timestamp_ms=1000,
             )
         ],
     )
@@ -93,7 +94,7 @@ def test_llm_sop_generator_returns_llm_payload(monkeypatch):
     assert event_payload["value"] == "[MASKED]"
     assert event_payload["attrs"] == {"page_title": "Login"}
     assert event_payload["page_title"] == "Login"
-
+    assert event_payload["timestamp_ms"] == 1000
 
 class FailingProvider:
     name = "openai"

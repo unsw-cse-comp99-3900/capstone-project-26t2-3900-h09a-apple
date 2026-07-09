@@ -16,6 +16,7 @@ function step(
     instruction: `Complete ${title.toLowerCase()}.`,
     source_event_ids: [sourceEventId],
     screenshot_url: null,
+    screenshot_highlight: null,
     ...extra,
   };
 }
@@ -46,6 +47,7 @@ describe('SopStepCard', () => {
         title="Submit request"
         instruction="Submit the completed request."
         screenshotUrl={null}
+        timeEstimate={5}
       />,
     );
 
@@ -55,6 +57,7 @@ describe('SopStepCard', () => {
     expect(branchMarkup).toContain('If the amount is over $500');
     expect(branchMarkup).toContain('https://example.com/approval.png');
     expect(plainMarkup).toContain('Submit request');
+    expect(plainMarkup).toContain('Estimated time: 5s');
     expect(plainMarkup).toContain('No screenshot captured for this step');
     expect(plainMarkup).not.toContain('Warning');
     expect(plainMarkup).not.toContain('Branch');
@@ -86,7 +89,9 @@ describe('SopViewer', () => {
       version: 2,
       generated_at: '2026-06-28T08:20:00Z',
       steps: [
-        step(3, 'Submit request', 'event-3'),
+        step(3, 'Submit request', 'event-3', {
+          time_estimate: 5,
+        }),
         step(1, 'Check invoice', 'event-1'),
         step(2, 'Choose approval path', 'event-2', {
           branch: 'If the amount is over $500, route to manager approval.',
@@ -110,5 +115,6 @@ describe('SopViewer', () => {
     expect(markup.indexOf('Choose approval path')).toBeLessThan(markup.indexOf('Submit request'));
     expect(markup).toContain('Invoice details were opened twice.');
     expect(markup).toContain('If the amount is over $500');
+    expect(markup).toContain('Estimated time: 5s');
   });
 });

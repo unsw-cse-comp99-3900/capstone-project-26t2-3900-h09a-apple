@@ -10,6 +10,8 @@ export type SopStepCardProps = {
   warning?: string | null;
   branch?: string | null;
   screenshotUrl?: string | null;
+  timeEstimate?: number | null;
+  screenshotHighlight?: SopStepResponse['screenshot_highlight'];
 };
 
 type SopViewerProps = {
@@ -109,6 +111,15 @@ function stepDisplayText(title: string, instruction: string) {
   };
 }
 
+function highlightStyle(highlight: NonNullable<SopStepResponse['screenshot_highlight']>) {
+  return {
+    left: `${(highlight.x / highlight.viewport_width) * 100}%`,
+    top: `${(highlight.y / highlight.viewport_height) * 100}%`,
+    width: `${(highlight.width / highlight.viewport_width) * 100}%`,
+    height: `${(highlight.height / highlight.viewport_height) * 100}%`,
+  };
+}
+
 export function SopStepCard({
   stepNumber,
   title,
@@ -116,6 +127,8 @@ export function SopStepCard({
   warning,
   branch,
   screenshotUrl,
+  timeEstimate,
+  screenshotHighlight,
 }: SopStepCardProps) {
   const display = stepDisplayText(title, instruction);
 
@@ -138,6 +151,10 @@ export function SopStepCard({
           ) : null}
           <p className={styles.instruction}>{display.instruction}</p>
 
+          {timeEstimate != null ? (
+            <p className={styles.timeEstimate}>Estimated time: {timeEstimate}s</p>
+          ) : null}
+
           {warning ? (
             <div className={`${styles.callout} ${styles.warningCallout}`} role="note">
               <strong>Warning</strong>
@@ -156,15 +173,24 @@ export function SopStepCard({
 
       <div className={styles.screenshotFrame}>
         {screenshotUrl ? (
-          <Image
-            className={styles.screenshotImage}
-            src={screenshotUrl}
-            alt={`Screenshot for step ${stepNumber}: ${title}`}
-            width={640}
-            height={420}
-            unoptimized
-          />
-        ) : (
+          <div className={styles.screenshotImageWrap}>
+            <Image
+              className={styles.screenshotImage}
+              src={screenshotUrl}
+              alt={`Screenshot for step ${stepNumber}: ${title}`}
+              width={640}
+              height={420}
+              unoptimized
+            />
+            {screenshotHighlight ? (
+              <span
+                className={styles.screenshotHighlight}
+                style={highlightStyle(screenshotHighlight)}
+                aria-hidden="true"
+              />
+            ) : null}
+          </div>
+) : (
           <div className={styles.screenshotPlaceholder}>
             <span aria-hidden="true">WT</span>
             <p>No screenshot captured for this step</p>
@@ -224,6 +250,7 @@ export function SopViewer({ sop }: SopViewerProps) {
                 warning={warningForStep(step, sop.warnings)}
                 branch={branchForStep(step)}
                 screenshotUrl={step.screenshot_url}
+                timeEstimate={step.time_estimate}
               />
             </li>
           ))}

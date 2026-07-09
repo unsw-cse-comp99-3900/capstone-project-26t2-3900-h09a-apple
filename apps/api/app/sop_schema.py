@@ -10,7 +10,7 @@ class SopStep(BaseModel):
     instruction: str = Field(..., min_length=1)
     branch: str | None = None
     source_event_ids: list[str] = Field(default_factory=list)
-
+    time_estimate: int | None = Field(default=None, ge=0)
 
 class SopStepResponse(SopStep):
     screenshot_url: str | None = None

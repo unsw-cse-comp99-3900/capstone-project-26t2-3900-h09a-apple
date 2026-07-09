@@ -21,6 +21,10 @@ Use only the create_sop tool schema.
 Every step must reference the source event ids that support it.
 Do not invent source_event_ids.
 
+For each step, include time_estimate as an integer number of seconds.
+Estimate it from the timestamps of the source events where possible.
+Use null if the estimate cannot be inferred.
+
 Session payload:
 {json.dumps(session_payload, default=str)}
 """

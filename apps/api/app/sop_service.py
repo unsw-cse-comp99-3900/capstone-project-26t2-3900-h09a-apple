@@ -93,9 +93,10 @@ def _resolve_step_metadata(
     tenant_id: UUID,
     db: DBSession,
 ) -> tuple[str | None, str | None, str | None]:
-    css_selector: str | None = None
-    xpath: str | None = None
-    screenshot_url: str | None = None
+    css_selector = None
+    xpath = None
+    screenshot_url = None
+    screenshot_highlight = None
 
     for event in _load_ordered_events(source_event_ids, session_id, tenant_id, db):
         if css_selector is None:
@@ -117,8 +118,14 @@ def _resolve_step_metadata(
 
         if css_selector and xpath and screenshot_url:
             break
-
-    return css_selector, xpath, screenshot_url
+        
+        if screenshot_highlight is None:
+            attrs = getattr(event, "attrs", None)
+            if isinstance(attrs, dict):
+                target_rect = attrs.get("target_rect")
+                if isinstance(target_rect, dict):
+                    screenshot_highlight = target_rect
+    return css_selector, xpath, screenshot_url, screenshot_highlight
 
 
 def resolve_step_screenshot_url(
@@ -127,7 +134,7 @@ def resolve_step_screenshot_url(
     session_id: UUID,
     tenant_id: UUID,
 ) -> str | None:
-    _, _, screenshot_url = _resolve_step_metadata(
+    _, _, screenshot_url, _ = _resolve_step_metadata(
         source_event_ids,
         session_id,
         tenant_id,
@@ -153,7 +160,7 @@ def build_walkthrough_payload(sop: models.Sop, db: DBSession) -> WalkthroughPayl
             raise WalkthroughDataError(f"Step {step['order']} has empty instruction")
 
         source_event_ids = step.get("source_event_ids", [])
-        css_selector, xpath, screenshot_url = _resolve_step_metadata(
+        css_selector, xpath, screenshot_url, screenshot_highlight = _resolve_step_metadata(
             source_event_ids,
             sop.session_id,
             sop.tenant_id,
@@ -176,3 +183,57 @@ def build_walkthrough_payload(sop: models.Sop, db: DBSession) -> WalkthroughPayl
         )
 
     return WalkthroughPayload(steps=steps)
+
+def _extract_screenshot_highlight(attrs: dict | None) -> dict | None:
+    if not isinstance(attrs, dict):
+        return None
+
+    target_rect = attrs.get("target_rect")
+    if not isinstance(target_rect, dict):
+        return None
+
+    required_keys = (
+        "x",
+        "y",
+        "width",
+        "height",
+        "viewport_width",
+        "viewport_height",
+    )
+
+    if not all(key in target_rect for key in required_keys):
+        return None
+
+    return {
+        key: target_rect[key]
+        for key in required_keys
+    }
+
+def resolve_step_screenshot_highlight(
+    source_event_ids,
+    db,
+    session_id,
+):
+    try:
+        events = (
+            db.query(models.Event)
+            .filter(
+                models.Event.session_id == session_id,
+                models.Event.id.in_(source_event_ids),
+            )
+            .order_by(models.Event.seq.asc())
+            .all()
+        )
+    except Exception:
+        return None
+
+    for event in events:
+        attrs = getattr(event, "attrs", None)
+        if not isinstance(attrs, dict):
+            continue
+
+        target_rect = attrs.get("target_rect")
+        if isinstance(target_rect, dict):
+            return target_rect
+
+    return None

@@ -102,6 +102,14 @@ test('assembleSession carries screenshot ids and screenshot payloads', () => {
           screenshot_id: screenshot.id,
           timestamp: 1001,
         },
+        target_rect: {
+          x: 10,
+          y: 20,
+          width: 100,
+          height: 40,
+          viewport_width: 1280,
+          viewport_height: 720,
+        },
       },
     ],
     {
@@ -114,6 +122,14 @@ test('assembleSession carries screenshot ids and screenshot payloads', () => {
 
   assert.equal(payload.events[0].screenshot_id, screenshot.id);
   assert.deepEqual(payload.screenshots, [screenshot]);
+  assert.deepEqual(session.events[clickEventIndex].attrs.target_rect, {
+    x: 10,
+    y: 20,
+    width: 100,
+    height: 40,
+    viewport_width: 1280,
+    viewport_height: 720,
+  });
 });
 
 test('assembleSession drops screenshots not referenced by any event after dedup', () => {

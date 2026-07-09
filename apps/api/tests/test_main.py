@@ -621,6 +621,7 @@ def test_get_sop_returns_signed_screenshot_url():
                 "title": "Login",
                 "instruction": "Click Login",
                 "source_event_ids": ["1"],
+                "time_estimate": 5,
             }
         ],
         warnings=[],
@@ -642,7 +643,7 @@ def test_get_sop_returns_signed_screenshot_url():
         body = response.json()
 
         assert body["steps"][0]["screenshot_url"] == "https://signed.example/screenshots/login.png"
-
+        assert body["steps"][0]["time_estimate"] == 5
     finally:
         app.dependency_overrides[get_db] = override_get_db
 

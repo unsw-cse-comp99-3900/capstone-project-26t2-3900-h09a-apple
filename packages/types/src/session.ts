@@ -155,6 +155,7 @@ export interface SopStep {
   instruction: string;
   branch?: string | null;
   source_event_ids: string[];
+  time_estimate?: number | null;
 }
 
 /** Mirrors `SopWarning` in `apps/api/app/sop_schema.py`. */
@@ -183,6 +184,7 @@ export interface SopStepResponse extends SopStep {
    * Null if no screenshot is associated with the step.
    */
   screenshot_url: string | null;
+  screenshot_highlight: ScreenshotHighlight | null;
 }
 
 /**
@@ -260,4 +262,13 @@ export interface WalkthroughStep {
 /** Response returned by GET /api/v1/sops/{id}/walkthrough. */
 export interface WalkthroughPayload {
   steps: WalkthroughStep[];
+}
+
+export interface ScreenshotHighlight {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  viewport_width: number;
+  viewport_height: number;
 }
