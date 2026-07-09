@@ -25,6 +25,15 @@ export function defaultTenantId(): string {
   return process.env.AUTH_DEFAULT_TENANT_ID ?? '22222222-2222-2222-2222-222222222222';
 }
 
+/** Edge-safe base64url decode for JWT payload segments (no Node Buffer). */
+export function decodeBase64Url(segment: string): string {
+  const base64 = segment.replace(/-/g, '+').replace(/_/g, '/');
+  const padding = '='.repeat((4 - (base64.length % 4)) % 4);
+  const binary = atob(base64 + padding);
+  const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+  return new TextDecoder().decode(bytes);
+}
+
 export function roleFromAccessToken(token: string | undefined): UserRole | null {
   if (!token) {
     return null;
@@ -36,7 +45,7 @@ export function roleFromAccessToken(token: string | undefined): UserRole | null 
   }
 
   try {
-    const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8')) as {
+    const payload = JSON.parse(decodeBase64Url(parts[1])) as {
       role?: string;
     };
     if (payload.role === 'EMPLOYEE' || payload.role === 'REVIEWER' || payload.role === 'MANAGER') {
