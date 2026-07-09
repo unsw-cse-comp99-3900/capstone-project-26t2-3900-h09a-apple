@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  decodeBase64Url,
-  roleLandingPath,
-  roleFromAccessToken,
-} from '@/lib/auth/constants';
+import { decodeBase64Url, roleLandingPath, roleFromAccessToken } from '@/lib/auth/constants';
 
 function encodeBase64Url(value: string): string {
   return btoa(value).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
