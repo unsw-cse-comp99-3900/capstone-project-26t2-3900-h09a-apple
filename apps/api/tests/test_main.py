@@ -20,6 +20,8 @@ client = TestClient(app)
 
 DEFAULT_TENANT_ID = UUID("22222222-2222-2222-2222-222222222222")
 OTHER_TENANT_ID = UUID("33333333-3333-3333-3333-333333333333")
+WALKTHROUGH_SESSION_ID = UUID("cccccccc-cccc-cccc-cccc-cccccccccccc")
+WALKTHROUGH_SOP_ID = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
 
 
 def _make_user(role: UserRole = UserRole.employee, tenant_id: UUID = DEFAULT_TENANT_ID):
@@ -281,12 +283,16 @@ class FakeDbWithSession(FakeDb):
         self.screenshot = screenshot
         self.sops = sops or []
         self._tenant_id_filter = None
+        self._session_id_filter = None
+        self._event_ids_filter = None
 
         self.current_model = None
 
     def query(self, model):
         self.current_model = model
         self._tenant_id_filter = None
+        self._session_id_filter = None
+        self._event_ids_filter = None
         return self
 
     def filter(self, *args):
@@ -295,9 +301,19 @@ class FakeDbWithSession(FakeDb):
             right = getattr(criterion, "right", None)
             if left is not None and getattr(left, "key", None) == "tenant_id":
                 self._tenant_id_filter = getattr(right, "value", right)
+            if left is not None and getattr(left, "key", None) == "session_id":
+                self._session_id_filter = getattr(right, "value", right)
+            operator = getattr(criterion, "operator", None)
+            if operator is not None and operator.__name__ == "in_op":
+                values = getattr(right, "value", right)
+                if values is not None:
+                    self._event_ids_filter = set(values)
         return self
 
     def order_by(self, *args):
+        return self
+
+    def join(self, *args):
         return self
 
     def first(self):
@@ -327,13 +343,31 @@ class FakeDbWithSession(FakeDb):
             return self.job
 
         if self.current_model == main_module.models.Screenshot:
+            if self.screenshot is None:
+                return None
+            if (
+                self._session_id_filter is not None
+                and getattr(self.screenshot, "session_id", self._session_id_filter)
+                != self._session_id_filter
+            ):
+                return None
             return self.screenshot
 
         return None
 
     def all(self):
         if self.current_model == main_module.models.Event:
-            return self.events
+            events = self.events
+            if self._event_ids_filter is not None:
+                events = [event for event in events if event.id in self._event_ids_filter]
+            if self._session_id_filter is not None:
+                events = [
+                    event
+                    for event in events
+                    if getattr(event, "session_id", self._session_id_filter)
+                    == self._session_id_filter
+                ]
+            return events
 
         if self.current_model == main_module.models.Sop:
             return self.sops
@@ -516,6 +550,7 @@ def test_get_sop_returns_200():
 
     fake_sop = SimpleNamespace(
         id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        session_id=WALKTHROUGH_SESSION_ID,
         title="Login Flow",
         version=1,
         generated_at=datetime.now(UTC),
@@ -564,16 +599,19 @@ def test_get_sop_returns_signed_screenshot_url():
     fake_event = SimpleNamespace(
         id=1,
         seq=1,
+        session_id=WALKTHROUGH_SESSION_ID,
         screenshot_id=UUID("22222222-2222-2222-2222-222222222222"),
     )
 
     fake_screenshot = SimpleNamespace(
         id=UUID("22222222-2222-2222-2222-222222222222"),
+        session_id=WALKTHROUGH_SESSION_ID,
         object_key="screenshots/login.png",
     )
 
     fake_sop = SimpleNamespace(
         id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        session_id=WALKTHROUGH_SESSION_ID,
         title="Login Flow",
         version=1,
         generated_at=datetime.now(UTC),
@@ -861,6 +899,408 @@ def test_list_sops_requires_authentication():
 
     try:
         response = client.get("/api/v1/sops")
+        assert response.status_code == 401
+    finally:
+        app.dependency_overrides[get_db] = override_get_db
+
+
+def _walkthrough_sop(
+    *,
+    steps: list[dict],
+    status: str = main_module.models.SopStatus.published.value,
+    tenant_id: UUID = DEFAULT_TENANT_ID,
+):
+    return SimpleNamespace(
+        id=WALKTHROUGH_SOP_ID,
+        session_id=WALKTHROUGH_SESSION_ID,
+        tenant_id=tenant_id,
+        title="Walkthrough Flow",
+        version=1,
+        generated_at=datetime.now(UTC),
+        published_at=datetime.now(UTC),
+        status=status,
+        steps=steps,
+        warnings=[],
+    )
+
+
+def test_get_sop_walkthrough_returns_404_for_missing_sop():
+    db = FakeDbWithSession(existing_sop=None)
+    app.dependency_overrides[get_db] = lambda: db
+
+    try:
+        response = client.get(f"/api/v1/sops/{WALKTHROUGH_SOP_ID}/walkthrough")
+        assert response.status_code == 404
+    finally:
+        app.dependency_overrides[get_db] = override_get_db
+
+
+def test_get_sop_walkthrough_returns_404_for_non_published_sop():
+    fake_sop = _walkthrough_sop(
+        steps=[
+            {
+                "order": 1,
+                "title": "Open page",
+                "instruction": "Open the invoices page.",
+                "source_event_ids": ["1"],
+            }
+        ],
+        status=main_module.models.SopStatus.approved.value,
+    )
+    db = FakeDbWithSession(existing_sop=fake_sop)
+    app.dependency_overrides[get_db] = lambda: db
+
+    try:
+        response = client.get(f"/api/v1/sops/{WALKTHROUGH_SOP_ID}/walkthrough")
+        assert response.status_code == 404
+    finally:
+        app.dependency_overrides[get_db] = override_get_db
+
+
+def test_get_sop_walkthrough_returns_404_for_cross_tenant_sop():
+    fake_sop = _walkthrough_sop(
+        steps=[
+            {
+                "order": 1,
+                "title": "Open page",
+                "instruction": "Open the invoices page.",
+                "source_event_ids": ["1"],
+            }
+        ],
+        tenant_id=OTHER_TENANT_ID,
+    )
+    db = FakeDbWithSession(existing_sop=fake_sop)
+    app.dependency_overrides[get_db] = lambda: db
+
+    try:
+        response = client.get(f"/api/v1/sops/{WALKTHROUGH_SOP_ID}/walkthrough")
+        assert response.status_code == 404
+    finally:
+        app.dependency_overrides[get_db] = override_get_db
+
+
+def test_get_sop_walkthrough_returns_payload_for_single_step():
+    fake_event = SimpleNamespace(
+        id=1,
+        seq=1,
+        session_id=WALKTHROUGH_SESSION_ID,
+        target_selector="#login-button",
+        attrs={"xpath": "/html/body/button[1]"},
+        screenshot_id=UUID("22222222-2222-2222-2222-222222222222"),
+    )
+    fake_screenshot = SimpleNamespace(
+        id=UUID("22222222-2222-2222-2222-222222222222"),
+        session_id=WALKTHROUGH_SESSION_ID,
+        object_key="screenshots/login.png",
+    )
+    fake_sop = _walkthrough_sop(
+        steps=[
+            {
+                "order": 1,
+                "title": "Login",
+                "instruction": "Click the login button.",
+                "source_event_ids": ["1"],
+            }
+        ],
+    )
+
+    db = FakeDbWithSession(
+        existing_sop=fake_sop,
+        events=[fake_event],
+        screenshot=fake_screenshot,
+    )
+    app.dependency_overrides[get_db] = lambda: db
+
+    try:
+        response = client.get(f"/api/v1/sops/{WALKTHROUGH_SOP_ID}/walkthrough")
+
+        assert response.status_code == 200
+        body = response.json()
+        assert len(body["steps"]) == 1
+        assert body["steps"][0] == {
+            "step_number": 1,
+            "instruction": "Click the login button.",
+            "css_selector": "#login-button",
+            "xpath": "/html/body/button[1]",
+            "screenshot_url": "https://signed.example/screenshots/login.png",
+        }
+    finally:
+        app.dependency_overrides[get_db] = override_get_db
+
+
+def test_get_sop_walkthrough_returns_payload_for_25_steps():
+    events = [
+        SimpleNamespace(
+            id=index,
+            seq=index,
+            session_id=WALKTHROUGH_SESSION_ID,
+            target_selector=f"#step-{index}",
+            attrs={},
+            screenshot_id=None,
+        )
+        for index in range(1, 26)
+    ]
+    fake_sop = _walkthrough_sop(
+        steps=[
+            {
+                "order": index,
+                "title": f"Step {index}",
+                "instruction": f"Perform action {index}.",
+                "source_event_ids": [str(index)],
+            }
+            for index in range(1, 26)
+        ],
+    )
+
+    db = FakeDbWithSession(existing_sop=fake_sop, events=events)
+    app.dependency_overrides[get_db] = lambda: db
+
+    try:
+        response = client.get(f"/api/v1/sops/{WALKTHROUGH_SOP_ID}/walkthrough")
+
+        assert response.status_code == 200
+        body = response.json()
+        assert len(body["steps"]) == 25
+        assert body["steps"][0]["step_number"] == 1
+        assert body["steps"][0]["css_selector"] == "#step-1"
+        assert body["steps"][24]["step_number"] == 25
+        assert body["steps"][24]["instruction"] == "Perform action 25."
+        assert body["steps"][24]["css_selector"] == "#step-25"
+    finally:
+        app.dependency_overrides[get_db] = override_get_db
+
+
+def test_get_sop_walkthrough_does_not_resolve_screenshot_from_other_session():
+    other_session_id = UUID("dddddddd-dddd-dddd-dddd-dddddddddddd")
+    fake_event = SimpleNamespace(
+        id=1,
+        seq=1,
+        session_id=WALKTHROUGH_SESSION_ID,
+        target_selector="#login-button",
+        attrs={},
+        screenshot_id=UUID("22222222-2222-2222-2222-222222222222"),
+    )
+    fake_screenshot = SimpleNamespace(
+        id=UUID("22222222-2222-2222-2222-222222222222"),
+        session_id=other_session_id,
+        object_key="screenshots/other-tenant.png",
+    )
+    fake_sop = _walkthrough_sop(
+        steps=[
+            {
+                "order": 1,
+                "title": "Login",
+                "instruction": "Click the login button.",
+                "source_event_ids": ["1"],
+            }
+        ],
+    )
+
+    db = FakeDbWithSession(
+        existing_sop=fake_sop,
+        events=[fake_event],
+        screenshot=fake_screenshot,
+    )
+    app.dependency_overrides[get_db] = lambda: db
+
+    try:
+        response = client.get(f"/api/v1/sops/{WALKTHROUGH_SOP_ID}/walkthrough")
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["steps"][0]["css_selector"] == "#login-button"
+        assert body["steps"][0]["screenshot_url"] is None
+    finally:
+        app.dependency_overrides[get_db] = override_get_db
+
+
+def test_resolve_step_screenshot_url_uses_24_hour_expiry(monkeypatch):
+    captured: dict[str, int] = {}
+
+    class ExpiryTrackingStorage(FakeStorage):
+        def generate_signed_url(self, key: str, expires: int = 60 * 60 * 24):
+            captured["expires"] = expires
+            return super().generate_signed_url(key, expires=expires)
+
+    storage = ExpiryTrackingStorage()
+    app.dependency_overrides[get_storage] = lambda: storage
+    monkeypatch.setattr(sop_service, "get_storage", lambda: storage)
+
+    fake_event = SimpleNamespace(
+        id=1,
+        seq=1,
+        session_id=WALKTHROUGH_SESSION_ID,
+        target_selector="#login-button",
+        attrs={},
+        screenshot_id=UUID("22222222-2222-2222-2222-222222222222"),
+    )
+    fake_screenshot = SimpleNamespace(
+        id=UUID("22222222-2222-2222-2222-222222222222"),
+        session_id=WALKTHROUGH_SESSION_ID,
+        object_key="screenshots/login.png",
+    )
+    fake_sop = _walkthrough_sop(
+        steps=[
+            {
+                "order": 1,
+                "title": "Login",
+                "instruction": "Click the login button.",
+                "source_event_ids": ["1"],
+            }
+        ],
+    )
+    db = FakeDbWithSession(
+        existing_sop=fake_sop,
+        events=[fake_event],
+        screenshot=fake_screenshot,
+    )
+    app.dependency_overrides[get_db] = lambda: db
+
+    try:
+        response = client.get(f"/api/v1/sops/{WALKTHROUGH_SOP_ID}/walkthrough")
+        assert response.status_code == 200
+        assert captured["expires"] == 60 * 60 * 24
+    finally:
+        app.dependency_overrides[get_db] = override_get_db
+
+
+def test_get_sop_walkthrough_returns_404_for_empty_steps():
+    fake_sop = _walkthrough_sop(steps=[])
+    db = FakeDbWithSession(existing_sop=fake_sop)
+    app.dependency_overrides[get_db] = lambda: db
+
+    try:
+        response = client.get(f"/api/v1/sops/{WALKTHROUGH_SOP_ID}/walkthrough")
+        assert response.status_code == 404
+    finally:
+        app.dependency_overrides[get_db] = override_get_db
+
+
+def test_get_sop_walkthrough_returns_422_when_step_has_no_selector():
+    fake_sop = _walkthrough_sop(
+        steps=[
+            {
+                "order": 1,
+                "title": "Missing selector",
+                "instruction": "Do something.",
+                "source_event_ids": ["not-a-number"],
+            }
+        ],
+    )
+    db = FakeDbWithSession(existing_sop=fake_sop)
+    app.dependency_overrides[get_db] = lambda: db
+
+    try:
+        response = client.get(f"/api/v1/sops/{WALKTHROUGH_SOP_ID}/walkthrough")
+        assert response.status_code == 422
+        assert "missing css_selector and xpath" in response.json()["detail"]
+    finally:
+        app.dependency_overrides[get_db] = override_get_db
+
+
+def test_get_sop_walkthrough_returns_422_when_step_is_missing_instruction():
+    fake_sop = _walkthrough_sop(
+        steps=[
+            {
+                "order": 1,
+                "title": "Missing instruction",
+                "source_event_ids": ["1"],
+            }
+        ],
+    )
+    db = FakeDbWithSession(existing_sop=fake_sop)
+    app.dependency_overrides[get_db] = lambda: db
+
+    try:
+        response = client.get(f"/api/v1/sops/{WALKTHROUGH_SOP_ID}/walkthrough")
+        assert response.status_code == 422
+        assert "missing instruction" in response.json()["detail"]
+    finally:
+        app.dependency_overrides[get_db] = override_get_db
+
+
+def test_get_sop_walkthrough_returns_422_when_step_has_empty_instruction():
+    fake_sop = _walkthrough_sop(
+        steps=[
+            {
+                "order": 1,
+                "title": "Empty instruction",
+                "instruction": "   ",
+                "source_event_ids": ["1"],
+            }
+        ],
+    )
+    db = FakeDbWithSession(existing_sop=fake_sop)
+    app.dependency_overrides[get_db] = lambda: db
+
+    try:
+        response = client.get(f"/api/v1/sops/{WALKTHROUGH_SOP_ID}/walkthrough")
+        assert response.status_code == 422
+        assert "empty instruction" in response.json()["detail"]
+    finally:
+        app.dependency_overrides[get_db] = override_get_db
+
+
+def test_get_sop_walkthrough_returns_422_when_step_is_missing_order():
+    fake_sop = _walkthrough_sop(
+        steps=[
+            {
+                "title": "Missing order",
+                "instruction": "Do something.",
+                "source_event_ids": ["1"],
+            }
+        ],
+    )
+    db = FakeDbWithSession(existing_sop=fake_sop)
+    app.dependency_overrides[get_db] = lambda: db
+
+    try:
+        response = client.get(f"/api/v1/sops/{WALKTHROUGH_SOP_ID}/walkthrough")
+        assert response.status_code == 422
+        assert "missing order" in response.json()["detail"]
+    finally:
+        app.dependency_overrides[get_db] = override_get_db
+
+
+def test_get_sop_walkthrough_returns_xpath_only_step():
+    fake_event = SimpleNamespace(
+        id=1,
+        seq=1,
+        session_id=WALKTHROUGH_SESSION_ID,
+        target_selector=None,
+        attrs={"xpath": "/html/body/main[1]"},
+        screenshot_id=None,
+    )
+    fake_sop = _walkthrough_sop(
+        steps=[
+            {
+                "order": 1,
+                "title": "Navigate",
+                "instruction": "Open the main panel.",
+                "source_event_ids": ["1"],
+            }
+        ],
+    )
+    db = FakeDbWithSession(existing_sop=fake_sop, events=[fake_event])
+    app.dependency_overrides[get_db] = lambda: db
+
+    try:
+        response = client.get(f"/api/v1/sops/{WALKTHROUGH_SOP_ID}/walkthrough")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["steps"][0]["css_selector"] is None
+        assert body["steps"][0]["xpath"] == "/html/body/main[1]"
+    finally:
+        app.dependency_overrides[get_db] = override_get_db
+
+
+def test_get_sop_walkthrough_requires_authentication():
+    db = FakeDbWithSession(existing_sop=None)
+    app.dependency_overrides[get_db] = lambda: db
+    app.dependency_overrides.pop(get_current_user, None)
+
+    try:
+        response = client.get(f"/api/v1/sops/{WALKTHROUGH_SOP_ID}/walkthrough")
         assert response.status_code == 401
     finally:
         app.dependency_overrides[get_db] = override_get_db

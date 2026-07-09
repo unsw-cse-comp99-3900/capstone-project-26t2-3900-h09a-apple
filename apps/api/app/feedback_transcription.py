@@ -9,7 +9,7 @@ import whisper
 from fastapi import HTTPException, UploadFile, status
 from fastapi.concurrency import run_in_threadpool
 
-MAX_AUDIO_SECONDS = 30
+MAX_AUDIO_SECONDS = 60
 WHISPER_MODEL_NAME = "base"
 
 _model = None
@@ -114,7 +114,7 @@ def transcribe_audio_file(input_path: Path, wav_path: Path) -> dict[str, Any]:
     if input_duration > MAX_AUDIO_SECONDS:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail="Audio must be 30 seconds or shorter",
+            detail=f"Audio must be {MAX_AUDIO_SECONDS} seconds or shorter",
         )
 
     convert_to_wav(input_path, wav_path)

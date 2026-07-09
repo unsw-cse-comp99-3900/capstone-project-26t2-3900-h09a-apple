@@ -8,6 +8,7 @@ import {
   stopRecording,
 } from './recording-state.js';
 import { WEB_APP_BASE_URL } from './config.js';
+import { isConsentCurrent, readDataCaptureConsent, saveDataCaptureConsent } from './consent.js';
 
 const form = document.querySelector('#recordingForm');
 const workflowNameInput = document.querySelector('#workflowName');
@@ -17,6 +18,10 @@ const stopButton = document.querySelector('#stopButton');
 const reviewButton = document.querySelector('#reviewButton');
 const statusBadge = document.querySelector('#statusBadge');
 const statusText = document.querySelector('#statusText');
+const consentOverlay = document.querySelector('#consentOverlay');
+const consentDeclineMessage = document.querySelector('#consentDeclineMessage');
+const consentAcceptButton = document.querySelector('#consentAcceptButton');
+const consentDeclineButton = document.querySelector('#consentDeclineButton');
 
 const statusLabels = {
   [RecordingStatus.READY]: 'Ready',
@@ -27,8 +32,8 @@ const statusLabels = {
 let state = createRecordingState();
 let eventCount = 0;
 let reviewSessionReady = false;
+let consentRecord = null;
 
-// When opening a pop-up window, restore the state from the local storage first
 chrome.storage?.local.get(['recordingState'], (result) => {
   if (result.recordingState) {
     state = result.recordingState;
@@ -36,7 +41,11 @@ chrome.storage?.local.get(['recordingState'], (result) => {
   }
 });
 
-// Read the total number of events in session storage and render
+readDataCaptureConsent((consent) => {
+  consentRecord = consent;
+  render();
+});
+
 chrome.storage?.session?.get(['eventBuffer'], (result) => {
   if (result.eventBuffer) {
     eventCount = result.eventBuffer.length;
@@ -44,7 +53,6 @@ chrome.storage?.session?.get(['eventBuffer'], (result) => {
   }
 });
 
-// Continuously monitor the changes in the number of events during the recording period
 chrome.storage?.onChanged.addListener((changes, area) => {
   if (area === 'session' && changes.eventBuffer) {
     eventCount = changes.eventBuffer.newValue?.length || 0;
@@ -82,11 +90,22 @@ function openReviewPage() {
   chrome.tabs.create({ url: reviewUrl.toString() });
 }
 
+function showConsentModal() {
+  consentDeclineMessage.hidden = true;
+  consentOverlay.hidden = false;
+}
+
+function hideConsentModal() {
+  consentOverlay.hidden = true;
+  consentDeclineMessage.hidden = true;
+}
+
 function render() {
   const isRecording = state.status === RecordingStatus.RECORDING;
   const isCompleted =
     state.status === RecordingStatus.COMPLETED && Boolean(state.client_session_id);
   const canReview = isCompleted && reviewSessionReady;
+  const hasConsent = isConsentCurrent(consentRecord);
 
   workflowNameInput.value = state.workflowName;
   workflowNameInput.disabled = isRecording;
@@ -102,12 +121,13 @@ function render() {
     workflowHint.textContent = `Recording "${state.workflowName}" in progress. Captured ${eventCount} events.`;
   } else if (state.status === RecordingStatus.COMPLETED) {
     workflowHint.textContent = `Capture completed (${eventCount} events). You can edit the name and start again.`;
+  } else if (!hasConsent) {
+    workflowHint.textContent = 'Accept the data capture agreement before recording can start.';
   } else {
     workflowHint.textContent = 'Required before recording can start.';
   }
 }
 
-// A unified status update entry point, which updates memory and persists to storage simultaneously
 function updateState(newState) {
   state = newState;
   if (state.status !== RecordingStatus.COMPLETED) {
@@ -117,15 +137,44 @@ function updateState(newState) {
   render();
 }
 
+async function beginRecording() {
+  eventCount = 0;
+  await chrome.storage?.session?.set({ eventBuffer: [] });
+  updateState(startRecording(state));
+}
+
 workflowNameInput.addEventListener('input', (event) => {
   updateState(setWorkflowName(state, event.target.value));
 });
 
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
-  eventCount = 0; // resert event count
-  await chrome.storage?.session?.set({ eventBuffer: [] }); // Clear the previous buffer before starting a new recording
-  updateState(startRecording(state));
+
+  if (!isConsentCurrent(consentRecord)) {
+    showConsentModal();
+    return;
+  }
+
+  await beginRecording();
+});
+
+consentAcceptButton.addEventListener('click', () => {
+  saveDataCaptureConsent((record) => {
+    consentRecord = record;
+    hideConsentModal();
+    render();
+  });
+});
+
+consentDeclineButton.addEventListener('click', () => {
+  consentDeclineMessage.hidden = false;
+});
+
+consentOverlay.addEventListener('click', (event) => {
+  if (event.target === consentOverlay) {
+    hideConsentModal();
+    render();
+  }
 });
 
 stopButton.addEventListener('click', () => {
