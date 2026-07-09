@@ -120,11 +120,7 @@ def _resolve_step_metadata(
             break
         
         if screenshot_highlight is None:
-            attrs = getattr(event, "attrs", None)
-            if isinstance(attrs, dict):
-                target_rect = attrs.get("target_rect")
-                if isinstance(target_rect, dict):
-                    screenshot_highlight = target_rect
+            screenshot_highlight = _extract_screenshot_highlight(getattr(event, "attrs", None))
     return css_selector, xpath, screenshot_url, screenshot_highlight
 
 
@@ -188,25 +184,30 @@ def _extract_screenshot_highlight(attrs: dict | None) -> dict | None:
     if not isinstance(attrs, dict):
         return None
 
-    target_rect = attrs.get("target_rect")
-    if not isinstance(target_rect, dict):
+    highlight = _extract_screenshot_highlight(attrs)
+    if highlight is not None:
+        return highlight
+
+    try:
+        x = float(target_rect["x"])
+        y = float(target_rect["y"])
+        width = float(target_rect["width"])
+        height = float(target_rect["height"])
+        viewport_width = float(target_rect["viewport_width"])
+        viewport_height = float(target_rect["viewport_height"])
+    except (KeyError, TypeError, ValueError):
         return None
 
-    required_keys = (
-        "x",
-        "y",
-        "width",
-        "height",
-        "viewport_width",
-        "viewport_height",
-    )
-
-    if not all(key in target_rect for key in required_keys):
+    if width <= 0 or height <= 0 or viewport_width <= 0 or viewport_height <= 0:
         return None
 
     return {
-        key: target_rect[key]
-        for key in required_keys
+        "x": max(0, x),
+        "y": max(0, y),
+        "width": width,
+        "height": height,
+        "viewport_width": viewport_width,
+        "viewport_height": viewport_height,
     }
 
 def resolve_step_screenshot_highlight(
