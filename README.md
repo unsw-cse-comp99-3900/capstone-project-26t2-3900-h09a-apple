@@ -205,14 +205,13 @@ Quit `psql` with `\q`.
 | `No module named 'anthropic'` (or similar) when running `pnpm dev` | Activate `apps/api/.venv` before `pnpm dev`.                                                                                                                    |
 | API returns **401** on session submit                              | Attach a Bearer token from `/api/v1/auth/login` (see auth note above).                                                                                          |
 | Port **3000** or **5432** already in use                           | Stop the conflicting process or container before starting dev services.                                                                                         |
-| `commit-policy` CI fails on your PR                                | Remove AI `Co-authored-by` trailers from commits; see [`docs/commit-policy.md`](docs/commit-policy.md).                                                         |
+| `commit-policy` CI fails on your PR                                | Forbid AI `Co-authored-by` trailers from commits; see [`docs/commit-policy.md`](docs/commit-policy.md).                                                         |
 
 ## Commit policy
 
 PRs must not contain AI agent trailers (`Co-authored-by: Cursor`, Copilot, Codex,
 etc.) in commit messages. CI runs the `commit-policy` check; install local hooks
-with `./scripts/install-githooks.sh`. Optional Cursor setup (local only, not in git):
-`./scripts/install-cursor-hooks.sh`. Details: [`docs/commit-policy.md`](docs/commit-policy.md).
+with `./scripts/install-githooks.sh`. Details: [`docs/commit-policy.md`](docs/commit-policy.md).
 
 ## Branches
 
