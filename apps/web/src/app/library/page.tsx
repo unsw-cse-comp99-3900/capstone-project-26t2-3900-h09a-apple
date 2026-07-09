@@ -1,10 +1,10 @@
-import { RoleLanding } from '@/components/role-landing';
-import { WalkthroughConsentGate } from '@/components/consent/walkthrough-consent-gate';
+import LibraryClient from './LibraryClient';
+import styles from './library.module.css';
 
 export default function LibraryPage() {
   return (
-    <RoleLanding title="Library" role="EMPLOYEE">
-      <WalkthroughConsentGate />
-    </RoleLanding>
+    <main className={styles.pageShell}>
+      <LibraryClient />
+    </main>
   );
 }

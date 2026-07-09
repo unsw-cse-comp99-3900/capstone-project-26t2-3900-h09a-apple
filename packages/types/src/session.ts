@@ -202,6 +202,52 @@ export interface SopDetailPayload {
   warnings: SopWarning[];
 }
 
+/**
+ * Response returned by POST /api/v1/sops/{id}/approve.
+ *
+ * Mirrors `SopApproveResponse` in `apps/api/app/sop_schema.py`.
+ */
+export interface SopApproveResponse {
+  id: string;
+  status: string;
+}
+
+/**
+ * Response returned by POST /api/v1/sops/{id}/publish.
+ *
+ * Mirrors `SopPublishResponse` in `apps/api/app/sop_schema.py`.
+ */
+export interface SopPublishResponse {
+  id: string;
+  status: string;
+  /** ISO-8601. */
+  published_at: string;
+  library_url: string;
+}
+
+/**
+ * Item returned in the SOP Library listing.
+ *
+ * Mirrors `SopLibraryItem` in `apps/api/app/sop_schema.py`.
+ */
+export interface SopLibraryItem {
+  id: string;
+  title: string;
+  workflow_category?: string | null;
+  step_count: number;
+  /** ISO-8601. */
+  published_at?: string | null;
+}
+
+/**
+ * Response returned by GET /api/v1/sops.
+ *
+ * Mirrors `SopListResponse` in `apps/api/app/sop_schema.py`.
+ */
+export interface SopListResponse {
+  sops: SopLibraryItem[];
+}
+
 /** Mirrors `WalkthroughStep` in `apps/api/app/sop_schema.py`. */
 export interface WalkthroughStep {
   step_number: number;
