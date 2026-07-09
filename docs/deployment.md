@@ -1,5 +1,11 @@
 # Deployment
 
+## Architecture
+
+![AWS deployment architecture](./architecture/aws-deployment.png)
+
+Source diagram: [`docs/architecture/aws-deployment.drawio`](./architecture/aws-deployment.png)
+
 ## Frontend — Vercel preview deploys
 
 The Next.js frontend (`apps/web`) is deployed to Vercel. Every PR gets its own
@@ -22,10 +28,9 @@ Whoever has admin access to the GitHub repo does this once:
    - **Output Directory**: leave default (`.next`)
 4. Under **Environment Variables**, add at least:
    - `NEXT_PUBLIC_API_BASE_URL` — for now, a placeholder like
-     `http://localhost:8000` is fine; replace with the real backend URL once
-     the backend is deployed.
    - `NEXT_PUBLIC_APP_NAME` — `H09A Apple`
-5. Click **Deploy**. The first deploy takes ~2 min.
+5. Add the production domain:
+   - `worktrace.unblox.ai`
 
 After this, no further action is needed: every PR push automatically triggers a
 preview build and Vercel posts the URL on the PR.
@@ -41,11 +46,46 @@ homepage should load.
 Update `NEXT_PUBLIC_API_BASE_URL` in Vercel project settings to point at the
 real backend URL. Vercel rebuilds previews automatically on the next push.
 
-## Backend — not deployed yet
+## Backend - AWS ECS Fargate
 
-The FastAPI backend (`apps/api`) is **not deployed** in this card. Local dev
-and CI tests are sufficient for Sprint 1. A backend deploy target (Render /
-Railway / Fly.io / etc.) will be picked in a later card.
+The FastAPI backend (`apps/api`) is deployed as a Docker container on AWS ECS
+Fargate. The original target was AWS App Runner, but App Runner is unavailable
+for this AWS account because AWS no longer accepts new App Runner customers.
+ECS Fargate is the replacement backend container service.
 
-Until then, frontend preview deploys can render but cannot make real API
-calls. That's fine — Sprint 1 UI review is purely visual.
+Production backend URL: TBD  
+Health check: `GET /api/v1/health`
+
+### AWS services
+
+- Application Load Balancer: public backend entrypoint
+- ECS Fargate Service: FastAPI backend
+- ECR: backend Docker image
+- AWS RDS PostgreSQL: application database
+- pgvector: enabled with `CREATE EXTENSION IF NOT EXISTS vector`
+- AWS S3: screenshot object storage
+- AWS Secrets Manager: database credentials and API secrets
+- AWS CloudWatch: ECS task logs and health alarms
+
+### ECS environment variables
+
+Do not commit real secret values to the repository.
+
+- `DATABASE_URL`
+- `SECRET_KEY`
+- `API_CORS_ORIGINS`
+- `OPENAI_API_KEY`
+- `OPENAI_MODEL`
+- `S3_BUCKET_NAME`
+- `S3_REGION_NAME`
+- `S3_ACCESS_KEY_ID`
+- `S3_SECRET_ACCESS_KEY`
+- `S3_ENDPOINT_URL` only needed for local MinIO or non-AWS S3-compatible storage
+
+### Database migrations
+
+Run migrations during deployment before starting the FastAPI server:
+
+```bash
+alembic upgrade head
+```
