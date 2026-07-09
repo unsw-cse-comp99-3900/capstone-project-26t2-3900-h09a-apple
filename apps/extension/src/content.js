@@ -257,7 +257,7 @@ document.addEventListener(
         url: window.location.href,
         title: document.title,
         timestamp: Date.now(),
-        target_rect: getTargetRect(target),
+        target_rect: getTargetRect(interactiveTarget),
       };
       sendEvent('CLICK', payload);
     }
