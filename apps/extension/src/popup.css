@@ -334,7 +334,7 @@ footer svg {
   }
 }
 
-.consent-overlay {
+.consent-overlay:not([hidden]) {
   position: fixed;
   inset: 0;
   z-index: 20;
