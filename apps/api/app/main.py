@@ -32,8 +32,13 @@ from app.sop_schema import (
     SopPublishResponse,
     SopStepResponse,
     SopWarning,
+    WalkthroughPayload,
 )
-from app.sop_service import resolve_step_screenshot_url
+from app.sop_service import (
+    WalkthroughDataError,
+    build_walkthrough_payload,
+    resolve_step_screenshot_url,
+)
 from app.storage import ObjectStorage, get_storage
 
 load_dotenv()
@@ -260,6 +265,8 @@ def get_sop(
             screenshot_url=resolve_step_screenshot_url(
                 step["source_event_ids"],
                 db,
+                sop.session_id,
+                current_user.tenant_id,
             ),
         )
         for step in sop.steps
@@ -276,6 +283,33 @@ def get_sop(
         steps=steps,
         warnings=warnings,
     )
+
+
+@app.get(
+    "/api/v1/sops/{sop_id}/walkthrough",
+    response_model=WalkthroughPayload,
+)
+def get_sop_walkthrough(
+    sop_id: UUID,
+    db: DBSession = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.employee)),
+):
+    sop = (
+        filter_by_tenant(db.query(models.Sop), models.Sop, current_user.tenant_id)
+        .filter(models.Sop.id == sop_id)
+        .first()
+    )
+
+    if sop is None or sop.status != models.SopStatus.published.value or not sop.steps:
+        raise HTTPException(status_code=404, detail="SOP not found")
+
+    try:
+        return build_walkthrough_payload(sop, db)
+    except WalkthroughDataError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
 
 
 @app.post("/api/v1/sops/{sop_id}/approve", response_model=SopApproveResponse)

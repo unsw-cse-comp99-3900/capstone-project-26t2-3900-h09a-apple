@@ -63,3 +63,15 @@ class SopListResponse(BaseModel):
 class SopApproveResponse(BaseModel):
     id: str
     status: str
+
+
+class WalkthroughStep(BaseModel):
+    step_number: int = Field(..., ge=1)
+    instruction: str = Field(..., min_length=1)
+    css_selector: str | None = None
+    xpath: str | None = None
+    screenshot_url: str | None = None
+
+
+class WalkthroughPayload(BaseModel):
+    steps: list[WalkthroughStep] = Field(..., min_length=1)
