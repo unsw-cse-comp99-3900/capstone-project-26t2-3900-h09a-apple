@@ -59,9 +59,7 @@ export default function LibraryClient() {
       return sops;
     }
 
-    return sops.filter((sop) =>
-      sop.title.toLowerCase().includes(keyword),
-    );
+    return sops.filter((sop) => sop.title.toLowerCase().includes(keyword));
   }, [search, sops]);
 
   if (loading) {
@@ -89,8 +87,7 @@ export default function LibraryClient() {
           <h1 className={styles.title}>SOP Library</h1>
 
           <p className={styles.subtitle}>
-            Every procedure your team has recorded, ready to open and follow
-            step by step.
+            Every procedure your team has recorded, ready to open and follow step by step.
           </p>
         </div>
 
@@ -100,11 +97,7 @@ export default function LibraryClient() {
             <p className={styles.userRole}>{user?.role}</p>
           </div>
 
-          <button
-            type="button"
-            className={styles.logoutButton}
-            onClick={() => void logout()}
-          >
+          <button type="button" className={styles.logoutButton} onClick={() => void logout()}>
             Log out
           </button>
         </div>
