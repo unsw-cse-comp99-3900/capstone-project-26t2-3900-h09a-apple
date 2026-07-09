@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ApiError, apiUrl, getSop } from './api';
+import {
+  ApiError,
+  apiUrl,
+  getPublishedSops,
+  getSop,
+} from './api';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -33,6 +38,35 @@ describe('getSop', () => {
     expect(globalThis.fetch).toHaveBeenCalledWith(
       '/api/backend/sops/00000000-0000-0000-0000-000000000000',
       expect.objectContaining({ cache: 'no-store' }),
+    );
+  });
+});
+
+describe('getPublishedSops', () => {
+  it('requests only published SOPs', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          sops: [],
+        }),
+        {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        },
+      ),
+    );
+
+    await expect(getPublishedSops()).resolves.toEqual({
+      sops: [],
+    });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/api/backend/sops?status=published',
+      expect.objectContaining({
+        cache: 'no-store',
+      }),
     );
   });
 });

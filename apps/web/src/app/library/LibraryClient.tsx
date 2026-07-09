@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import type { SopLibraryItem } from '@h09a/types';
 
 import { getPublishedSops } from '@/lib/api';
@@ -15,10 +15,9 @@ import { useCurrentUser } from '@/contexts/auth-context';
 export default function LibraryClient() {
   const router = useRouter();
   const pathname = usePathname();
-  const searchParams = useSearchParams();
   const { user, logout } = useCurrentUser();
 
-  const [search, setSearch] = useState(() => searchParams.get('search') ?? '');
+  const [search, setSearch] = useState('');
 
   const [sops, setSops] = useState<SopLibraryItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -40,23 +39,10 @@ export default function LibraryClient() {
   }, []);
 
   useEffect(() => {
-    setSearch(searchParams.get('search') ?? '');
-  }, [searchParams]);
-
-  useEffect(() => {
-    const current = (searchParams.get('search') ?? '').trim();
-    const next = search.trim();
-
-    if (current === next) {
-      return;
-    }
-
-    const params = new URLSearchParams(searchParams);
+    const params = new URLSearchParams();
 
     if (search.trim()) {
       params.set('search', search);
-    } else {
-      params.delete('search');
     }
 
     const query = params.toString();
@@ -64,7 +50,7 @@ export default function LibraryClient() {
     router.replace(query ? `${pathname}?${query}` : pathname, {
       scroll: false,
     });
-  }, [search, searchParams, pathname, router]);
+  }, [search, pathname, router]);
 
   const filtered = useMemo(() => {
     const keyword = search.trim().toLowerCase();
@@ -136,8 +122,13 @@ export default function LibraryClient() {
         </p>
       </div>
 
-      {filtered.length === 0 ? (
+      {sops.length === 0 ? (
         <EmptyState />
+      ) : filtered.length === 0 ? (
+        <EmptyState
+          title="No procedures match your search."
+          description="Try a different keyword or clear the search to see all published procedures."
+        />
       ) : (
         <div className={styles.grid}>
           {filtered.map((sop) => (
