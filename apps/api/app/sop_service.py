@@ -4,6 +4,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session as DBSession
 
+from math import ceil
 from app import models
 from app.sop_schema import WalkthroughPayload, WalkthroughStep
 from app.storage import get_storage
@@ -175,6 +176,8 @@ def build_walkthrough_payload(sop: models.Sop, db: DBSession) -> WalkthroughPayl
                 css_selector=css_selector,
                 xpath=xpath,
                 screenshot_url=screenshot_url,
+                time_estimate=step.get("time_estimate"),
+                screenshot_highlight=screenshot_highlight,
             )
         )
 
@@ -238,3 +241,23 @@ def resolve_step_screenshot_highlight(
             return highlight
 
     return None
+
+def resolve_step_time_estimate(
+    source_event_ids: list[str],
+    db: DBSession,
+    session_id: UUID,
+    tenant_id: UUID,
+) -> int | None:
+    events = _load_ordered_events(source_event_ids, session_id, tenant_id, db)
+
+    timestamps = [
+        int(event.timestamp_ms)
+        for event in events
+        if getattr(event, "timestamp_ms", None) is not None
+    ]
+
+    if not timestamps:
+        return None
+
+    duration_seconds = ceil((max(timestamps) - min(timestamps)) / 1000)
+    return max(1, duration_seconds)
