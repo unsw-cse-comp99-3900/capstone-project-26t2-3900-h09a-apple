@@ -7,16 +7,9 @@ import {
   roleFromAccessToken,
   roleLandingPath,
 } from '@/lib/auth/constants';
+import { isProtectedPath } from '@/lib/auth/protected-paths';
 
 const PUBLIC_PATHS = new Set(['/login', '/register']);
-
-const PROTECTED_PREFIXES = ['/library', '/review', '/dashboard', '/session', '/sop'];
-
-function isProtectedPath(pathname: string): boolean {
-  return PROTECTED_PREFIXES.some(
-    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
-  );
-}
 
 function isAuthenticated(request: NextRequest): boolean {
   return Boolean(

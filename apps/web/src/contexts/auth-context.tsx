@@ -12,6 +12,7 @@ import {
 } from 'react';
 
 import { roleLandingPath } from '@/lib/auth/constants';
+import { isProtectedPath } from '@/lib/auth/protected-paths';
 
 type AuthContextValue = {
   user: AuthUser | null;
@@ -50,6 +51,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(nextUser);
     return nextUser;
   }, []);
+
+  useEffect(() => {
+    if (loading || user) {
+      return;
+    }
+
+    const pathname = window.location.pathname;
+    if (isProtectedPath(pathname)) {
+      window.location.replace('/login');
+    }
+  }, [loading, user]);
 
   useEffect(() => {
     let cancelled = false;

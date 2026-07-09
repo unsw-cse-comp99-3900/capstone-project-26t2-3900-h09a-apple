@@ -22,21 +22,25 @@ export function RoleLanding({ title, role, children }: RoleLandingProps) {
     );
   }
 
+  if (!user) {
+    return (
+      <main>
+        <p>Redirecting to sign in...</p>
+      </main>
+    );
+  }
+
   return (
     <main>
       <h1>{title}</h1>
       <p>Placeholder landing page for {role} users.</p>
-      {user ? (
-        <>
-          <p>
-            Signed in as {user.email} ({user.role})
-          </p>
-          <button type="button" onClick={() => void logout()}>
-            Log out
-          </button>
-          {children}
-        </>
-      ) : null}
+      <p>
+        Signed in as {user.email} ({user.role})
+      </p>
+      <button type="button" onClick={() => void logout()}>
+        Log out
+      </button>
+      {children}
     </main>
   );
 }
