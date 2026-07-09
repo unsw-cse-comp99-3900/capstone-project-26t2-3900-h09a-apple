@@ -90,6 +90,38 @@
       </footer>
     </main>
 
+    <div id="consentOverlay" class="consent-overlay" hidden>
+      <div class="consent-modal" role="dialog" aria-modal="true" aria-labelledby="consentTitle">
+        <p class="consent-eyebrow">Terms version 2026-07-01</p>
+        <h2 id="consentTitle">Data capture and privacy agreement</h2>
+        <p id="consentIntro">
+          Before WorkTrace records your screen or browser actions, review what we capture and how it
+          is handled.
+        </p>
+        <ul class="consent-list">
+          <li>
+            We capture clicks, navigation, form interactions, and screenshots during a session.
+          </li>
+          <li>
+            Passwords are never recorded. Other values are masked before storage when possible.
+          </li>
+          <li>Captured data stays within your tenant workspace to generate editable SOP drafts.</li>
+        </ul>
+        <p id="consentDeclineMessage" class="consent-decline" hidden>
+          Recording stays disabled without consent. You can review this agreement again before
+          starting a session.
+        </p>
+        <div class="consent-actions">
+          <button id="consentDeclineButton" class="button button-secondary" type="button">
+            Decline
+          </button>
+          <button id="consentAcceptButton" class="button button-primary" type="button">
+            I agree and allow capture
+          </button>
+        </div>
+      </div>
+    </div>
+
     <script type="module" src="popup.js"></script>
   </body>
 </html>

@@ -29,5 +29,10 @@ describe('getSop', () => {
       status: 404,
       message: 'Failed to load SOP: SOP not found',
     } satisfies Partial<ApiError>);
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/api/backend/sops/00000000-0000-0000-0000-000000000000',
+      expect.objectContaining({ cache: 'no-store' }),
+    );
   });
 });
