@@ -254,6 +254,7 @@ export function SopViewer({ sop }: SopViewerProps) {
                 branch={branchForStep(step)}
                 screenshotUrl={step.screenshot_url}
                 timeEstimate={step.time_estimate}
+                screenshotHighlight={step.screenshot_highlight}
               />
             </li>
           ))}

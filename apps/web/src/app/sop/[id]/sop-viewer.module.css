@@ -337,6 +337,7 @@
 
 .screenshotHighlight {
   position: absolute;
+  z-index: 1;
   border: 3px solid #756eff;
   border-radius: 10px;
   box-shadow:

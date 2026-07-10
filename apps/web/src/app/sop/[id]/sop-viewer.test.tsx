@@ -127,6 +127,15 @@ describe('SopViewer', () => {
       steps: [
         step(3, 'Submit request', 'event-3', {
           time_estimate: 5,
+          screenshot_url: 'https://example.com/submit.png',
+          screenshot_highlight: {
+            x: 320,
+            y: 180,
+            width: 160,
+            height: 90,
+            viewport_width: 1280,
+            viewport_height: 720,
+          },
         }),
         step(1, 'Check invoice', 'event-1'),
         step(2, 'Choose approval path', 'event-2', {
@@ -152,5 +161,8 @@ describe('SopViewer', () => {
     expect(markup).toContain('Invoice details were opened twice.');
     expect(markup).toContain('If the amount is over $500');
     expect(markup).toContain('Estimated time: 5s');
+    expect(markup).toContain('left:25%');
+    expect(markup).toContain('top:25%');
+    expect(markup).toContain('width:12.5%');
   });
 });
