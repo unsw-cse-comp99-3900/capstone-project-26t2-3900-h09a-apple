@@ -101,16 +101,16 @@ test('assembleSession carries screenshot ids and screenshot payloads', () => {
           url: 'https://example.com/login',
           screenshot_id: screenshot.id,
           timestamp: 1001,
+          target_rect: {
+            x: 10,
+            y: 20,
+            width: 100,
+            height: 40,
+            viewport_width: 1280,
+            viewport_height: 720,
+          },
         },
-        target_rect: {
-          x: 10,
-          y: 20,
-          width: 100,
-          height: 40,
-          viewport_width: 1280,
-          viewport_height: 720,
-        },
-      },
+      }
     ],
     {
       workflowName: 'Login flow',
