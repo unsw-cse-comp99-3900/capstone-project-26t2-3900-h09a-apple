@@ -167,19 +167,24 @@ def build_walkthrough_payload(sop: models.Sop, db: DBSession) -> WalkthroughPayl
             db,
         )
 
+        computed_time_estimate = resolve_step_time_estimate(
+            source_event_ids,
+            db,
+            sop.session_id,
+            sop.tenant_id,
+        )
+
         raw_time_estimate = step.get("time_estimate")
         try:
-            time_estimate = int(raw_time_estimate) if raw_time_estimate is not None else None
+            llm_time_estimate = int(raw_time_estimate) if raw_time_estimate is not None else None
         except (TypeError, ValueError):
-            time_estimate = None
+            llm_time_estimate = None
 
-        if time_estimate is None or time_estimate > MAX_STEP_ESTIMATE_SECONDS:
-            time_estimate = resolve_step_time_estimate(
-                source_event_ids,
-                db,
-                sop.session_id,
-                sop.tenant_id,
-            )
+        time_estimate = (
+            computed_time_estimate
+            if computed_time_estimate is not None
+            else llm_time_estimate
+        )
 
         if not css_selector and not xpath:
             raise WalkthroughDataError(

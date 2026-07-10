@@ -35,7 +35,6 @@ from app.sop_schema import (
     WalkthroughPayload,
 )
 from app.sop_service import (
-    MAX_STEP_ESTIMATE_SECONDS,
     WalkthroughDataError,
     build_walkthrough_payload,
     resolve_step_screenshot_highlight,
@@ -267,20 +266,22 @@ def get_sop(
 
     for step in sop.steps:
         source_event_ids = step.get("source_event_ids", [])
+        time_estimate = resolve_step_time_estimate(
+            source_event_ids,
+            db,
+            sop.session_id,
+            current_user.tenant_id,
+        )
+
         raw_time_estimate = step.get("time_estimate")
 
-        try:
-            time_estimate = int(raw_time_estimate) if raw_time_estimate is not None else None
-        except (TypeError, ValueError):
-            time_estimate = None
-
-        if time_estimate is None or time_estimate > MAX_STEP_ESTIMATE_SECONDS:
-            time_estimate = resolve_step_time_estimate(
-                source_event_ids,
-                db,
-                sop.session_id,
-                current_user.tenant_id,
-            )
+        if time_estimate is None:
+            try:
+                time_estimate = (
+                    int(raw_time_estimate) if raw_time_estimate is not None else None
+                )
+            except (TypeError, ValueError):
+                time_estimate = None
 
         steps.append(
             SopStepResponse(
