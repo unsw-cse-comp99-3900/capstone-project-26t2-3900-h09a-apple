@@ -110,7 +110,7 @@ test('assembleSession carries screenshot ids and screenshot payloads', () => {
             viewport_height: 720,
           },
         },
-      }
+      },
     ],
     {
       workflowName: 'Login flow',

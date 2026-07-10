@@ -101,7 +101,7 @@ function setupPopupDom(recordingState = { status: 'ready', workflowName: '' }) {
         type: 'SESSION_PAYLOAD_READY',
         sessionId,
       });
-    }
+    },
   };
 }
 
