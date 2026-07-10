@@ -20,5 +20,5 @@ export async function broadcastExtensionHandoff(): Promise<void> {
     return;
   }
 
-  postExtensionHandoff(payload.code);
+  await postExtensionHandoff(payload.code);
 }

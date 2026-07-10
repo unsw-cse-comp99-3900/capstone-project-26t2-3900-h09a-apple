@@ -14,32 +14,6 @@ window.addEventListener('message', (event) => {
     return;
   }
 
-  if (event.data.type === 'EXTENSION_PING') {
-    window.postMessage(
-      {
-        source: WORKTRACE_EXTENSION_MESSAGE_SOURCE,
-        type: 'EXTENSION_PING_RESULT',
-        requestId: event.data.requestId,
-        present: true,
-      },
-      window.location.origin,
-    );
-    return;
-  }
-
-  if (event.data.type === 'EXTENSION_HANDOFF') {
-    chrome.runtime.sendMessage({
-      type: 'EXTENSION_HANDOFF',
-      code: event.data.code,
-    });
-    return;
-  }
-
-  if (event.data.type === 'EXTENSION_LOGOUT') {
-    chrome.runtime.sendMessage({ type: 'EXTENSION_LOGOUT' });
-    return;
-  }
-
   if (event.data.type !== 'GET_SESSION_PAYLOAD') {
     return;
   }

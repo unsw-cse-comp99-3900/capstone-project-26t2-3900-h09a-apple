@@ -1,84 +1,98 @@
-export const WORKTRACE_WEB_MESSAGE_SOURCE = 'worktrace-web';
-export const WORKTRACE_EXTENSION_MESSAGE_SOURCE = 'worktrace-extension';
+import { getExtensionId } from '@/lib/extension-config';
 
 export const EXTENSION_MESSAGE_TYPES = {
   ping: 'EXTENSION_PING',
-  pingResult: 'EXTENSION_PING_RESULT',
   handoff: 'EXTENSION_HANDOFF',
   logout: 'EXTENSION_LOGOUT',
 } as const;
 
 const DEFAULT_PING_TIMEOUT_MS = 1500;
 
-export function pingExtension(timeoutMs = DEFAULT_PING_TIMEOUT_MS): Promise<boolean> {
+type ExtensionRuntimeResponse = {
+  ok?: boolean;
+  present?: boolean;
+  requestId?: string;
+  error?: string;
+};
+
+type ChromeRuntime = {
+  sendMessage: (
+    extensionId: string,
+    message: unknown,
+    responseCallback?: (response: ExtensionRuntimeResponse) => void,
+  ) => void;
+  lastError?: { message?: string };
+};
+
+function getChromeRuntime(): ChromeRuntime | null {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  const runtime = (window as Window & { chrome?: { runtime?: ChromeRuntime } }).chrome?.runtime;
+  if (!runtime || typeof runtime.sendMessage !== 'function') {
+    return null;
+  }
+
+  return runtime;
+}
+
+function sendExtensionMessage(message: unknown): Promise<ExtensionRuntimeResponse | null> {
   return new Promise((resolve) => {
-    if (typeof window === 'undefined') {
-      resolve(false);
+    const runtime = getChromeRuntime();
+    const extensionId = getExtensionId();
+
+    if (!runtime || !extensionId) {
+      resolve(null);
       return;
     }
 
-    const requestId = crypto.randomUUID();
-    const timeout = window.setTimeout(() => {
-      window.removeEventListener('message', handleMessage);
-      resolve(false);
-    }, timeoutMs);
+    try {
+      runtime.sendMessage(extensionId, message, (response) => {
+        if (runtime.lastError) {
+          resolve(null);
+          return;
+        }
 
-    function handleMessage(event: MessageEvent) {
-      if (event.source !== window || event.data?.source !== WORKTRACE_EXTENSION_MESSAGE_SOURCE) {
-        return;
-      }
-
-      if (
-        event.data.type !== EXTENSION_MESSAGE_TYPES.pingResult ||
-        event.data.requestId !== requestId
-      ) {
-        return;
-      }
-
-      window.clearTimeout(timeout);
-      window.removeEventListener('message', handleMessage);
-      resolve(Boolean(event.data.present));
+        resolve(response ?? null);
+      });
+    } catch {
+      resolve(null);
     }
-
-    window.addEventListener('message', handleMessage);
-    window.postMessage(
-      {
-        source: WORKTRACE_WEB_MESSAGE_SOURCE,
-        type: EXTENSION_MESSAGE_TYPES.ping,
-        requestId,
-      },
-      window.location.origin,
-    );
   });
 }
 
-export function postExtensionHandoff(code: string): void {
-  if (typeof window === 'undefined') {
-    return;
+export function pingExtension(timeoutMs = DEFAULT_PING_TIMEOUT_MS): Promise<boolean> {
+  if (typeof window === 'undefined' || !getExtensionId()) {
+    return Promise.resolve(false);
   }
 
-  window.postMessage(
-    {
-      source: WORKTRACE_WEB_MESSAGE_SOURCE,
-      type: EXTENSION_MESSAGE_TYPES.handoff,
-      requestId: crypto.randomUUID(),
-      code,
-    },
-    window.location.origin,
-  );
+  const requestId = crypto.randomUUID();
+
+  return Promise.race([
+    new Promise<boolean>((resolve) => {
+      window.setTimeout(() => resolve(false), timeoutMs);
+    }),
+    sendExtensionMessage({
+      type: EXTENSION_MESSAGE_TYPES.ping,
+      requestId,
+    }).then((response) =>
+      Boolean(response?.ok && response.present && response.requestId === requestId),
+    ),
+  ]);
 }
 
-export function postExtensionLogout(): void {
-  if (typeof window === 'undefined') {
-    return;
-  }
+export async function postExtensionHandoff(code: string): Promise<void> {
+  await sendExtensionMessage({
+    type: EXTENSION_MESSAGE_TYPES.handoff,
+    requestId: crypto.randomUUID(),
+    code,
+  });
+}
 
-  window.postMessage(
-    {
-      source: WORKTRACE_WEB_MESSAGE_SOURCE,
-      type: EXTENSION_MESSAGE_TYPES.logout,
-      requestId: crypto.randomUUID(),
-    },
-    window.location.origin,
-  );
+export async function postExtensionLogout(): Promise<void> {
+  await sendExtensionMessage({
+    type: EXTENSION_MESSAGE_TYPES.logout,
+    requestId: crypto.randomUUID(),
+  });
 }

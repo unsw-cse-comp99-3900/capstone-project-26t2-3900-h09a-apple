@@ -1,5 +1,11 @@
 import { assembleSession } from './session-assembly.js';
 import { clearStoredAuthTokens, redeemHandoffCode } from './auth.js';
+import { handleExternalAuthMessage } from './external-auth.js';
+
+const externalAuthHandlers = {
+  redeemHandoffCode,
+  clearStoredAuthTokens,
+};
 
 let writeQueue = Promise.resolve();
 let lastScreenshotAt = 0;
@@ -164,6 +170,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   return false;
 });
+
+chrome.runtime.onMessageExternal.addListener((message, sender, sendResponse) =>
+  handleExternalAuthMessage(message, sender, sendResponse, externalAuthHandlers),
+);
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && changes.recordingState) {

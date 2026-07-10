@@ -3,9 +3,9 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { JSDOM } from 'jsdom';
 
-test('content script responds to extension ping and forwards handoff codes', async () => {
+test('content script forwards GET_SESSION_PAYLOAD requests to the background worker', async () => {
   const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
-    url: 'http://localhost:3000/library',
+    url: 'http://localhost:3000/session/review',
     runScripts: 'dangerously',
   });
 
@@ -15,7 +15,13 @@ test('content script responds to extension ping and forwards handoff codes', asy
 
   window.chrome = {
     runtime: {
-      sendMessage: (message) => sentMessages.push(message),
+      sendMessage: (message, callback) => {
+        sentMessages.push(message);
+        callback?.({
+          ok: true,
+          session: { client_session_id: 'session-1' },
+        });
+      },
     },
     storage: {
       local: {
@@ -44,37 +50,25 @@ test('content script responds to extension ping and forwards handoff codes', asy
     new window.MessageEvent('message', {
       data: {
         source: 'worktrace-web',
-        type: 'EXTENSION_PING',
-        requestId: 'ping-1',
+        type: 'GET_SESSION_PAYLOAD',
+        requestId: 'session-request-1',
+        sessionId: 'session-1',
       },
       source: window,
     }),
   );
 
+  await new Promise((resolve) => setTimeout(resolve, 10));
+
+  const payloadMessages = sentMessages.filter((message) => message.type === 'GET_SESSION_PAYLOAD');
+  assert.equal(payloadMessages.length, 1);
+  assert.equal(payloadMessages[0].sessionId, 'session-1');
   assert.equal(postedMessages.length, 1);
-  assert.equal(postedMessages[0].data.source, 'worktrace-extension');
-  assert.equal(postedMessages[0].data.type, 'EXTENSION_PING_RESULT');
-  assert.equal(postedMessages[0].data.requestId, 'ping-1');
-  assert.equal(postedMessages[0].data.present, true);
-
-  window.dispatchEvent(
-    new window.MessageEvent('message', {
-      data: {
-        source: 'worktrace-web',
-        type: 'EXTENSION_HANDOFF',
-        code: 'handoff-code',
-      },
-      source: window,
-    }),
-  );
-
-  const handoffMessages = sentMessages.filter((message) => message.type === 'EXTENSION_HANDOFF');
-  assert.equal(handoffMessages.length, 1);
-  assert.equal(handoffMessages[0].type, 'EXTENSION_HANDOFF');
-  assert.equal(handoffMessages[0].code, 'handoff-code');
+  assert.equal(postedMessages[0].data.type, 'GET_SESSION_PAYLOAD_RESULT');
+  assert.equal(postedMessages[0].data.requestId, 'session-request-1');
 });
 
-test('content script forwards logout messages to the background worker', async () => {
+test('content script ignores auth handoff postMessage events', async () => {
   const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
     url: 'http://localhost:3000/library',
     runScripts: 'dangerously',
@@ -108,12 +102,12 @@ test('content script forwards logout messages to the background worker', async (
     new window.MessageEvent('message', {
       data: {
         source: 'worktrace-web',
-        type: 'EXTENSION_LOGOUT',
+        type: 'EXTENSION_HANDOFF',
+        code: 'handoff-code',
       },
       source: window,
     }),
   );
 
-  const logoutMessages = sentMessages.filter((message) => message.type === 'EXTENSION_LOGOUT');
-  assert.equal(logoutMessages.length, 1);
+  assert.equal(sentMessages.length, 0);
 });
