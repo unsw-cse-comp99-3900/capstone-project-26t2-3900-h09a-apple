@@ -14,7 +14,6 @@ DEFAULT_STEP_ESTIMATE_SECONDS = 5
 MAX_EVENT_GAP_SECONDS = 30
 
 
-
 class WalkthroughDataError(Exception):
     """Published SOP data cannot be converted into a walkthrough payload."""
 
@@ -181,9 +180,7 @@ def build_walkthrough_payload(sop: models.Sop, db: DBSession) -> WalkthroughPayl
             llm_time_estimate = None
 
         time_estimate = (
-            computed_time_estimate
-            if computed_time_estimate is not None
-            else llm_time_estimate
+            computed_time_estimate if computed_time_estimate is not None else llm_time_estimate
         )
 
         if not css_selector and not xpath:

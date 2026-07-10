@@ -277,9 +277,7 @@ def get_sop(
 
         if time_estimate is None:
             try:
-                time_estimate = (
-                    int(raw_time_estimate) if raw_time_estimate is not None else None
-                )
+                time_estimate = int(raw_time_estimate) if raw_time_estimate is not None else None
             except (TypeError, ValueError):
                 time_estimate = None
 
