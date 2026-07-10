@@ -35,11 +35,11 @@ from app.sop_schema import (
     WalkthroughPayload,
 )
 from app.sop_service import (
+    MAX_STEP_ESTIMATE_SECONDS,
     WalkthroughDataError,
     build_walkthrough_payload,
-    MAX_STEP_ESTIMATE_SECONDS,
-    resolve_step_screenshot_url,
     resolve_step_screenshot_highlight,
+    resolve_step_screenshot_url,
     resolve_step_time_estimate,
 )
 from app.storage import ObjectStorage, get_storage

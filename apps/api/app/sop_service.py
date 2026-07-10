@@ -1,10 +1,10 @@
 from __future__ import annotations
 
+from math import ceil
 from uuid import UUID
 
 from sqlalchemy.orm import Session as DBSession
 
-from math import ceil
 from app import models
 from app.sop_schema import WalkthroughPayload, WalkthroughStep
 from app.storage import get_storage
@@ -281,7 +281,7 @@ def resolve_step_time_estimate(
     active_ms = 0
     max_gap_ms = MAX_EVENT_GAP_SECONDS * 1000
 
-    for previous, current in zip(timestamps, timestamps[1:]):
+    for previous, current in zip(timestamps, timestamps[1:], strict=False):
         gap_ms = current - previous
         if 0 <= gap_ms <= max_gap_ms:
             active_ms += gap_ms

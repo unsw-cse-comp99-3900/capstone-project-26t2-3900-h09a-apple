@@ -1,8 +1,9 @@
 from types import SimpleNamespace
 
 from app.mock_sop_generator import MockSopGenerator
-from app.sop_schema import SopPayload
 from app.models import EventType
+from app.sop_schema import SopPayload
+
 
 def test_mock_sop_generator_returns_payload_for_session():
     session = SimpleNamespace(

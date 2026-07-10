@@ -57,9 +57,7 @@ export async function saveSessionPayload(sessionPayload) {
     throw new Error('Cannot save session payload without a client_session_id');
   }
 
-  await withSessionStore('readwrite', (store) =>
-    requestToPromise(store.put(sessionPayload)),
-  );
+  await withSessionStore('readwrite', (store) => requestToPromise(store.put(sessionPayload)));
 }
 
 export async function getSessionPayload(sessionId) {
