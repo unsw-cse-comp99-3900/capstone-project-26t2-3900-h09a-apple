@@ -96,6 +96,7 @@ def test_llm_sop_generator_returns_llm_payload(monkeypatch):
     assert event_payload["page_title"] == "Login"
     assert event_payload["timestamp_ms"] == 1000
 
+
 class FailingProvider:
     name = "openai"
     model = "gpt-4o"

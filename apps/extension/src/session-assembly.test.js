@@ -122,7 +122,7 @@ test('assembleSession carries screenshot ids and screenshot payloads', () => {
 
   assert.equal(payload.events[0].screenshot_id, screenshot.id);
   assert.deepEqual(payload.screenshots, [screenshot]);
-  assert.deepEqual(session.events[clickEventIndex].attrs.target_rect, {
+  assert.deepEqual(payload.events[0].attrs.target_rect, {
     x: 10,
     y: 20,
     width: 100,

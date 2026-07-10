@@ -12,6 +12,7 @@ class SopStep(BaseModel):
     source_event_ids: list[str] = Field(default_factory=list)
     time_estimate: int | None = Field(default=None, ge=0)
 
+
 class ScreenshotHighlight(BaseModel):
     x: float = Field(..., ge=0)
     y: float = Field(..., ge=0)
@@ -20,9 +21,11 @@ class ScreenshotHighlight(BaseModel):
     viewport_width: float = Field(..., gt=0)
     viewport_height: float = Field(..., gt=0)
 
+
 class SopStepResponse(SopStep):
     screenshot_url: str | None = None
     screenshot_highlight: ScreenshotHighlight | None = None
+
 
 class SopWarning(BaseModel):
     type: Literal["repeated_action", "invalid_sequence", "missing_context"]
@@ -81,6 +84,7 @@ class WalkthroughStep(BaseModel):
     screenshot_url: str | None = None
     time_estimate: int | None = Field(default=None, ge=0)
     screenshot_highlight: ScreenshotHighlight | None = None
+
 
 class WalkthroughPayload(BaseModel):
     steps: list[WalkthroughStep] = Field(..., min_length=1)

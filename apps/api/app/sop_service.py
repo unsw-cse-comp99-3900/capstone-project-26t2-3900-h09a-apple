@@ -14,6 +14,7 @@ DEFAULT_STEP_ESTIMATE_SECONDS = 5
 MAX_EVENT_GAP_SECONDS = 30
 MAX_STEP_ESTIMATE_SECONDS = 60
 
+
 class WalkthroughDataError(Exception):
     """Published SOP data cannot be converted into a walkthrough payload."""
 
@@ -118,7 +119,7 @@ def _resolve_step_metadata(
                     tenant_id,
                     db,
                 )
-        
+
         if screenshot_highlight is None:
             screenshot_highlight = _extract_screenshot_highlight(getattr(event, "attrs", None))
 
@@ -199,6 +200,7 @@ def build_walkthrough_payload(sop: models.Sop, db: DBSession) -> WalkthroughPayl
 
     return WalkthroughPayload(steps=steps)
 
+
 def _extract_screenshot_highlight(attrs: dict | None) -> dict | None:
     if not isinstance(attrs, dict):
         return None
@@ -206,7 +208,7 @@ def _extract_screenshot_highlight(attrs: dict | None) -> dict | None:
     target_rect = attrs.get("target_rect")
     if not isinstance(target_rect, dict):
         return None
-    
+
     try:
         x = float(target_rect["x"])
         y = float(target_rect["y"])
@@ -228,6 +230,7 @@ def _extract_screenshot_highlight(attrs: dict | None) -> dict | None:
         "viewport_width": viewport_width,
         "viewport_height": viewport_height,
     }
+
 
 def resolve_step_screenshot_highlight(
     source_event_ids: list[str],
@@ -257,6 +260,7 @@ def resolve_step_screenshot_highlight(
             return highlight
 
     return None
+
 
 def resolve_step_time_estimate(
     source_event_ids: list[str],
