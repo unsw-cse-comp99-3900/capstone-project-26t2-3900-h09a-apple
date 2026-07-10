@@ -76,6 +76,7 @@ class LlmSopGenerator(SopGenerator):
                     "url": event.url,
                     "attrs": getattr(event, "attrs", {}) or {},
                     "page_title": (getattr(event, "attrs", {}) or {}).get("page_title"),
+                    "timestamp_ms": getattr(event, "timestamp_ms", None),
                 }
                 for event in events
             ],
