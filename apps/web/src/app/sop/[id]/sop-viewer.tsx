@@ -121,6 +121,18 @@ function highlightStyle(highlight: NonNullable<SopStepResponse['screenshot_highl
   };
 }
 
+function screenshotAspectStyle(
+  highlight: SopStepCardProps['screenshotHighlight'],
+): React.CSSProperties | undefined {
+  if (!highlight) {
+    return undefined;
+  }
+
+  return {
+    aspectRatio: `${highlight.viewport_width} / ${highlight.viewport_height}`,
+  };
+}
+
 export function SopStepCard({
   stepNumber,
   title,
@@ -176,7 +188,10 @@ export function SopStepCard({
 
       <div className={styles.screenshotFrame}>
         {screenshotUrl ? (
-          <div className={styles.screenshotImageWrap}>
+          <div
+            className={styles.screenshotImageWrap}
+            style={screenshotAspectStyle(screenshotHighlight)}
+          >
             <Image
               className={styles.screenshotImage}
               src={screenshotUrl}
@@ -193,7 +208,7 @@ export function SopStepCard({
               />
             ) : null}
           </div>
-) : (
+        ) : (
           <div className={styles.screenshotPlaceholder}>
             <span aria-hidden="true">WT</span>
             <p>No screenshot captured for this step</p>
