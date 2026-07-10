@@ -257,6 +257,8 @@ export interface WalkthroughStep {
   css_selector?: string | null;
   xpath?: string | null;
   screenshot_url?: string | null;
+  time_estimate?: number | null;
+  screenshot_highlight?: ScreenshotHighlight | null;
 }
 
 /** Response returned by GET /api/v1/sops/{id}/walkthrough. */
