@@ -12,7 +12,7 @@ from app.storage import get_storage
 SIGNED_URL_EXPIRY_SECONDS = 60 * 60 * 24
 DEFAULT_STEP_ESTIMATE_SECONDS = 5
 MAX_EVENT_GAP_SECONDS = 30
-MAX_STEP_ESTIMATE_SECONDS = 60
+
 
 
 class WalkthroughDataError(Exception):
@@ -298,4 +298,4 @@ def resolve_step_time_estimate(
     if active_ms <= 0:
         return DEFAULT_STEP_ESTIMATE_SECONDS
 
-    return min(MAX_STEP_ESTIMATE_SECONDS, max(1, ceil(active_ms / 1000)))
+    return max(1, ceil(active_ms / 1000))
