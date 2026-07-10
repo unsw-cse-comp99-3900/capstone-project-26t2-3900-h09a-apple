@@ -6,6 +6,7 @@ from pathlib import Path
 from openai import OpenAI
 from pydantic import ValidationError
 
+from app.openai_client import create_openai_compatible_client
 from app.sop_schema import SopPayload
 
 API_ROOT = Path(__file__).resolve().parents[1]
@@ -199,10 +200,7 @@ def percentile_95(values: list[float]) -> float:
 
 
 def main() -> None:
-    if not os.getenv("OPENAI_API_KEY"):
-        raise RuntimeError("OPENAI_API_KEY is not set. Please export it first.")
-
-    client = OpenAI()
+    client = create_openai_compatible_client()
 
     with open(FIXTURES_PATH, encoding="utf-8") as file:
         sessions = json.load(file)
