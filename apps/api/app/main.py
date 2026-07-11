@@ -308,6 +308,7 @@ def get_sop(
         summary=f"{len(steps)} step workflow",
         version=sop.version,
         generated_at=sop.generated_at,
+        status=sop.status,
         steps=steps,
         warnings=warnings,
     )

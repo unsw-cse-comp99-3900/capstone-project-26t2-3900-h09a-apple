@@ -47,6 +47,7 @@ class SopDetailPayload(BaseModel):
     summary: str
     version: int
     generated_at: datetime
+    status: str
 
     steps: list[SopStepResponse]
     warnings: list[SopWarning] = Field(default_factory=list)

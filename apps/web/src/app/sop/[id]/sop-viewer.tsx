@@ -234,6 +234,20 @@ export function SopViewer({ sop }: SopViewerProps) {
         <div className={styles.aiBadge}>AI generated</div>
       </section>
 
+      {sop.status === 'draft' && (
+        <section className={styles.pendingReviewBanner}>
+          <div className={styles.pendingReviewIcon}>✓</div>
+
+          <div>
+            <h3>Submitted for review</h3>
+            <p>
+              Your SOP has been submitted successfully and is awaiting reviewer approval.
+              It will appear in the SOP Library once approved and published.
+            </p>
+          </div>
+        </section>
+      )}
+
       <section className={styles.summaryGrid} aria-label="SOP summary">
         <article className={styles.summaryCard}>
           <span>Version</span>

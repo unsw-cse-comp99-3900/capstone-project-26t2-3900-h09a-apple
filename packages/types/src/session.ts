@@ -198,6 +198,7 @@ export interface SopDetailPayload {
   summary: string;
   version: number;
   generated_at: string;
+  status: SopStatus;
 
   steps: SopStepResponse[];
 
