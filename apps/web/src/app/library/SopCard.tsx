@@ -22,11 +22,7 @@ export default function SopCard({ sop }: Props) {
   const overflow = sop.step_count - dotCount;
 
   const statusLabel =
-    sop.status === 'published'
-      ? null
-      : sop.status === 'approved'
-        ? 'Approved'
-        : 'Pending Review';
+    sop.status === 'published' ? null : sop.status === 'approved' ? 'Approved' : 'Pending Review';
 
   return (
     <Link href={`/sop/${sop.id}`} className={styles.card}>
@@ -51,13 +47,7 @@ export default function SopCard({ sop }: Props) {
         </div>
 
         {statusLabel ? (
-          <span
-            className={
-              sop.status === 'approved'
-                ? styles.approvedStamp
-                : styles.pendingStamp
-            }
-          >
+          <span className={sop.status === 'approved' ? styles.approvedStamp : styles.pendingStamp}>
             {statusLabel}
           </span>
         ) : (
