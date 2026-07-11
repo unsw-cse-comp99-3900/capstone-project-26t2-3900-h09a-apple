@@ -87,7 +87,6 @@ async function refreshAuthState() {
     return;
   }
 
-
   render();
   await syncConsentForCurrentUser();
 }

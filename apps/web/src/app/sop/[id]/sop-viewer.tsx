@@ -241,8 +241,8 @@ export function SopViewer({ sop }: SopViewerProps) {
           <div>
             <h3>Pending review</h3>
             <p>
-              Your SOP has been submitted successfully and is awaiting reviewer approval.
-              It will appear in the SOP Library once approved and published.
+              Your SOP has been submitted successfully and is awaiting reviewer approval. It will
+              appear in the SOP Library once approved and published.
             </p>
           </div>
         </section>

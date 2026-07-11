@@ -35,12 +35,7 @@ export async function getStoredAuthTokens() {
   };
 }
 
-export async function setStoredAuthTokens(
-  accessToken,
-  refreshToken,
-  expiresIn,
-  userId,
-) {
+export async function setStoredAuthTokens(accessToken, refreshToken, expiresIn, userId) {
   const expiresAt = Date.now() + expiresIn * 1000;
   await storageSet({
     [AUTH_STORAGE_KEYS.accessToken]: accessToken,

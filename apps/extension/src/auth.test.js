@@ -45,12 +45,7 @@ function mockChromeStorage() {
 test('setStoredAuthTokens persists access, refresh tokens and user id', async () => {
   mockChromeStorage();
 
-  await setStoredAuthTokens(
-    'access-token',
-    'refresh-token',
-    3600,
-    'user-123',
-  );
+  await setStoredAuthTokens('access-token', 'refresh-token', 3600, 'user-123');
 
   const tokens = await getStoredAuthTokens();
 
@@ -91,12 +86,7 @@ test('redeemHandoffCode stores tokens and user id from the API response', async 
 test('authenticatedFetch refreshes once on 401 and retries', async () => {
   mockChromeStorage();
 
-  await setStoredAuthTokens(
-    'expired-access',
-    'refresh-token',
-    3600,
-    'user-123',
-  );
+  await setStoredAuthTokens('expired-access', 'refresh-token', 3600, 'user-123');
 
   const calls = [];
 
@@ -154,12 +144,7 @@ test('authenticatedFetch refreshes once on 401 and retries', async () => {
 test('clearStoredAuthTokens clears stored user id', async () => {
   mockChromeStorage();
 
-  await setStoredAuthTokens(
-    'access-token',
-    'refresh-token',
-    3600,
-    'user-123',
-  );
+  await setStoredAuthTokens('access-token', 'refresh-token', 3600, 'user-123');
 
   await clearStoredAuthTokens();
 
