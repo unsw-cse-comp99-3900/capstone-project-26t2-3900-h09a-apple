@@ -5,11 +5,18 @@ import { JSDOM } from 'jsdom';
 import { CONSENT_STORAGE_KEY, CONSENT_TERMS_VERSION } from './consent.js';
 import 'fake-indexeddb/auto';
 import { saveSessionPayload } from './session-store.js';
+import { AUTH_STORAGE_KEYS } from './auth.js';
 
 const acceptedConsent = {
   accepted: true,
   version: CONSENT_TERMS_VERSION,
   acceptedAt: '2026-07-01T00:00:00.000Z',
+};
+
+const authenticatedStorage = {
+  [AUTH_STORAGE_KEYS.accessToken]: 'access-token',
+  [AUTH_STORAGE_KEYS.refreshToken]: 'refresh-token',
+  [AUTH_STORAGE_KEYS.expiresAt]: Date.now() + 60_000,
 };
 
 function setupPopupDom(recordingState = { status: 'ready', workflowName: '' }) {
@@ -21,6 +28,7 @@ function setupPopupDom(recordingState = { status: 'ready', workflowName: '' }) {
   let persistedRecordingState = recordingState;
   let localStorageValues = {
     [CONSENT_STORAGE_KEY]: acceptedConsent,
+    ...authenticatedStorage,
   };
   let storageChangeCallback = () => {};
 
@@ -172,7 +180,9 @@ test('accepting consent does not auto-start recording', async () => {
     url: 'chrome-extension://worktrace/popup.html',
   });
   let persistedRecordingState = { status: 'ready', workflowName: '' };
-  let localStorageValues = {};
+  let localStorageValues = {
+    ...authenticatedStorage,
+  };
 
   globalThis.window = dom.window;
   globalThis.document = dom.window.document;
@@ -228,4 +238,47 @@ test('accepting consent does not auto-start recording', async () => {
   assert.equal(consentOverlay.hidden, true);
   assert.equal(statusText.textContent, 'Ready');
   assert.equal(persistedRecordingState.status, 'ready');
+});
+
+test('shows sign-in state when extension auth tokens are missing', async () => {
+  const popupHtml = readFileSync(new URL('./popup.html', import.meta.url), 'utf-8');
+  const dom = new JSDOM(popupHtml, {
+    url: 'chrome-extension://worktrace/popup.html',
+  });
+  const openedTabs = [];
+
+  globalThis.window = dom.window;
+  globalThis.document = dom.window.document;
+  globalThis.chrome = {
+    storage: {
+      local: {
+        get: (keys, callback) => {
+          callback({ recordingState: { status: 'ready', workflowName: '' } });
+        },
+        set: (_value, callback = () => {}) => callback(),
+      },
+      session: {
+        get: (_keys, callback) => callback({ eventBuffer: [] }),
+        set: () => Promise.resolve(),
+      },
+      onChanged: { addListener: () => {} },
+    },
+    tabs: {
+      create: (options) => openedTabs.push(options),
+    },
+  };
+
+  await import(`./popup.js?test=${crypto.randomUUID()}`);
+  await flushPromises();
+
+  const authSection = dom.window.document.querySelector('#authSection');
+  const recordingSection = dom.window.document.querySelector('#recordingSection');
+  const signInButton = dom.window.document.querySelector('#signInButton');
+
+  assert.equal(authSection.hidden, false);
+  assert.equal(recordingSection.hidden, true);
+
+  signInButton.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+  assert.equal(openedTabs.length, 1);
+  assert.match(openedTabs[0].url, /\/login$/);
 });

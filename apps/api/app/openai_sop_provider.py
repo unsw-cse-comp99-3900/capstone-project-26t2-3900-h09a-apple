@@ -1,9 +1,8 @@
 import json
 import os
 
-from openai import OpenAI
-
 from app.llm_provider import LlmProviderResult, SopLlmProvider, estimate_cost_usd
+from app.openai_client import create_openai_compatible_client
 from app.sop_schema import SopPayload
 
 SYSTEM_PROMPT = """
@@ -43,13 +42,9 @@ class OpenAiSopProvider(SopLlmProvider):
 
     def __init__(self):
         self.model = os.getenv("OPENAI_MODEL", "gpt-4o")
-        self.api_key = os.getenv("OPENAI_API_KEY")
 
     def generate_sop(self, session_payload: dict) -> LlmProviderResult:
-        if not self.api_key:
-            raise RuntimeError("OPENAI_API_KEY is not configured")
-
-        client = OpenAI(api_key=self.api_key)
+        client = create_openai_compatible_client()
 
         response = client.chat.completions.create(
             model=self.model,

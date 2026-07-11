@@ -16,6 +16,10 @@
   box-sizing: border-box;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 body {
   width: 380px;
   min-height: 486px;
@@ -393,6 +397,27 @@ footer svg {
   grid-template-columns: 1fr 1fr;
   gap: 10px;
   margin-top: 16px;
+}
+
+.auth-section {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid #dfe4fb;
+  border-radius: 16px;
+  background: rgb(255 255 255 / 82%);
+  box-shadow: 0 12px 28px rgb(88 98 170 / 10%);
+}
+
+.auth-section h2 {
+  margin-bottom: 0;
+  font-size: 20px;
+}
+
+.auth-section p {
+  margin-bottom: 0;
+  color: #5d678a;
+  line-height: 1.5;
 }
 
 @media (prefers-reduced-motion: reduce) {

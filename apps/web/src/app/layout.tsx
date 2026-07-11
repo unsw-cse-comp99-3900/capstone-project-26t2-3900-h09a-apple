@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 
 import { AuthProvider } from '@/contexts/auth-context';
+import { ExtensionHandoffSync } from '@/components/extension-handoff-sync';
 
 import './globals.css';
 
@@ -15,7 +16,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body>
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider>
+          <ExtensionHandoffSync />
+          {children}
+        </AuthProvider>
       </body>
     </html>
   );
