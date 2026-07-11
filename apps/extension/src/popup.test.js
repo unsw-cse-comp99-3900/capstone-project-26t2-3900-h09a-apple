@@ -19,6 +19,46 @@ const authenticatedStorage = {
   [AUTH_STORAGE_KEYS.expiresAt]: Date.now() + 60_000,
 };
 
+function mockConsentApiFetch({
+  statusAccepted = true,
+  acceptedAt = '2026-07-01T00:00:00.000Z',
+} = {}) {
+  globalThis.fetch = async (url, init = {}) => {
+    const href = String(url);
+
+    if (href.includes('/api/v1/consent/status')) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          accepted: statusAccepted,
+          accepted_at: statusAccepted ? acceptedAt : null,
+          consent_type: 'recording',
+          version: CONSENT_TERMS_VERSION,
+        }),
+      };
+    }
+
+    if (href.includes('/api/v1/consent/accept') && init.method === 'POST') {
+      return {
+        ok: true,
+        status: 201,
+        json: async () => ({
+          consent_type: 'recording',
+          version: CONSENT_TERMS_VERSION,
+          accepted_at: acceptedAt,
+        }),
+      };
+    }
+
+    return {
+      ok: false,
+      status: 404,
+      json: async () => ({ detail: 'not found' }),
+    };
+  };
+}
+
 function setupPopupDom(recordingState = { status: 'ready', workflowName: '' }) {
   const popupHtml = readFileSync(new URL('./popup.html', import.meta.url), 'utf-8');
   const dom = new JSDOM(popupHtml, {
@@ -32,6 +72,7 @@ function setupPopupDom(recordingState = { status: 'ready', workflowName: '' }) {
   };
   let storageChangeCallback = () => {};
 
+  mockConsentApiFetch({ statusAccepted: true });
   let runtimeMessageCallback = () => {};
 
   globalThis.window = dom.window;
@@ -55,6 +96,12 @@ function setupPopupDom(recordingState = { status: 'ready', workflowName: '' }) {
             persistedRecordingState = value.recordingState;
           }
           localStorageValues = { ...localStorageValues, ...value };
+          callback();
+        },
+        remove: (keys, callback = () => {}) => {
+          for (const key of keys) {
+            delete localStorageValues[key];
+          }
           callback();
         },
       },
@@ -83,6 +130,9 @@ function setupPopupDom(recordingState = { status: 'ready', workflowName: '' }) {
   return {
     dom,
     openedTabs,
+    getLocalStorageValues() {
+      return localStorageValues;
+    },
     getRecordingState() {
       return persistedRecordingState;
     },
@@ -110,6 +160,39 @@ function setupPopupDom(recordingState = { status: 'ready', workflowName: '' }) {
         sessionId,
       });
     },
+    async simulateLogout() {
+      delete localStorageValues[AUTH_STORAGE_KEYS.accessToken];
+      delete localStorageValues[AUTH_STORAGE_KEYS.refreshToken];
+      delete localStorageValues[AUTH_STORAGE_KEYS.expiresAt];
+      storageChangeCallback(
+        {
+          [AUTH_STORAGE_KEYS.accessToken]: { oldValue: 'access-token', newValue: undefined },
+          [AUTH_STORAGE_KEYS.refreshToken]: { oldValue: 'refresh-token', newValue: undefined },
+          [AUTH_STORAGE_KEYS.expiresAt]: { oldValue: Date.now(), newValue: undefined },
+        },
+        'local',
+      );
+      await flushPromises();
+    },
+    async simulateLogin({ statusAccepted = false } = {}) {
+      mockConsentApiFetch({ statusAccepted });
+      Object.assign(localStorageValues, authenticatedStorage);
+      storageChangeCallback(
+        {
+          [AUTH_STORAGE_KEYS.accessToken]: {
+            newValue: authenticatedStorage[AUTH_STORAGE_KEYS.accessToken],
+          },
+          [AUTH_STORAGE_KEYS.refreshToken]: {
+            newValue: authenticatedStorage[AUTH_STORAGE_KEYS.refreshToken],
+          },
+          [AUTH_STORAGE_KEYS.expiresAt]: {
+            newValue: authenticatedStorage[AUTH_STORAGE_KEYS.expiresAt],
+          },
+        },
+        'local',
+      );
+      await flushPromises();
+    },
   };
 }
 
@@ -126,6 +209,7 @@ async function flushPromises() {
 test('review session button is only available after recording is completed', async () => {
   const { dom, openedTabs, getRecordingState, markSessionPayloadReady } = setupPopupDom();
   await loadPopupScript();
+  await flushPromises();
 
   const workflowNameInput = dom.window.document.querySelector('#workflowName');
   const startButton = dom.window.document.querySelector('#startButton');
@@ -184,6 +268,8 @@ test('accepting consent does not auto-start recording', async () => {
     ...authenticatedStorage,
   };
 
+  mockConsentApiFetch({ statusAccepted: false });
+
   globalThis.window = dom.window;
   globalThis.document = dom.window.document;
   globalThis.chrome = {
@@ -205,6 +291,12 @@ test('accepting consent does not auto-start recording', async () => {
           localStorageValues = { ...localStorageValues, ...value };
           callback();
         },
+        remove: (keys, callback = () => {}) => {
+          for (const key of keys) {
+            delete localStorageValues[key];
+          }
+          callback();
+        },
       },
       session: {
         get: (_keys, callback) => callback({ eventBuffer: [] }),
@@ -216,6 +308,7 @@ test('accepting consent does not auto-start recording', async () => {
   };
 
   await import(`./popup.js?test=${crypto.randomUUID()}`);
+  await flushPromises();
 
   const workflowNameInput = dom.window.document.querySelector('#workflowName');
   const startButton = dom.window.document.querySelector('#startButton');
@@ -233,11 +326,40 @@ test('accepting consent does not auto-start recording', async () => {
   assert.equal(consentOverlay.hidden, false);
   assert.equal(statusText.textContent, 'Ready');
 
+  mockConsentApiFetch({
+    statusAccepted: true,
+    acceptedAt: '2026-07-01T12:00:00.000Z',
+  });
   consentAcceptButton.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
   await flushPromises();
   assert.equal(consentOverlay.hidden, true);
   assert.equal(statusText.textContent, 'Ready');
   assert.equal(persistedRecordingState.status, 'ready');
+  assert.equal(localStorageValues[CONSENT_STORAGE_KEY]?.accepted, true);
+});
+
+test('logout clears consent so a new account cannot reuse the local cache', async () => {
+  const { dom, getLocalStorageValues, simulateLogout, simulateLogin } = setupPopupDom();
+  await loadPopupScript();
+  await flushPromises();
+
+  assert.equal(getLocalStorageValues()[CONSENT_STORAGE_KEY]?.accepted, true);
+
+  await simulateLogout();
+  assert.equal(getLocalStorageValues()[CONSENT_STORAGE_KEY], undefined);
+
+  const form = dom.window.document.querySelector('#recordingForm');
+  const consentOverlay = dom.window.document.querySelector('#consentOverlay');
+  const workflowNameInput = dom.window.document.querySelector('#workflowName');
+
+  await simulateLogin({ statusAccepted: false });
+  assert.equal(getLocalStorageValues()[CONSENT_STORAGE_KEY], undefined);
+
+  workflowNameInput.value = 'Refund workflow';
+  workflowNameInput.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+  form.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
+  await flushPromises();
+  assert.equal(consentOverlay.hidden, false);
 });
 
 test('shows sign-in state when extension auth tokens are missing', async () => {
@@ -256,6 +378,7 @@ test('shows sign-in state when extension auth tokens are missing', async () => {
           callback({ recordingState: { status: 'ready', workflowName: '' } });
         },
         set: (_value, callback = () => {}) => callback(),
+        remove: (_keys, callback = () => {}) => callback(),
       },
       session: {
         get: (_keys, callback) => callback({ eventBuffer: [] }),

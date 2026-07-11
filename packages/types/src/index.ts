@@ -3,4 +3,5 @@ export type HealthResponse = {
 };
 
 export * from './auth';
+export * from './consent';
 export * from './session';

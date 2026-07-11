@@ -14,7 +14,7 @@ type WalkthroughConsentButtonProps = {
 };
 
 export function WalkthroughConsentButton({ onReady }: WalkthroughConsentButtonProps) {
-  const { ready, hasConsent, refresh } = useDataCaptureConsent();
+  const { ready, hasConsent, refresh } = useDataCaptureConsent('walkthrough');
   const [modalOpen, setModalOpen] = useState(false);
   const [blockedMessage, setBlockedMessage] = useState<string | null>(null);
 
@@ -50,6 +50,7 @@ export function WalkthroughConsentButton({ onReady }: WalkthroughConsentButtonPr
       {blockedMessage ? <p className={styles.blocked}>{blockedMessage}</p> : null}
       <DataCaptureConsentModal
         open={modalOpen}
+        consentType="walkthrough"
         onAccepted={handleAccepted}
         onDeclined={handleDeclined}
       />

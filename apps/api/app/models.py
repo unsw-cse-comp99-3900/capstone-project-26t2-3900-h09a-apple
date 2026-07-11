@@ -83,6 +83,11 @@ class UserRole(str, enum.Enum):
     manager = "MANAGER"
 
 
+class ConsentType(str, enum.Enum):
+    recording = "recording"
+    walkthrough = "walkthrough"
+
+
 def _csv(values: type[enum.Enum]) -> str:
     """Format an Enum as ``'a','b','c'`` for use inside an SQL CHECK clause."""
     return ",".join(f"'{member.value}'" for member in values)
@@ -457,8 +462,54 @@ class LlmAuditLog(Base):
     )
 
 
+# ---------------------------------------------------------------------------
+# consent_acceptance (append-only; H09AAPPLE-59)
+# ---------------------------------------------------------------------------
+class ConsentAcceptance(Base):
+    __tablename__ = "consent_acceptance"
+
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    user_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    tenant_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    consent_type = Column(String(32), nullable=False)
+    version = Column(String(64), nullable=False)
+    accepted_at = Column(DateTime(timezone=True), nullable=False)
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=text("now()"),
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            f"consent_type IN ({_csv(ConsentType)})",
+            name="ck_consent_acceptance_type",
+        ),
+        CheckConstraint(
+            "length(trim(version)) > 0",
+            name="ck_consent_acceptance_version_nonempty",
+        ),
+        Index(
+            "ix_consent_acceptance_user_type_accepted",
+            "user_id",
+            "consent_type",
+            text("accepted_at DESC"),
+        ),
+    )
+
+
 __all__ = [
     "Base",
+    "ConsentAcceptance",
+    "ConsentType",
     "Event",
     "EventType",
     "Screenshot",

@@ -3,11 +3,14 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 
-import { CONSENT_COPY, CONSENT_TERMS_VERSION } from '@/lib/consent/constants';
+import { acceptConsent, getConsentStatus } from '@/lib/api';
+import { CONSENT_COPY, CONSENT_TERMS_VERSION, type ConsentType } from '@/lib/consent/constants';
 import {
   acceptDataCaptureConsent,
+  clearDataCaptureConsent,
   isConsentCurrent,
   readDataCaptureConsent,
+  writeDataCaptureConsent,
   type DataCaptureConsentRecord,
 } from '@/lib/consent/storage';
 
@@ -15,20 +18,26 @@ import styles from './data-capture-consent.module.css';
 
 type DataCaptureConsentModalProps = {
   open: boolean;
+  consentType: ConsentType;
   onAccepted: () => void;
   onDeclined: () => void;
 };
 
 export function DataCaptureConsentModal({
   open,
+  consentType,
   onAccepted,
   onDeclined,
 }: DataCaptureConsentModalProps) {
   const [declined, setDeclined] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (open) {
       setDeclined(false);
+      setError(null);
+      setSubmitting(false);
     }
   }, [open]);
 
@@ -36,9 +45,22 @@ export function DataCaptureConsentModal({
     return null;
   }
 
-  function handleAccept() {
-    acceptDataCaptureConsent();
-    onAccepted();
+  async function handleAccept() {
+    setSubmitting(true);
+    setError(null);
+
+    try {
+      const result = await acceptConsent({
+        consent_type: consentType,
+        version: CONSENT_TERMS_VERSION,
+      });
+      acceptDataCaptureConsent(consentType, result.accepted_at);
+      onAccepted();
+    } catch {
+      setError('Could not record consent. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   function handleDecline() {
@@ -91,12 +113,23 @@ export function DataCaptureConsentModal({
             <p className={styles.meta}>
               Read the full <Link href="/privacy">Privacy and data capture terms</Link>.
             </p>
+            {error ? <p className={styles.body}>{error}</p> : null}
             <div className={styles.actions}>
-              <button type="button" className={styles.secondaryButton} onClick={handleDecline}>
+              <button
+                type="button"
+                className={styles.secondaryButton}
+                onClick={handleDecline}
+                disabled={submitting}
+              >
                 {CONSENT_COPY.declineLabel}
               </button>
-              <button type="button" className={styles.primaryButton} onClick={handleAccept}>
-                {CONSENT_COPY.acceptLabel}
+              <button
+                type="button"
+                className={styles.primaryButton}
+                onClick={() => void handleAccept()}
+                disabled={submitting}
+              >
+                {submitting ? 'Saving…' : CONSENT_COPY.acceptLabel}
               </button>
             </div>
           </>
@@ -106,19 +139,56 @@ export function DataCaptureConsentModal({
   );
 }
 
-export function useDataCaptureConsent() {
+export function useDataCaptureConsent(consentType: ConsentType) {
   const [consent, setConsent] = useState<DataCaptureConsentRecord | null>(null);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    setConsent(readDataCaptureConsent());
-    setReady(true);
-  }, []);
+    let cancelled = false;
+
+    async function syncFromServer() {
+      const local = readDataCaptureConsent(consentType);
+      if (!cancelled) {
+        setConsent(local);
+      }
+
+      try {
+        const status = await getConsentStatus(consentType);
+        if (cancelled) {
+          return;
+        }
+
+        if (status.accepted && status.accepted_at) {
+          const record = writeDataCaptureConsent(consentType, {
+            accepted: true,
+            version: status.version,
+            acceptedAt: status.accepted_at,
+          });
+          setConsent(record);
+        } else {
+          clearDataCaptureConsent(consentType);
+          setConsent(null);
+        }
+      } catch {
+        // Keep the local cache when the status endpoint is unreachable.
+      } finally {
+        if (!cancelled) {
+          setReady(true);
+        }
+      }
+    }
+
+    void syncFromServer();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [consentType]);
 
   return {
     ready,
     consent,
     hasConsent: isConsentCurrent(consent),
-    refresh: () => setConsent(readDataCaptureConsent()),
+    refresh: () => setConsent(readDataCaptureConsent(consentType)),
   };
 }
