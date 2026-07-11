@@ -35,3 +35,12 @@ export type RefreshResponse = {
 };
 
 export type MeResponse = AuthUser;
+
+export type ExtensionHandoffCreateResponse = {
+  code: string;
+  expires_in: number;
+};
+
+export type ExtensionHandoffRedeemRequest = {
+  code: string;
+};

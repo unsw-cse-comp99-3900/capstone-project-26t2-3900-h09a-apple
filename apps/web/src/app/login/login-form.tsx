@@ -9,6 +9,7 @@ import { AuthEmailPasswordFields } from '@/components/auth/auth-email-password-f
 import { AuthFormCard } from '@/components/auth/auth-form-card';
 import { AuthFormPanel } from '@/components/auth/auth-form-panel';
 import { redirectPathForRole, useCurrentUser } from '@/contexts/auth-context';
+import { broadcastExtensionHandoff } from '@/lib/extension-handoff';
 
 import styles from './auth.module.css';
 
@@ -45,6 +46,7 @@ export function LoginForm() {
 
       const nextUser = await refreshSession();
       if (nextUser) {
+        await broadcastExtensionHandoff();
         router.replace(redirectPathForRole(nextUser.role));
       }
     } catch {

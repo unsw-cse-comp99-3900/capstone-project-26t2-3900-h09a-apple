@@ -13,6 +13,7 @@ import {
 
 import { roleLandingPath } from '@/lib/auth/constants';
 import { isProtectedPath } from '@/lib/auth/protected-paths';
+import { broadcastExtensionLogout } from '@/lib/extension-logout';
 
 type AuthContextValue = {
   user: AuthUser | null;
@@ -94,6 +95,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     await fetch('/api/auth/logout', { method: 'POST' });
+    broadcastExtensionLogout();
     setUser(null);
     window.location.href = '/login';
   }, []);

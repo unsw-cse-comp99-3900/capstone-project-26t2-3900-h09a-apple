@@ -8,8 +8,13 @@ import {
   stopRecording,
 } from './recording-state.js';
 import { WEB_APP_BASE_URL } from './config.js';
+import { AUTH_STORAGE_KEYS, hasStoredAuthTokens } from './auth.js';
 import { isConsentCurrent, readDataCaptureConsent, saveDataCaptureConsent } from './consent.js';
 
+const authSection = document.querySelector('#authSection');
+const recordingSection = document.querySelector('#recordingSection');
+const signInButton = document.querySelector('#signInButton');
+const footerText = document.querySelector('#footerText');
 const form = document.querySelector('#recordingForm');
 const workflowNameInput = document.querySelector('#workflowName');
 const workflowHint = document.querySelector('#workflowHint');
@@ -33,24 +38,29 @@ let state = createRecordingState();
 let eventCount = 0;
 let reviewSessionReady = false;
 let consentRecord = null;
+let isAuthenticated = false;
+let authReady = false;
 
-chrome.storage?.local.get(['recordingState'], (result) => {
-  if (result.recordingState) {
-    state = result.recordingState;
-    checkReviewSessionReady();
-  }
-});
+function openSignInPage() {
+  chrome.tabs.create({ url: new URL('/login', WEB_APP_BASE_URL).toString() });
+}
 
-readDataCaptureConsent((consent) => {
-  consentRecord = consent;
+function setPanelVisibility(authenticated) {
+  authSection.hidden = authenticated;
+  recordingSection.hidden = !authenticated;
+}
+
+async function refreshAuthState() {
+  isAuthenticated = await hasStoredAuthTokens();
   render();
+}
+
+signInButton.addEventListener('click', () => {
+  openSignInPage();
 });
 
-chrome.storage?.session?.get(['eventBuffer'], (result) => {
-  if (result.eventBuffer) {
-    eventCount = result.eventBuffer.length;
-    render();
-  }
+window.addEventListener('focus', () => {
+  void refreshAuthState();
 });
 
 chrome.storage?.onChanged.addListener((changes, area) => {
@@ -59,12 +69,22 @@ chrome.storage?.onChanged.addListener((changes, area) => {
     render();
   }
 
-  if (area === 'local' && state.client_session_id) {
-    const storageKey = `session_${state.client_session_id}`;
+  if (area === 'local') {
+    if (
+      changes[AUTH_STORAGE_KEYS.accessToken] ||
+      changes[AUTH_STORAGE_KEYS.refreshToken] ||
+      changes[AUTH_STORAGE_KEYS.expiresAt]
+    ) {
+      void refreshAuthState();
+    }
 
-    if (changes[storageKey]?.newValue) {
-      reviewSessionReady = true;
-      render();
+    if (state.client_session_id) {
+      const storageKey = `session_${state.client_session_id}`;
+
+      if (changes[storageKey]?.newValue) {
+        reviewSessionReady = true;
+        render();
+      }
     }
   }
 });
@@ -101,6 +121,19 @@ function hideConsentModal() {
 }
 
 function render() {
+  if (!authReady) {
+    return;
+  }
+
+  setPanelVisibility(isAuthenticated);
+  footerText.textContent = isAuthenticated
+    ? 'This preview keeps recording state on your device only.'
+    : 'Sign in through the web app to connect this extension to your workspace.';
+
+  if (!isAuthenticated) {
+    return;
+  }
+
   const isRecording = state.status === RecordingStatus.RECORDING;
   const isCompleted =
     state.status === RecordingStatus.COMPLETED && Boolean(state.client_session_id);
@@ -194,4 +227,32 @@ reviewButton.addEventListener('click', () => {
   openReviewPage();
 });
 
-render();
+async function initPopup() {
+  isAuthenticated = await hasStoredAuthTokens();
+  authReady = true;
+
+  readDataCaptureConsent((consent) => {
+    consentRecord = consent;
+    render();
+  });
+
+  chrome.storage?.local.get(['recordingState'], (result) => {
+    if (result.recordingState) {
+      state = result.recordingState;
+      checkReviewSessionReady();
+    } else {
+      render();
+    }
+  });
+
+  chrome.storage?.session?.get(['eventBuffer'], (result) => {
+    if (result.eventBuffer) {
+      eventCount = result.eventBuffer.length;
+      render();
+    }
+  });
+
+  render();
+}
+
+void initPopup();
