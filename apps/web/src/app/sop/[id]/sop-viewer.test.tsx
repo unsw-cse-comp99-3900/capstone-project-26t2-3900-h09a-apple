@@ -124,7 +124,7 @@ describe('SopViewer', () => {
       summary: '3 step workflow',
       version: 2,
       generated_at: '2026-06-28T08:20:00Z',
-      status: 'draft', 
+      status: 'draft',
       steps: [
         step(3, 'Submit request', 'event-3', {
           time_estimate: 5,

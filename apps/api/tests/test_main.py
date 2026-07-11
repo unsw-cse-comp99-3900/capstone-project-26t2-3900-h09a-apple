@@ -287,27 +287,48 @@ class FakeDbWithSession(FakeDb):
         self._event_ids_filter = None
 
         self.current_model = None
+        self._recorded_by_filter = None
+        self._status_filter = None
+        self._status_not_filter = None
 
     def query(self, model):
         self.current_model = model
         self._tenant_id_filter = None
         self._session_id_filter = None
         self._event_ids_filter = None
+        self._recorded_by_filter = None
+        self._status_filter = None
+        self._status_not_filter = None
         return self
 
     def filter(self, *args):
         for criterion in args:
             left = getattr(criterion, "left", None)
             right = getattr(criterion, "right", None)
+            operator = getattr(criterion, "operator", None)
+
             if left is not None and getattr(left, "key", None) == "tenant_id":
                 self._tenant_id_filter = getattr(right, "value", right)
+
             if left is not None and getattr(left, "key", None) == "session_id":
                 self._session_id_filter = getattr(right, "value", right)
-            operator = getattr(criterion, "operator", None)
+
             if operator is not None and operator.__name__ == "in_op":
                 values = getattr(right, "value", right)
                 if values is not None:
                     self._event_ids_filter = set(values)
+
+            if left is not None and getattr(left, "key", None) == "recorded_by":
+                self._recorded_by_filter = getattr(right, "value", right)
+
+            if left is not None and getattr(left, "key", None) == "status":
+                value = getattr(right, "value", right)
+
+                if operator is not None and operator.__name__ == "eq":
+                    self._status_filter = value
+                elif operator is not None and operator.__name__ == "ne":
+                    self._status_not_filter = value
+
         return self
 
     def order_by(self, *args):
@@ -370,7 +391,23 @@ class FakeDbWithSession(FakeDb):
             return events
 
         if self.current_model == main_module.models.Sop:
-            return self.sops
+            sops = self.sops
+
+            # Fake join(Session): store recorded_by on the fake SOP object for filtering.
+            if self._recorded_by_filter is not None:
+                sops = [
+                    sop
+                    for sop in sops
+                    if getattr(sop, "recorded_by", None) == self._recorded_by_filter
+                ]
+
+            if self._status_filter is not None:
+                sops = [sop for sop in sops if sop.status == self._status_filter]
+
+            if self._status_not_filter is not None:
+                sops = [sop for sop in sops if sop.status != self._status_not_filter]
+
+            return sops
 
         return []
 
@@ -899,6 +936,7 @@ def test_list_published_sops():
         assert body["sops"][0]["id"] == fake_sop.id
         assert body["sops"][0]["title"] == "Login Flow"
         assert body["sops"][0]["step_count"] == 2
+        assert body["sops"][0]["status"] == main_module.models.SopStatus.published.value
     finally:
         app.dependency_overrides[get_db] = override_get_db
 
@@ -924,6 +962,67 @@ def test_list_sops_requires_authentication():
         assert response.status_code == 401
     finally:
         app.dependency_overrides[get_db] = override_get_db
+
+
+def test_list_my_draft_sops():
+    current_user = _make_user()
+
+    my_draft = SimpleNamespace(
+        id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        title="My Draft SOP",
+        status=main_module.models.SopStatus.draft.value,
+        published_at=None,
+        tenant_id=DEFAULT_TENANT_ID,
+        steps=[{}],
+        recorded_by=current_user.id,
+    )
+
+    other_users_draft = SimpleNamespace(
+        id="bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+        title="Other User Draft",
+        status=main_module.models.SopStatus.draft.value,
+        published_at=None,
+        tenant_id=DEFAULT_TENANT_ID,
+        steps=[{}],
+        recorded_by=UUID("99999999-9999-9999-9999-999999999999"),
+    )
+
+    my_published = SimpleNamespace(
+        id="cccccccc-cccc-cccc-cccc-cccccccccccc",
+        title="Published SOP",
+        status=main_module.models.SopStatus.published.value,
+        published_at=datetime.now(UTC),
+        tenant_id=DEFAULT_TENANT_ID,
+        steps=[{}],
+        recorded_by=current_user.id,
+    )
+
+    db = FakeDbWithSession(
+        sops=[
+            my_draft,
+            other_users_draft,
+            my_published,
+        ]
+    )
+
+    app.dependency_overrides[get_db] = lambda: db
+    app.dependency_overrides[get_current_user] = lambda: current_user
+
+    try:
+        response = client.get("/api/v1/sops?mine=true")
+
+        assert response.status_code == 200
+
+        body = response.json()
+
+        assert len(body["sops"]) == 1
+        assert body["sops"][0]["id"] == my_draft.id
+        assert body["sops"][0]["title"] == "My Draft SOP"
+        assert body["sops"][0]["status"] == main_module.models.SopStatus.draft.value
+        assert body["sops"][0]["step_count"] == 1
+    finally:
+        app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_current_user] = lambda: _make_user()
 
 
 def _walkthrough_sop(
