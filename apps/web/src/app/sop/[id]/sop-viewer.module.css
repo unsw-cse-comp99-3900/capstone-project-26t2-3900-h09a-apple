@@ -205,6 +205,7 @@
   overflow: hidden;
   font-size: 24px;
   -webkit-box-orient: vertical;
+  line-clamp: 2;
   -webkit-line-clamp: 2;
 }
 
@@ -226,6 +227,7 @@
   font-size: 16px;
   line-height: 1.65;
   -webkit-box-orient: vertical;
+  line-clamp: 5;
   -webkit-line-clamp: 5;
 }
 
