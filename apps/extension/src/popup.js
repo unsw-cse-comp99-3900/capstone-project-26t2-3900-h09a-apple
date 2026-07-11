@@ -47,6 +47,19 @@ let reviewSessionReady = false;
 let consentRecord = null;
 let isAuthenticated = false;
 let authReady = false;
+let sessionStorageError = null;
+
+function getLocalStorage(keys) {
+  return new Promise((resolve) => {
+    chrome.storage?.local.get(keys, resolve);
+  });
+}
+
+function getSessionStorage(keys) {
+  return new Promise((resolve) => {
+    chrome.storage?.session?.get(keys, resolve);
+  });
+}
 
 function openSignInPage() {
   chrome.tabs.create({ url: new URL('/login', WEB_APP_BASE_URL).toString() });
@@ -66,23 +79,27 @@ function clearLocalConsent() {
   });
 }
 
-async function syncConsentForCurrentUser() {
+async function syncConsentForCurrentUser({ renderAfter = true } = {}) {
   try {
     consentRecord = await syncConsentFromServer();
   } catch {
     // Keep the local consent cache when the status endpoint is unreachable.
   }
-  render();
+  if (renderAfter) {
+    render();
+  }
 }
 
-async function refreshAuthState() {
+async function refreshAuthState({ renderAfter = true } = {}) {
   const wasAuthenticated = isAuthenticated;
   isAuthenticated = await hasStoredAuthTokens();
 
   if (!isAuthenticated) {
     // Drop cached consent on logout so the next account cannot reuse it.
     await clearLocalConsent();
-    render();
+    if (renderAfter) {
+      render();
+    }
     return;
   }
 
@@ -92,8 +109,10 @@ async function refreshAuthState() {
     consentRecord = null;
   }
 
-  render();
-  await syncConsentForCurrentUser();
+  if (renderAfter) {
+    render();
+  }
+  await syncConsentForCurrentUser({ renderAfter });
 }
 
 signInButton.addEventListener('click', () => {
@@ -129,7 +148,15 @@ chrome.storage?.onChanged.addListener((changes, area) => {
 
 chrome.runtime?.onMessage?.addListener((message) => {
   if (message.type === 'SESSION_PAYLOAD_READY' && message.sessionId === state.client_session_id) {
+    sessionStorageError = null;
     reviewSessionReady = true;
+    render();
+  }
+
+  if (message.type === 'SESSION_PAYLOAD_ERROR') {
+    sessionStorageError =
+      message.error || 'Captured session could not be saved locally. Try recording again.';
+    reviewSessionReady = false;
     render();
   }
 });
@@ -143,9 +170,16 @@ async function checkReviewSessionReady() {
 
   try {
     reviewSessionReady = await hasSessionPayload(state.client_session_id);
+    sessionStorageError = reviewSessionReady
+      ? null
+      : 'Preparing session payload. If this does not clear, stop and record again.';
     render();
   } catch (error) {
     console.warn('Failed to check session payload readiness:', error);
+    sessionStorageError =
+      error instanceof Error
+        ? `Could not read captured session locally: ${error.message}`
+        : 'Could not read captured session locally.';
     reviewSessionReady = false;
     render();
   }
@@ -203,7 +237,9 @@ function render() {
   if (isRecording) {
     workflowHint.textContent = `Recording "${state.workflowName}" in progress. Captured ${eventCount} events.`;
   } else if (state.status === RecordingStatus.COMPLETED) {
-    workflowHint.textContent = `Capture completed (${eventCount} events). You can edit the name and start again.`;
+    workflowHint.textContent =
+      sessionStorageError ??
+      `Capture completed (${eventCount} events). You can edit the name and start again.`;
   } else if (!hasConsent) {
     workflowHint.textContent = 'Accept the data capture agreement before recording can start.';
   } else {
@@ -215,6 +251,7 @@ function updateState(newState) {
   state = newState;
   if (state.status !== RecordingStatus.COMPLETED) {
     reviewSessionReady = false;
+    sessionStorageError = null;
   }
   chrome.storage?.local.set({ recordingState: state });
   render();
@@ -291,23 +328,27 @@ reviewButton.addEventListener('click', () => {
 
 async function initPopup() {
   authReady = true;
-  await refreshAuthState();
+  await refreshAuthState({ renderAfter: false });
 
-  chrome.storage?.local.get(['recordingState'], (result) => {
-    if (result.recordingState) {
-      state = result.recordingState;
-      checkReviewSessionReady();
-    } else {
-      render();
-    }
-  });
+  const [localState, sessionState] = await Promise.all([
+    getLocalStorage(['recordingState', 'sessionStorageError']),
+    getSessionStorage(['eventBuffer']),
+  ]);
 
-  chrome.storage?.session?.get(['eventBuffer'], (result) => {
-    if (result.eventBuffer) {
-      eventCount = result.eventBuffer.length;
-      render();
-    }
-  });
+  if (localState.recordingState) {
+    state = localState.recordingState;
+  }
+
+  sessionStorageError = localState.sessionStorageError ?? null;
+
+  if (sessionState.eventBuffer) {
+    eventCount = sessionState.eventBuffer.length;
+  }
+
+  if (state.status === RecordingStatus.COMPLETED) {
+    await checkReviewSessionReady();
+    return;
+  }
 
   render();
 }

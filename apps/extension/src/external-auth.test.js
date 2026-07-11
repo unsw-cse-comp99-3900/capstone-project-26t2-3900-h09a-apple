@@ -26,6 +26,7 @@ test('handleExternalAuthMessage responds to ping requests from allowed origins',
     {
       redeemHandoffCode: async () => {},
       clearStoredAuthTokens: async () => {},
+      deleteSessionPayload: async () => {},
     },
   );
 
@@ -48,6 +49,7 @@ test('handleExternalAuthMessage rejects requests from untrusted origins', () => 
     {
       redeemHandoffCode: async () => {},
       clearStoredAuthTokens: async () => {},
+      deleteSessionPayload: async () => {},
     },
   );
 
@@ -72,11 +74,37 @@ test('handleExternalAuthMessage redeems handoff codes for allowed origins', asyn
         redeemedCodes.push(code);
       },
       clearStoredAuthTokens: async () => {},
+      deleteSessionPayload: async () => {},
     },
   );
 
   assert.equal(keepChannelOpen, true);
   await new Promise((resolve) => setTimeout(resolve, 0));
   assert.deepEqual(redeemedCodes, ['handoff-code']);
+  assert.deepEqual(response, { ok: true });
+});
+
+test('handleExternalAuthMessage deletes submitted sessions for allowed origins', async () => {
+  let response = null;
+  const deletedSessionIds = [];
+
+  const keepChannelOpen = handleExternalAuthMessage(
+    { type: 'SESSION_SUBMITTED', sessionId: 'session-123' },
+    { origin: 'http://localhost:3000' },
+    (payload) => {
+      response = payload;
+    },
+    {
+      redeemHandoffCode: async () => {},
+      clearStoredAuthTokens: async () => {},
+      deleteSessionPayload: async (sessionId) => {
+        deletedSessionIds.push(sessionId);
+      },
+    },
+  );
+
+  assert.equal(keepChannelOpen, true);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.deepEqual(deletedSessionIds, ['session-123']);
   assert.deepEqual(response, { ok: true });
 });

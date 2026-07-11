@@ -77,4 +77,28 @@ describe('extension bridge', () => {
       expect.any(Function),
     );
   });
+
+  it('sends submitted session ids through chrome.runtime.sendMessage', async () => {
+    const sendMessage = vi.fn((_extensionId, _message, callback) => {
+      callback({ ok: true });
+    });
+
+    vi.stubGlobal(
+      'window',
+      createWindowStub({
+        runtime: {
+          sendMessage,
+        },
+      }),
+    );
+
+    const { postExtensionSessionSubmitted } = await import('@/lib/extension-bridge');
+    await postExtensionSessionSubmitted('session-123');
+
+    expect(sendMessage).toHaveBeenCalledWith(
+      EXTENSION_ID,
+      expect.objectContaining({ type: 'SESSION_SUBMITTED', sessionId: 'session-123' }),
+      expect.any(Function),
+    );
+  });
 });

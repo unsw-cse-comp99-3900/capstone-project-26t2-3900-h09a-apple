@@ -4,6 +4,7 @@ export const EXTENSION_MESSAGE_TYPES = {
   ping: 'EXTENSION_PING',
   handoff: 'EXTENSION_HANDOFF',
   logout: 'EXTENSION_LOGOUT',
+  sessionSubmitted: 'SESSION_SUBMITTED',
 } as const;
 
 const DEFAULT_PING_TIMEOUT_MS = 1500;
@@ -94,5 +95,13 @@ export async function postExtensionLogout(): Promise<void> {
   await sendExtensionMessage({
     type: EXTENSION_MESSAGE_TYPES.logout,
     requestId: crypto.randomUUID(),
+  });
+}
+
+export async function postExtensionSessionSubmitted(sessionId: string): Promise<void> {
+  await sendExtensionMessage({
+    type: EXTENSION_MESSAGE_TYPES.sessionSubmitted,
+    requestId: crypto.randomUUID(),
+    sessionId,
   });
 }
