@@ -84,15 +84,7 @@ chrome.storage?.onChanged.addListener((changes, area) => {
     ) {
       void refreshAuthState();
     }
-
-    if (state.client_session_id) {
-      const storageKey = `session_${state.client_session_id}`;
-
-      if (changes[storageKey]?.newValue) {
-        reviewSessionReady = true;
-        render();
-      }
-    }
+    
   }
 });
 
