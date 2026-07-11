@@ -1,4 +1,8 @@
 import type {
+  ConsentAcceptRequest,
+  ConsentAcceptResponse,
+  ConsentStatusResponse,
+  ConsentType,
   HealthResponse,
   SessionCreateResponse,
   SessionStatusResponse,
@@ -136,6 +140,34 @@ export async function getPublishedSops(): Promise<SopListResponse> {
 
   if (!res.ok) {
     throw new ApiError(await errorMessage(res, 'Failed to load SOP library'), res.status);
+  }
+
+  return res.json();
+}
+
+export async function getConsentStatus(consentType: ConsentType): Promise<ConsentStatusResponse> {
+  const res = await authedFetch(
+    `/api/v1/consent/status?consent_type=${encodeURIComponent(consentType)}`,
+  );
+
+  if (!res.ok) {
+    throw new ApiError(await errorMessage(res, 'Failed to load consent status'), res.status);
+  }
+
+  return res.json();
+}
+
+export async function acceptConsent(payload: ConsentAcceptRequest): Promise<ConsentAcceptResponse> {
+  const res = await authedFetch('/api/v1/consent/accept', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    throw new ApiError(await errorMessage(res, 'Failed to record consent'), res.status);
   }
 
   return res.json();

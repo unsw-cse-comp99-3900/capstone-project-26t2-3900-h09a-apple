@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session as DBSession
 from app import models
 from app.auth.deps import filter_by_tenant, require_role
 from app.auth.routes import router as auth_router
+from app.consent_routes import router as consent_router
 from app.database import get_db
 from app.feedback_routes import router as feedback_router
 from app.feedback_transcription import preload_whisper_model
@@ -63,6 +64,7 @@ app.add_middleware(
 
 app.include_router(auth_router)
 app.include_router(feedback_router)
+app.include_router(consent_router)
 
 
 @app.get("/health")

@@ -9,7 +9,13 @@ import {
 } from './recording-state.js';
 import { WEB_APP_BASE_URL } from './config.js';
 import { AUTH_STORAGE_KEYS, hasStoredAuthTokens } from './auth.js';
-import { isConsentCurrent, readDataCaptureConsent, saveDataCaptureConsent } from './consent.js';
+import {
+  clearDataCaptureConsent,
+  isConsentCurrent,
+  postConsentAccept,
+  saveDataCaptureConsent,
+  syncConsentFromServer,
+} from './consent.js';
 
 const authSection = document.querySelector('#authSection');
 const recordingSection = document.querySelector('#recordingSection');
@@ -50,9 +56,43 @@ function setPanelVisibility(authenticated) {
   recordingSection.hidden = !authenticated;
 }
 
-async function refreshAuthState() {
-  isAuthenticated = await hasStoredAuthTokens();
+function clearLocalConsent() {
+  return new Promise((resolve) => {
+    clearDataCaptureConsent(() => {
+      consentRecord = null;
+      resolve();
+    });
+  });
+}
+
+async function syncConsentForCurrentUser() {
+  try {
+    consentRecord = await syncConsentFromServer();
+  } catch {
+    // Keep the local consent cache when the status endpoint is unreachable.
+  }
   render();
+}
+
+async function refreshAuthState() {
+  const wasAuthenticated = isAuthenticated;
+  isAuthenticated = await hasStoredAuthTokens();
+
+  if (!isAuthenticated) {
+    // Drop cached consent on logout so the next account cannot reuse it.
+    await clearLocalConsent();
+    render();
+    return;
+  }
+
+  // Account switch / fresh login: do not trust the previous user's local cache
+  // while the server status request is in flight.
+  if (!wasAuthenticated) {
+    consentRecord = null;
+  }
+
+  render();
+  await syncConsentForCurrentUser();
 }
 
 signInButton.addEventListener('click', () => {
@@ -112,6 +152,8 @@ function openReviewPage() {
 
 function showConsentModal() {
   consentDeclineMessage.hidden = true;
+  consentDeclineMessage.textContent =
+    'Recording stays disabled without consent. You can review this agreement again before starting a session.';
   consentOverlay.hidden = false;
 }
 
@@ -192,11 +234,23 @@ form.addEventListener('submit', async (event) => {
 });
 
 consentAcceptButton.addEventListener('click', () => {
-  saveDataCaptureConsent((record) => {
-    consentRecord = record;
-    hideConsentModal();
-    render();
-  });
+  void (async () => {
+    consentAcceptButton.disabled = true;
+    try {
+      const result = await postConsentAccept();
+      saveDataCaptureConsent(result.accepted_at, (record) => {
+        consentRecord = record;
+        hideConsentModal();
+        render();
+      });
+    } catch {
+      consentDeclineMessage.hidden = false;
+      consentDeclineMessage.textContent =
+        'Could not record consent. Please try again after signing in.';
+    } finally {
+      consentAcceptButton.disabled = false;
+    }
+  })();
 });
 
 consentDeclineButton.addEventListener('click', () => {
@@ -228,13 +282,8 @@ reviewButton.addEventListener('click', () => {
 });
 
 async function initPopup() {
-  isAuthenticated = await hasStoredAuthTokens();
   authReady = true;
-
-  readDataCaptureConsent((consent) => {
-    consentRecord = consent;
-    render();
-  });
+  await refreshAuthState();
 
   chrome.storage?.local.get(['recordingState'], (result) => {
     if (result.recordingState) {

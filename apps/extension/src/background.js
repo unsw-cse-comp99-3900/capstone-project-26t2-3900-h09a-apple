@@ -1,5 +1,6 @@
 import { assembleSession } from './session-assembly.js';
 import { clearStoredAuthTokens, redeemHandoffCode } from './auth.js';
+import { clearDataCaptureConsent } from './consent.js';
 import { handleExternalAuthMessage } from './external-auth.js';
 
 const externalAuthHandlers = {
@@ -100,6 +101,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.type === 'EXTENSION_LOGOUT') {
     clearStoredAuthTokens()
+      .then(
+        () =>
+          new Promise((resolve) => {
+            clearDataCaptureConsent(resolve);
+          }),
+      )
       .then(() => {
         sendResponse({ ok: true });
       })

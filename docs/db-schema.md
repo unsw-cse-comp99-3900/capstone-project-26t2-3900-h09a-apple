@@ -393,3 +393,37 @@ from `sessions.tenant_id`). `sessions.tenant_id` already existed from Sprint 1.
 HS256, 24h, `SECRET_KEY` env), `get_current_user` FastAPI dependency (JWT
 `user_id` → DB lookup; 401 if missing/invalid). Login/register routes are
 H09AAPPLE-43.
+
+---
+
+## Table: `consent_acceptance` (H09AAPPLE-59)
+
+Append-only history of data-capture consent acceptances. There is no update or
+delete API for this table — every Accept inserts a new row so full history per
+`(user_id, consent_type)` remains reconstructable.
+
+| Column         | Type        | Null | Default             | Notes                                                     |
+| -------------- | ----------- | ---- | ------------------- | --------------------------------------------------------- |
+| `id`           | uuid        | no   | `gen_random_uuid()` | PK                                                        |
+| `user_id`      | uuid        | no   | —                   | FK → `users.id` **CASCADE**                               |
+| `tenant_id`    | uuid        | no   | —                   | copied from authenticated user; indexed                   |
+| `consent_type` | varchar(32) | no   | —                   | `recording` · `walkthrough` (CHECK)                       |
+| `version`      | varchar(64) | no   | —                   | terms version string (e.g. `2026-07-01`); non-empty CHECK |
+| `accepted_at`  | timestamptz | no   | —                   | set by server at insert time                              |
+| `created_at`   | timestamptz | no   | `now()`             | row insert time                                           |
+
+**Indexes**
+
+- `ix_consent_acceptance_tenant_id(tenant_id)`
+- `ix_consent_acceptance_user_type_accepted(user_id, consent_type, accepted_at DESC)`
+
+**Deliberately excluded:** IP address, User-Agent, and other client metadata.
+Consent proof is `{user_id, tenant_id, consent_type, version, accepted_at}` only.
+
+**API**
+
+- `POST /api/v1/consent/accept` — insert one acceptance (`consent_type`, `version`)
+- `GET /api/v1/consent/status?consent_type=` — whether the current user has accepted
+  the current terms version for that type (`accepted`, `accepted_at`)
+
+**Revision:** `0007_consent_acceptance`

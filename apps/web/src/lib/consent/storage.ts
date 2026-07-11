@@ -1,4 +1,9 @@
-import { CONSENT_STORAGE_KEY, CONSENT_TERMS_VERSION } from '@/lib/consent/constants';
+import {
+  CONSENT_STORAGE_KEY_LEGACY,
+  CONSENT_TERMS_VERSION,
+  consentStorageKey,
+  type ConsentType,
+} from '@/lib/consent/constants';
 
 export type DataCaptureConsentRecord = {
   accepted: boolean;
@@ -6,37 +11,66 @@ export type DataCaptureConsentRecord = {
   acceptedAt: string;
 };
 
-export function readDataCaptureConsent(): DataCaptureConsentRecord | null {
-  if (typeof window === 'undefined') {
+function parseConsentRecord(raw: string | null): DataCaptureConsentRecord | null {
+  if (!raw) {
     return null;
   }
 
   try {
-    const raw = window.localStorage.getItem(CONSENT_STORAGE_KEY);
-    if (!raw) {
-      return null;
-    }
     return JSON.parse(raw) as DataCaptureConsentRecord;
   } catch {
     return null;
   }
 }
 
+export function readDataCaptureConsent(consentType: ConsentType): DataCaptureConsentRecord | null {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  const typed = parseConsentRecord(window.localStorage.getItem(consentStorageKey(consentType)));
+  if (typed) {
+    return typed;
+  }
+
+  // Walkthrough previously used a single shared key before consent types split.
+  if (consentType === 'walkthrough') {
+    return parseConsentRecord(window.localStorage.getItem(CONSENT_STORAGE_KEY_LEGACY));
+  }
+
+  return null;
+}
+
 export function isConsentCurrent(consent: DataCaptureConsentRecord | null): boolean {
   return consent?.accepted === true && consent.version === CONSENT_TERMS_VERSION;
 }
 
-export function needsDataCaptureConsent(): boolean {
-  return !isConsentCurrent(readDataCaptureConsent());
+export function needsDataCaptureConsent(consentType: ConsentType): boolean {
+  return !isConsentCurrent(readDataCaptureConsent(consentType));
 }
 
-export function acceptDataCaptureConsent(): DataCaptureConsentRecord {
-  const record: DataCaptureConsentRecord = {
+export function writeDataCaptureConsent(
+  consentType: ConsentType,
+  record: DataCaptureConsentRecord,
+): DataCaptureConsentRecord {
+  window.localStorage.setItem(consentStorageKey(consentType), JSON.stringify(record));
+  return record;
+}
+
+export function clearDataCaptureConsent(consentType: ConsentType): void {
+  window.localStorage.removeItem(consentStorageKey(consentType));
+  if (consentType === 'walkthrough') {
+    window.localStorage.removeItem(CONSENT_STORAGE_KEY_LEGACY);
+  }
+}
+
+export function acceptDataCaptureConsent(
+  consentType: ConsentType,
+  acceptedAt: string = new Date().toISOString(),
+): DataCaptureConsentRecord {
+  return writeDataCaptureConsent(consentType, {
     accepted: true,
     version: CONSENT_TERMS_VERSION,
-    acceptedAt: new Date().toISOString(),
-  };
-
-  window.localStorage.setItem(CONSENT_STORAGE_KEY, JSON.stringify(record));
-  return record;
+    acceptedAt,
+  });
 }
