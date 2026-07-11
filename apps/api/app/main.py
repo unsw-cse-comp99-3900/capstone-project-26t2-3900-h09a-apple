@@ -37,7 +37,9 @@ from app.sop_schema import (
 from app.sop_service import (
     WalkthroughDataError,
     build_walkthrough_payload,
+    resolve_step_screenshot_highlight,
     resolve_step_screenshot_url,
+    resolve_step_time_estimate,
 )
 from app.storage import ObjectStorage, get_storage
 
@@ -260,18 +262,41 @@ def get_sop(
     if sop is None:
         raise HTTPException(status_code=404, detail="SOP not found")
 
-    steps = [
-        SopStepResponse(
-            **step,
-            screenshot_url=resolve_step_screenshot_url(
-                step["source_event_ids"],
-                db,
-                sop.session_id,
-                current_user.tenant_id,
-            ),
+    steps = []
+
+    for step in sop.steps:
+        source_event_ids = step.get("source_event_ids", [])
+        time_estimate = resolve_step_time_estimate(
+            source_event_ids,
+            db,
+            sop.session_id,
+            current_user.tenant_id,
         )
-        for step in sop.steps
-    ]
+
+        raw_time_estimate = step.get("time_estimate")
+
+        if time_estimate is None:
+            try:
+                time_estimate = int(raw_time_estimate) if raw_time_estimate is not None else None
+            except (TypeError, ValueError):
+                time_estimate = None
+
+        steps.append(
+            SopStepResponse(
+                **{**step, "time_estimate": time_estimate},
+                screenshot_url=resolve_step_screenshot_url(
+                    source_event_ids,
+                    db,
+                    sop.session_id,
+                    current_user.tenant_id,
+                ),
+                screenshot_highlight=resolve_step_screenshot_highlight(
+                    source_event_ids,
+                    db,
+                    sop.session_id,
+                ),
+            )
+        )
 
     warnings = [SopWarning.model_validate(warning) for warning in sop.warnings]
 

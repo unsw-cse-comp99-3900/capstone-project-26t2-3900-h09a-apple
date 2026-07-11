@@ -1,7 +1,34 @@
 from types import SimpleNamespace
 
 from app.mock_sop_generator import MockSopGenerator
+from app.models import EventType
 from app.sop_schema import SopPayload
+
+
+def test_mock_sop_generator_returns_payload_for_session():
+    session = SimpleNamespace(
+        workflow_name="Login Flow",
+        events=[
+            SimpleNamespace(
+                id=1,
+                seq=0,
+                type=EventType.navigation,
+                url="https://example.com/login",
+                target_label=None,
+                target_selector=None,
+                value=None,
+                attrs={"page_title": "Login"},
+            )
+        ],
+    )
+
+    generator = MockSopGenerator()
+    payload = generator.generate(session)
+
+    assert payload.title == "Login Flow"
+    assert len(payload.steps) == 1
+    assert payload.steps[0].order == 1
+    assert payload.steps[0].time_estimate == 5
 
 
 def test_generate_single_step():

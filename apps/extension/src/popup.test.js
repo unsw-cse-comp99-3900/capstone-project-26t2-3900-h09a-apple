@@ -3,6 +3,8 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { JSDOM } from 'jsdom';
 import { CONSENT_STORAGE_KEY, CONSENT_TERMS_VERSION } from './consent.js';
+import 'fake-indexeddb/auto';
+import { saveSessionPayload } from './session-store.js';
 import { AUTH_STORAGE_KEYS } from './auth.js';
 
 const acceptedConsent = {
@@ -29,6 +31,8 @@ function setupPopupDom(recordingState = { status: 'ready', workflowName: '' }) {
     ...authenticatedStorage,
   };
   let storageChangeCallback = () => {};
+
+  let runtimeMessageCallback = () => {};
 
   globalThis.window = dom.window;
   globalThis.document = dom.window.document;
@@ -64,6 +68,13 @@ function setupPopupDom(recordingState = { status: 'ready', workflowName: '' }) {
         },
       },
     },
+    runtime: {
+      onMessage: {
+        addListener: (callback) => {
+          runtimeMessageCallback = callback;
+        },
+      },
+    },
     tabs: {
       create: (options) => openedTabs.push(options),
     },
@@ -75,13 +86,29 @@ function setupPopupDom(recordingState = { status: 'ready', workflowName: '' }) {
     getRecordingState() {
       return persistedRecordingState;
     },
-    markSessionPayloadReady(sessionId) {
+    async markSessionPayloadReady(sessionId) {
       const storageKey = `session_${sessionId}`;
       localStorageValues[storageKey] = { client_session_id: sessionId };
+
+      await saveSessionPayload({
+        client_session_id: sessionId,
+        workflow_name: 'Refund workflow',
+        started_at: new Date(1000).toISOString(),
+        stopped_at: new Date(2000).toISOString(),
+        event_count: 0,
+        events: [],
+        screenshots: [],
+      });
+
       storageChangeCallback(
         { [storageKey]: { newValue: localStorageValues[storageKey] } },
         'local',
       );
+
+      runtimeMessageCallback({
+        type: 'SESSION_PAYLOAD_READY',
+        sessionId,
+      });
     },
   };
 }
@@ -126,6 +153,8 @@ test('review session button is only available after recording is completed', asy
 
   // Completed: Review becomes visible, but it stays disabled until the assembled payload exists.
   stopButton.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+  await flushPromises();
+
   assert.equal(statusText.textContent, 'Completed');
   assert.equal(reviewButton.hidden, false);
   assert.equal(reviewButton.disabled, true);
@@ -135,7 +164,8 @@ test('review session button is only available after recording is completed', asy
 
   // Once the service worker writes session_<id>, Review becomes enabled.
   const sessionId = getRecordingState().client_session_id;
-  markSessionPayloadReady(sessionId);
+  await markSessionPayloadReady(sessionId);
+  await flushPromises();
   assert.equal(reviewButton.disabled, false);
 
   // Clicking Review opens the session review route with the generated session id
