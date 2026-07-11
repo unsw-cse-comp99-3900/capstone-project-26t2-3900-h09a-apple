@@ -12,7 +12,7 @@ from app.auth.deps import get_current_user
 from app.database import get_db
 from app.llm_provider import LlmProviderResult
 from app.main import app
-from app.models import UserRole
+from app.models import SopStatus, UserRole
 from app.sop_schema import SopPayload, SopStep
 from app.storage import get_storage
 
@@ -554,6 +554,7 @@ def test_get_sop_returns_200():
         title="Login Flow",
         version=1,
         generated_at=datetime.now(UTC),
+        status=SopStatus.draft,
         steps=[
             {
                 "order": 1,
@@ -626,6 +627,7 @@ def test_get_sop_returns_signed_screenshot_url():
         title="Login Flow",
         version=1,
         generated_at=datetime.now(UTC),
+        status=SopStatus.draft,
         steps=[
             {
                 "order": 1,

@@ -43,6 +43,7 @@ class LoginResponse(BaseModel):
     refresh_token: str
     token_type: str = "bearer"
     expires_in: int
+    user_id: UUID
 
 
 class RefreshRequest(BaseModel):
