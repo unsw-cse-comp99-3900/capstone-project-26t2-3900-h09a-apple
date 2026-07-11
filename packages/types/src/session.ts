@@ -238,8 +238,12 @@ export interface SopLibraryItem {
   title: string;
   workflow_category?: string | null;
   step_count: number;
+
   /** ISO-8601. */
   published_at?: string | null;
+
+  /** Current SOP status (draft, needs_review, approved, published). */
+  status: string;
 }
 
 /**

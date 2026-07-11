@@ -66,6 +66,7 @@ class SopLibraryItem(BaseModel):
     workflow_category: str | None = None
     step_count: int
     published_at: datetime | None = None
+    status: str
 
 
 class SopListResponse(BaseModel):

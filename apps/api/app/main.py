@@ -436,15 +436,41 @@ def publish_sop(
 )
 def list_sops(
     status_filter: models.SopStatus | None = Query(None, alias="status"),
+    mine: bool = Query(False),
     db: DBSession = Depends(get_db),
     current_user: User = Depends(require_role(UserRole.employee)),
 ):
-    query = filter_by_tenant(db.query(models.Sop), models.Sop, current_user.tenant_id)
+    query = filter_by_tenant(
+        db.query(models.Sop),
+        models.Sop,
+        current_user.tenant_id,
+    )
 
-    sop_status = (status_filter or models.SopStatus.published).value
-    query = query.filter(models.Sop.status == sop_status)
+    if mine:
+        # Only show SOPs created from this user's recordings.
+        query = (
+            query.join(models.Session)
+            .filter(models.Session.recorded_by == current_user.id)
+        )
 
-    sops = query.all()
+        # By default, "My Drafts" excludes published SOPs.
+        if status_filter is None:
+            query = query.filter(
+                models.Sop.status != models.SopStatus.published.value
+            )
+        else:
+            query = query.filter(
+                models.Sop.status == status_filter.value
+            )
+    else:
+        # Existing behaviour: library shows published SOPs unless another status is requested.
+        sop_status = (status_filter or models.SopStatus.published).value
+        query = query.filter(models.Sop.status == sop_status)
+
+    sops = (
+        query.order_by(models.Sop.generated_at.desc())
+        .all()
+    )
 
     return SopListResponse(
         sops=[
@@ -454,6 +480,7 @@ def list_sops(
                 workflow_category=None,
                 step_count=len(sop.steps),
                 published_at=sop.published_at,
+                status=sop.status,
             )
             for sop in sops
         ]

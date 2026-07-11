@@ -116,6 +116,46 @@
   color: var(--slate);
 }
 
+/* --- Tabs --- */
+
+.tabs {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+}
+
+.tab,
+.activeTab {
+  border: 1px solid var(--slate-border);
+  border-radius: 999px;
+  padding: 0.55rem 1.2rem;
+
+  background: var(--card-bg);
+
+  color: var(--slate);
+
+  font-size: 0.9rem;
+  font-weight: 600;
+
+  cursor: pointer;
+
+  transition:
+    background-color 0.15s,
+    border-color 0.15s,
+    color 0.15s;
+}
+
+.tab:hover {
+  border-color: var(--indigo-border);
+  color: var(--indigo);
+}
+
+.activeTab {
+  background: var(--indigo);
+  border-color: var(--indigo);
+  color: white;
+}
+
 /* --- Card grid --- */
 
 .grid {
@@ -231,6 +271,50 @@
 .stampDate {
   font-weight: 500;
   color: #15803d;
+}
+
+.pendingStamp {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.65rem;
+  background: #fefce8;
+  border: 1px solid #fde68a;
+  border-radius: 999px;
+  color: #a16207;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.pendingStamp::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ca8a04;
+  flex-shrink: 0;
+}
+
+.approvedStamp {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.65rem;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  color: #1d4ed8;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.approvedStamp::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #2563eb;
+  flex-shrink: 0;
 }
 
 /* --- Empty state --- */

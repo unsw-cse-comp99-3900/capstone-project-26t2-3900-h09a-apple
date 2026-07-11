@@ -145,6 +145,16 @@ export async function getPublishedSops(): Promise<SopListResponse> {
   return res.json();
 }
 
+export async function getMyDrafts(): Promise<SopListResponse> {
+  const res = await authedFetch('/api/v1/sops?mine=true');
+
+  if (!res.ok) {
+    throw new ApiError(await errorMessage(res, 'Failed to load draft SOPs'), res.status);
+  }
+
+  return res.json();
+}
+
 export async function getConsentStatus(consentType: ConsentType): Promise<ConsentStatusResponse> {
   const res = await authedFetch(
     `/api/v1/consent/status?consent_type=${encodeURIComponent(consentType)}`,
