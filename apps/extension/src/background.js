@@ -1,4 +1,5 @@
 import { assembleSession } from './session-assembly.js';
+import { getSessionPayload, saveSessionPayload } from './session-store.js';
 import { clearStoredAuthTokens, redeemHandoffCode } from './auth.js';
 import { clearDataCaptureConsent } from './consent.js';
 import { handleExternalAuthMessage } from './external-auth.js';
@@ -121,14 +122,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === 'GET_SESSION_PAYLOAD') {
-    const storageKey = `session_${message.sessionId}`;
-
-    chrome.storage.local
-      .get([storageKey])
-      .then((result) => {
+    getSessionPayload(message.sessionId)
+      .then((session) => {
         sendResponse({
           ok: true,
-          session: result[storageKey] || null,
+          session: session || null,
         });
       })
       .catch((error) => {
@@ -201,11 +199,19 @@ chrome.storage.onChanged.addListener((changes, area) => {
             stoppedAt: Date.now(),
             screenshots: result.screenshots,
           });
-          const storageKey = `session_${sessionPayload.client_session_id}`;
 
-          await chrome.storage.local.set({ [storageKey]: sessionPayload });
+          await saveSessionPayload(sessionPayload);
           await resetSessionBuffers();
-          console.log('Structured session assembled and saved locally:', storageKey);
+          chrome.runtime
+            .sendMessage({
+              type: 'SESSION_PAYLOAD_READY',
+              sessionId: sessionPayload.client_session_id,
+            })
+            .catch(() => {});
+          console.log(
+            'Structured session assembled and saved to IndexedDB:',
+            sessionPayload.client_session_id,
+          );
         })
         .catch((err) => console.error('Failed to assemble session:', err));
     }

@@ -16,6 +16,7 @@ import {
   saveDataCaptureConsent,
   syncConsentFromServer,
 } from './consent.js';
+import { hasSessionPayload } from './session-store.js';
 
 const authSection = document.querySelector('#authSection');
 const recordingSection = document.querySelector('#recordingSection');
@@ -109,6 +110,12 @@ chrome.storage?.onChanged.addListener((changes, area) => {
     render();
   }
 
+  if (area === 'local' && state.client_session_id) {
+    if (changes.recordingState?.newValue?.status === RecordingStatus.COMPLETED) {
+      checkReviewSessionReady();
+    }
+  }
+
   if (area === 'local') {
     if (
       changes[AUTH_STORAGE_KEYS.accessToken] ||
@@ -117,30 +124,31 @@ chrome.storage?.onChanged.addListener((changes, area) => {
     ) {
       void refreshAuthState();
     }
-
-    if (state.client_session_id) {
-      const storageKey = `session_${state.client_session_id}`;
-
-      if (changes[storageKey]?.newValue) {
-        reviewSessionReady = true;
-        render();
-      }
-    }
   }
 });
 
-function checkReviewSessionReady() {
+chrome.runtime?.onMessage?.addListener((message) => {
+  if (message.type === 'SESSION_PAYLOAD_READY' && message.sessionId === state.client_session_id) {
+    reviewSessionReady = true;
+    render();
+  }
+});
+
+async function checkReviewSessionReady() {
   if (state.status !== RecordingStatus.COMPLETED || !state.client_session_id) {
     reviewSessionReady = false;
     render();
     return;
   }
 
-  const storageKey = `session_${state.client_session_id}`;
-  chrome.storage?.local.get([storageKey], (result) => {
-    reviewSessionReady = Boolean(result[storageKey]);
+  try {
+    reviewSessionReady = await hasSessionPayload(state.client_session_id);
     render();
-  });
+  } catch (error) {
+    console.warn('Failed to check session payload readiness:', error);
+    reviewSessionReady = false;
+    render();
+  }
 }
 
 function openReviewPage() {

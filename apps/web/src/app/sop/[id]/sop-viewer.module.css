@@ -6,6 +6,14 @@
   color: #17213d;
 }
 
+.timeEstimate {
+  width: fit-content;
+  margin: 10px 0 0;
+  color: #5f6f95;
+  font-size: 14px;
+  font-weight: 700;
+}
+
 .hero {
   display: flex;
   align-items: flex-start;
@@ -263,7 +271,7 @@
   display: block;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: fill;
 }
 
 .screenshotPlaceholder {
@@ -319,4 +327,23 @@
   .stepContent {
     grid-template-columns: 1fr;
   }
+}
+
+.screenshotImageWrap {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  min-height: 190px;
+  overflow: hidden;
+}
+
+.screenshotHighlight {
+  position: absolute;
+  z-index: 1;
+  border: 3px solid #756eff;
+  border-radius: 10px;
+  box-shadow:
+    0 0 0 4px rgb(117 110 255 / 18%),
+    0 12px 28px rgb(62 72 162 / 22%);
+  pointer-events: none;
 }

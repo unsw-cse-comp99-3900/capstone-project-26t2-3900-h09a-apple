@@ -601,6 +601,17 @@ def test_get_sop_returns_signed_screenshot_url():
         seq=1,
         session_id=WALKTHROUGH_SESSION_ID,
         screenshot_id=UUID("22222222-2222-2222-2222-222222222222"),
+        timestamp_ms=1_000,
+        attrs={
+            "target_rect": {
+                "x": 10,
+                "y": 20,
+                "width": 120,
+                "height": 40,
+                "viewport_width": 1440,
+                "viewport_height": 900,
+            },
+        },
     )
 
     fake_screenshot = SimpleNamespace(
@@ -621,6 +632,7 @@ def test_get_sop_returns_signed_screenshot_url():
                 "title": "Login",
                 "instruction": "Click Login",
                 "source_event_ids": ["1"],
+                "time_estimate": 1_624,
             }
         ],
         warnings=[],
@@ -642,7 +654,15 @@ def test_get_sop_returns_signed_screenshot_url():
         body = response.json()
 
         assert body["steps"][0]["screenshot_url"] == "https://signed.example/screenshots/login.png"
-
+        assert body["steps"][0]["screenshot_highlight"] == {
+            "x": 10,
+            "y": 20,
+            "width": 120,
+            "height": 40,
+            "viewport_width": 1440,
+            "viewport_height": 900,
+        }
+        assert body["steps"][0]["time_estimate"] == 5
     finally:
         app.dependency_overrides[get_db] = override_get_db
 
@@ -987,6 +1007,7 @@ def test_get_sop_walkthrough_returns_payload_for_single_step():
         target_selector="#login-button",
         attrs={"xpath": "/html/body/button[1]"},
         screenshot_id=UUID("22222222-2222-2222-2222-222222222222"),
+        timestamp_ms=1_000,
     )
     fake_screenshot = SimpleNamespace(
         id=UUID("22222222-2222-2222-2222-222222222222"),
@@ -1023,6 +1044,8 @@ def test_get_sop_walkthrough_returns_payload_for_single_step():
             "css_selector": "#login-button",
             "xpath": "/html/body/button[1]",
             "screenshot_url": "https://signed.example/screenshots/login.png",
+            "time_estimate": 5,
+            "screenshot_highlight": None,
         }
     finally:
         app.dependency_overrides[get_db] = override_get_db

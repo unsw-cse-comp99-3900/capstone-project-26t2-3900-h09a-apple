@@ -257,6 +257,7 @@ document.addEventListener(
         url: window.location.href,
         title: document.title,
         timestamp: Date.now(),
+        target_rect: getTargetRect(interactiveTarget),
       };
       sendEvent('CLICK', payload);
     }
@@ -342,4 +343,25 @@ if (document.readyState === 'complete' || document.readyState === 'interactive')
   recordNavigation();
 } else {
   window.addEventListener('load', recordNavigation, { once: true });
+}
+
+function getTargetRect(element) {
+  if (!element || typeof element.getBoundingClientRect !== 'function') {
+    return null;
+  }
+
+  const rect = element.getBoundingClientRect();
+
+  if (rect.width <= 0 || rect.height <= 0) {
+    return null;
+  }
+
+  return {
+    x: rect.x,
+    y: rect.y,
+    width: rect.width,
+    height: rect.height,
+    viewport_width: window.innerWidth,
+    viewport_height: window.innerHeight,
+  };
 }
