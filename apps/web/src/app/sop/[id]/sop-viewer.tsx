@@ -239,7 +239,7 @@ export function SopViewer({ sop }: SopViewerProps) {
           <div className={styles.pendingReviewIcon}>✓</div>
 
           <div>
-            <h3>Submitted for review</h3>
+            <h3>Pending review</h3>
             <p>
               Your SOP has been submitted successfully and is awaiting reviewer approval.
               It will appear in the SOP Library once approved and published.
