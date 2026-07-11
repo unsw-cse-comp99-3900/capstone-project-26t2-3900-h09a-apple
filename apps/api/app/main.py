@@ -448,29 +448,19 @@ def list_sops(
 
     if mine:
         # Only show SOPs created from this user's recordings.
-        query = (
-            query.join(models.Session)
-            .filter(models.Session.recorded_by == current_user.id)
-        )
+        query = query.join(models.Session).filter(models.Session.recorded_by == current_user.id)
 
         # By default, "My Drafts" excludes published SOPs.
         if status_filter is None:
-            query = query.filter(
-                models.Sop.status != models.SopStatus.published.value
-            )
+            query = query.filter(models.Sop.status != models.SopStatus.published.value)
         else:
-            query = query.filter(
-                models.Sop.status == status_filter.value
-            )
+            query = query.filter(models.Sop.status == status_filter.value)
     else:
         # Existing behaviour: library shows published SOPs unless another status is requested.
         sop_status = (status_filter or models.SopStatus.published).value
         query = query.filter(models.Sop.status == sop_status)
 
-    sops = (
-        query.order_by(models.Sop.generated_at.desc())
-        .all()
-    )
+    sops = query.order_by(models.Sop.generated_at.desc()).all()
 
     return SopListResponse(
         sops=[
