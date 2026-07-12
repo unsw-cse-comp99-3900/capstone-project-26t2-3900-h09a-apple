@@ -47,7 +47,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16
+        image: pgvector/pgvector:pg15
         env:
           POSTGRES_USER: worktrace
           POSTGRES_PASSWORD: secret
