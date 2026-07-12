@@ -8,7 +8,7 @@ type Props = {
 
 const MAX_DOTS = 10;
 
-// Display a published SOP summary card styled as a catalog index card.
+// Display an SOP summary card for both published procedures and the user's draft SOPs.
 export default function SopCard({ sop }: Props) {
   const publishedDate = sop.published_at
     ? new Date(sop.published_at).toLocaleDateString('en-US', {
@@ -20,6 +20,9 @@ export default function SopCard({ sop }: Props) {
 
   const dotCount = Math.min(sop.step_count, MAX_DOTS);
   const overflow = sop.step_count - dotCount;
+
+  const statusLabel =
+    sop.status === 'published' ? null : sop.status === 'approved' ? 'Approved' : 'Pending Review';
 
   return (
     <Link href={`/sop/${sop.id}`} className={styles.card}>
@@ -43,11 +46,17 @@ export default function SopCard({ sop }: Props) {
           {overflow > 0 && <span className={styles.dotOverflow}>+{overflow}</span>}
         </div>
 
-        {publishedDate && (
-          <span className={styles.stamp}>
-            Verified
-            <span className={styles.stampDate}>{publishedDate}</span>
+        {statusLabel ? (
+          <span className={sop.status === 'approved' ? styles.approvedStamp : styles.pendingStamp}>
+            {statusLabel}
           </span>
+        ) : (
+          publishedDate && (
+            <span className={styles.stamp}>
+              Verified
+              <span className={styles.stampDate}>{publishedDate}</span>
+            </span>
+          )
         )}
       </div>
     </Link>

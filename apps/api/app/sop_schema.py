@@ -47,6 +47,7 @@ class SopDetailPayload(BaseModel):
     summary: str
     version: int
     generated_at: datetime
+    status: str
 
     steps: list[SopStepResponse]
     warnings: list[SopWarning] = Field(default_factory=list)
@@ -65,6 +66,7 @@ class SopLibraryItem(BaseModel):
     workflow_category: str | None = None
     step_count: int
     published_at: datetime | None = None
+    status: str
 
 
 class SopListResponse(BaseModel):

@@ -8,7 +8,7 @@ import {
   stopRecording,
 } from './recording-state.js';
 import { WEB_APP_BASE_URL } from './config.js';
-import { AUTH_STORAGE_KEYS, hasStoredAuthTokens } from './auth.js';
+import { AUTH_STORAGE_KEYS, getStoredAuthTokens } from './auth.js';
 import {
   clearDataCaptureConsent,
   isConsentCurrent,
@@ -47,6 +47,7 @@ let reviewSessionReady = false;
 let consentRecord = null;
 let isAuthenticated = false;
 let authReady = false;
+let currentUserId = null;
 let sessionStorageError = null;
 
 function getLocalStorage(keys) {
@@ -91,20 +92,31 @@ async function syncConsentForCurrentUser({ renderAfter = true } = {}) {
 }
 
 async function refreshAuthState({ renderAfter = true } = {}) {
+  const tokens = await getStoredAuthTokens();
   const wasAuthenticated = isAuthenticated;
-  isAuthenticated = await hasStoredAuthTokens();
+  const previousUserId = currentUserId;
+  isAuthenticated = Boolean(tokens.accessToken && tokens.refreshToken);
+  currentUserId = tokens.userId ?? null;
 
   if (!isAuthenticated) {
     // Drop cached consent on logout so the next account cannot reuse it.
     await clearLocalConsent();
+    consentRecord = null;
     if (renderAfter) {
       render();
     }
     return;
   }
 
-  // Account switch / fresh login: do not trust the previous user's local cache
-  // while the server status request is in flight.
+  // Authentication changed to a different user.
+  // Do not keep the previous user's cached consent while waiting for
+  // the backend consent status to be refreshed.
+  if (previousUserId !== currentUserId) {
+    await clearLocalConsent();
+    consentRecord = null;
+  }
+
+  // Fresh login with the same user after the popup starts.
   if (!wasAuthenticated) {
     consentRecord = null;
   }
@@ -139,7 +151,8 @@ chrome.storage?.onChanged.addListener((changes, area) => {
     if (
       changes[AUTH_STORAGE_KEYS.accessToken] ||
       changes[AUTH_STORAGE_KEYS.refreshToken] ||
-      changes[AUTH_STORAGE_KEYS.expiresAt]
+      changes[AUTH_STORAGE_KEYS.expiresAt] ||
+      changes[AUTH_STORAGE_KEYS.userId]
     ) {
       void refreshAuthState();
     }

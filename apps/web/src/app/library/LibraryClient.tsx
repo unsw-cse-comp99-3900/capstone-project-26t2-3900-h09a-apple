@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import type { SopLibraryItem } from '@h09a/types';
 
-import { getPublishedSops } from '@/lib/api';
+import { getMyDrafts, getPublishedSops } from '@/lib/api';
 
 import SopCard from './SopCard';
 import EmptyState from './EmptyState';
@@ -19,24 +19,53 @@ export default function LibraryClient() {
 
   const [search, setSearch] = useState('');
 
-  const [sops, setSops] = useState<SopLibraryItem[]>([]);
+  const [publishedSops, setPublishedSops] = useState<SopLibraryItem[]>([]);
+  const [draftSops, setDraftSops] = useState<SopLibraryItem[]>([]);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [tab, setTab] = useState<'published' | 'drafts'>('published');
+
   useEffect(() => {
-    async function load() {
+    async function loadPublished() {
       try {
         const data = await getPublishedSops();
-        setSops(data.sops);
+        setPublishedSops(data.sops);
       } catch {
         setError('Failed to load SOP library.');
-      } finally {
-        setLoading(false);
+      }
+    }
+
+    async function loadDrafts() {
+      try {
+        const data = await getMyDrafts();
+        setDraftSops(data.sops);
+      } catch {
+        setError('Failed to load your draft SOPs.');
+      }
+    }
+
+    async function load() {
+      setError(null);
+
+      if (tab === 'published') {
+        if (publishedSops.length === 0) {
+          setLoading(true);
+          await loadPublished();
+          setLoading(false);
+        }
+      } else {
+        if (draftSops.length === 0) {
+          setLoading(true);
+          await loadDrafts();
+          setLoading(false);
+        }
       }
     }
 
     void load();
-  }, []);
+  }, [tab, publishedSops.length, draftSops.length]);
 
   useEffect(() => {
     const params = new URLSearchParams();
@@ -51,6 +80,8 @@ export default function LibraryClient() {
       scroll: false,
     });
   }, [search, pathname, router]);
+
+  const sops = tab === 'published' ? publishedSops : draftSops;
 
   const filtered = useMemo(() => {
     const keyword = search.trim().toLowerCase();
@@ -103,6 +134,24 @@ export default function LibraryClient() {
         </div>
       </div>
 
+      <div className={styles.tabs}>
+        <button
+          type="button"
+          className={tab === 'published' ? styles.activeTab : styles.tab}
+          onClick={() => setTab('published')}
+        >
+          Published
+        </button>
+
+        <button
+          type="button"
+          className={tab === 'drafts' ? styles.activeTab : styles.tab}
+          onClick={() => setTab('drafts')}
+        >
+          My Drafts
+        </button>
+      </div>
+
       <div className={styles.drawer}>
         <label htmlFor="search" className={styles.drawerLabel}>
           Find a procedure
@@ -118,16 +167,28 @@ export default function LibraryClient() {
         />
 
         <p className={styles.count}>
-          Showing {filtered.length} of {sops.length} procedures
+          Showing {filtered.length} of {sops.length}{' '}
+          {tab === 'published' ? 'published procedures' : 'draft procedures'}
         </p>
       </div>
 
       {sops.length === 0 ? (
-        <EmptyState />
+        tab === 'published' ? (
+          <EmptyState />
+        ) : (
+          <EmptyState
+            title="No draft SOPs yet."
+            description="Your submitted SOPs will appear here until they are published."
+          />
+        )
       ) : filtered.length === 0 ? (
         <EmptyState
           title="No procedures match your search."
-          description="Try a different keyword or clear the search to see all published procedures."
+          description={
+            tab === 'published'
+              ? 'Try a different keyword or clear the search to see all published procedures.'
+              : 'Try a different keyword or clear the search to see all of your draft SOPs.'
+          }
         />
       ) : (
         <div className={styles.grid}>

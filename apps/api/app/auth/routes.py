@@ -116,6 +116,7 @@ def login(payload: LoginRequest, db: DB_DEPENDENCY) -> LoginResponse:
         access_token=generate_token(user.id, role, user.tenant_id),
         refresh_token=generate_refresh_token(user.id, role, user.tenant_id),
         expires_in=ACCESS_TOKEN_EXPIRE_SECONDS,
+        user_id=user.id,
     )
 
 
@@ -163,6 +164,7 @@ def redeem_extension_handoff(
         access_token=generate_token(user.id, role, user.tenant_id),
         refresh_token=generate_refresh_token(user.id, role, user.tenant_id),
         expires_in=ACCESS_TOKEN_EXPIRE_SECONDS,
+        user_id=user.id,
     )
 
 

@@ -4,6 +4,7 @@ export const AUTH_STORAGE_KEYS = {
   accessToken: 'authAccessToken',
   refreshToken: 'authRefreshToken',
   expiresAt: 'authExpiresAt',
+  userId: 'authUserId',
 };
 
 function storageGet(keys) {
@@ -30,15 +31,17 @@ export async function getStoredAuthTokens() {
     accessToken: result[AUTH_STORAGE_KEYS.accessToken] ?? null,
     refreshToken: result[AUTH_STORAGE_KEYS.refreshToken] ?? null,
     expiresAt: result[AUTH_STORAGE_KEYS.expiresAt] ?? null,
+    userId: result[AUTH_STORAGE_KEYS.userId] ?? null,
   };
 }
 
-export async function setStoredAuthTokens(accessToken, refreshToken, expiresIn) {
+export async function setStoredAuthTokens(accessToken, refreshToken, expiresIn, userId) {
   const expiresAt = Date.now() + expiresIn * 1000;
   await storageSet({
     [AUTH_STORAGE_KEYS.accessToken]: accessToken,
     [AUTH_STORAGE_KEYS.refreshToken]: refreshToken,
     [AUTH_STORAGE_KEYS.expiresAt]: expiresAt,
+    [AUTH_STORAGE_KEYS.userId]: userId,
   });
 }
 
@@ -68,7 +71,12 @@ export async function redeemHandoffCode(code) {
   }
 
   const payload = await response.json();
-  await setStoredAuthTokens(payload.access_token, payload.refresh_token, payload.expires_in);
+  await setStoredAuthTokens(
+    payload.access_token,
+    payload.refresh_token,
+    payload.expires_in,
+    payload.user_id,
+  );
   return payload;
 }
 
