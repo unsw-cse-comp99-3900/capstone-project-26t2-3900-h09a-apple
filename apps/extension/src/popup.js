@@ -297,8 +297,7 @@ function render() {
     stopWalkthroughButton.disabled = walkthroughBusy || !canStopWalkthrough(walkthroughState);
   }
   if (walkthroughStatusText) {
-    walkthroughStatusText.textContent =
-      walkthroughStatusLabels[walkthroughState.status] ?? 'Idle';
+    walkthroughStatusText.textContent = walkthroughStatusLabels[walkthroughState.status] ?? 'Idle';
   }
   if (walkthroughBadge) {
     walkthroughBadge.className = `status-badge status-${

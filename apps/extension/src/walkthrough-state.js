@@ -77,17 +77,13 @@ export function canGoPrevious(state) {
 
 export function canGoNext(state, stepCount) {
   return (
-    state.status === WalkthroughStatus.PLAYING &&
-    stepCount > 0 &&
-    state.stepIndex < stepCount - 1
+    state.status === WalkthroughStatus.PLAYING && stepCount > 0 && state.stepIndex < stepCount - 1
   );
 }
 
 export function isLastStep(state, stepCount) {
   return (
-    state.status === WalkthroughStatus.PLAYING &&
-    stepCount > 0 &&
-    state.stepIndex >= stepCount - 1
+    state.status === WalkthroughStatus.PLAYING && stepCount > 0 && state.stepIndex >= stepCount - 1
   );
 }
 

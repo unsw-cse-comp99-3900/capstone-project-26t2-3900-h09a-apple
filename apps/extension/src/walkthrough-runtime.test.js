@@ -3,10 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { JSDOM } from 'jsdom';
 
-function loadRuntime({
-  walkthroughState = null,
-  walkthroughPayload = null,
-} = {}) {
+function loadRuntime({ walkthroughState = null, walkthroughPayload = null } = {}) {
   const dom = new JSDOM(
     `
     <!DOCTYPE html>
@@ -106,7 +103,10 @@ test('resolveTarget prefers css_selector then xpath then fallback', async () => 
   assert.equal(fallback.element, null);
 
   assert.equal(api.resolveAnchorMode({ css_selector: '#x' }), 'element');
-  assert.equal(api.resolveAnchorMode({ screenshot_url: 'https://example.com/a.png' }), 'screenshot');
+  assert.equal(
+    api.resolveAnchorMode({ screenshot_url: 'https://example.com/a.png' }),
+    'screenshot',
+  );
   assert.equal(api.resolveAnchorMode({ instruction: 'Go' }), 'none');
   assert.equal(api.resolveAnchorMode({ anchor_mode: 'none', css_selector: '#x' }), 'none');
 });
@@ -275,7 +275,10 @@ test('finish clears session walkthrough state and tears down overlay', async () 
   host.shadowRoot.querySelector('[data-action="finish"]').click();
   await flush();
 
-  assert.equal(sentMessages.some((m) => m.type === 'WALKTHROUGH_FINISHED'), true);
+  assert.equal(
+    sentMessages.some((m) => m.type === 'WALKTHROUGH_FINISHED'),
+    true,
+  );
   assert.equal(sessionValues().walkthroughState.status, 'idle');
   assert.equal(sessionValues().walkthroughPayload, null);
   assert.equal(document.getElementById('worktrace-walkthrough-host'), null);
