@@ -91,7 +91,6 @@ async function syncConsentForCurrentUser({ renderAfter = true } = {}) {
   }
 }
 
-
 async function refreshAuthState({ renderAfter = true } = {}) {
   const tokens = await getStoredAuthTokens();
   const wasAuthenticated = isAuthenticated;
