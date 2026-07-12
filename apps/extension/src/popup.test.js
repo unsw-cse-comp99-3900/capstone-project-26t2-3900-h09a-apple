@@ -12,6 +12,7 @@ const acceptedConsent = {
   version: CONSENT_TERMS_VERSION,
   acceptedAt: '2026-07-01T00:00:00.000Z',
 };
+const popupSource = readFileSync(new URL('./popup.js', import.meta.url), 'utf-8');
 
 const authenticatedStorage = {
   [AUTH_STORAGE_KEYS.accessToken]: 'access-token',
@@ -404,4 +405,17 @@ test('shows sign-in state when extension auth tokens are missing', async () => {
   signInButton.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
   assert.equal(openedTabs.length, 1);
   assert.match(openedTabs[0].url, /\/login$/);
+});
+
+test('initPopup awaits recording state and event buffer before first render', () => {
+  assert.match(popupSource, /refreshAuthState\(\{ renderAfter: false \}\)/);
+  assert.match(popupSource, /Promise\.all\(\[/);
+  assert.match(popupSource, /getLocalStorage\(\['recordingState', 'sessionStorageError'\]\)/);
+  assert.match(popupSource, /getSessionStorage\(\['eventBuffer'\]\)/);
+});
+
+test('popup exposes local session storage errors instead of hanging silently', () => {
+  assert.match(popupSource, /SESSION_PAYLOAD_ERROR/);
+  assert.match(popupSource, /sessionStorageError/);
+  assert.match(popupSource, /Could not read captured session locally/);
 });
