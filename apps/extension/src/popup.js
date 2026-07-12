@@ -79,12 +79,29 @@ async function syncConsentForCurrentUser() {
 async function refreshAuthState() {
   const tokens = await getStoredAuthTokens();
   const wasAuthenticated = isAuthenticated;
+  const previousUserId = currentUserId;
   isAuthenticated = Boolean(tokens.accessToken && tokens.refreshToken);
+  currentUserId = tokens.userId ?? null;
 
   if (!isAuthenticated) {
+    // Drop cached consent on logout so the next account cannot reuse it.
     await clearLocalConsent();
+    consentRecord = null;
     render();
     return;
+  }
+
+  // Authentication changed to a different user.
+  // Do not keep the previous user's cached consent while waiting for
+  // the backend consent status to be refreshed.
+  if (previousUserId !== currentUserId) {
+    await clearLocalConsent();
+    consentRecord = null;
+  }
+
+  // Fresh login with the same user after the popup starts.
+  if (!wasAuthenticated) {
+    consentRecord = null;
   }
 
   render();
