@@ -49,6 +49,8 @@ def upgrade() -> None:
         "sop_step_embedding",
         ["sop_id"],
     )
+    # lists=10 is sized for <1000 rows. Downstream similarity queries should fall
+    # back to seqscan when row count < lists (IVFFlat can return 0 rows otherwise).
     op.execute(
         """
         CREATE INDEX ix_sop_step_embedding_embedding_ivfflat

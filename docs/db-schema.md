@@ -243,7 +243,7 @@ one row per SOP step, not a single whole-SOP embedding column on `sops`.
 | ------------- | ------------ | ---- | ------------------- | ------------------------------------ |
 | `id`          | uuid         | no   | `gen_random_uuid()` | PK                                   |
 | `sop_id`      | uuid         | no   | -                   | FK -> `sops.id`, `ON DELETE CASCADE` |
-| `step_number` | int          | no   | -                   | SOP step number, `>= 1`              |
+| `step_number` | int          | no   | -                   | Must equal `steps[].order` on the parent SOP (`>= 1`); not enforced by DB |
 | `embedding`   | vector(1536) | no   | -                   | pgvector embedding for this step     |
 | `created_at`  | timestamptz  | no   | `now()`             | row insert time                      |
 
@@ -251,6 +251,17 @@ one row per SOP step, not a single whole-SOP embedding column on `sops`.
 **Indexes:** `ix_sop_step_embedding_sop_id(sop_id)`,
 `ix_sop_step_embedding_embedding_ivfflat USING ivfflat (embedding vector_cosine_ops) WITH (lists = 10)`.
 **Extension:** migration `0008_sop_step_embedding` runs `CREATE EXTENSION IF NOT EXISTS vector`.
+
+**Write contract (H09AAPPLE-35):** upsert embeddings by `(sop_id, step.order)` — store
+`step.order` in `step_number`. The DB does not validate that `step_number` matches a
+row in `sops.steps`; the embedding write path must map explicitly.
+
+**IVFFlat query note (H09AAPPLE-36/-37):** with `lists = 10`, cosine `ORDER BY
+embedding <=> query` via a freshly built IVFFlat index can return **zero rows** when
+the table has very little data at index-build time (seqscan still finds them; pgvector
+emits a low-recall warning). Use a seqscan fallback or defer index-backed similarity
+search until enough rows exist. Rebuilding the index after bulk deletes changes this
+behaviour — prefer `row_count < lists` checks in application code.
 
 ### `steps` JSONB shape
 
