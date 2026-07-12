@@ -234,6 +234,24 @@ stores only the key.
 **Indexes:** `ix_sops_session_status(session_id, status)`, `ix_sops_tenant_id(tenant_id)`.
 **Allowed `status` values:** `draft` · `needs_review` · `approved` · `published`.
 
+## Table: `sop_step_embedding` (H09AAPPLE-34)
+
+Per-step vector embeddings for Sprint 3 clustering and friction analysis. This is
+one row per SOP step, not a single whole-SOP embedding column on `sops`.
+
+| Column        | Type         | Null | Default             | Notes                                |
+| ------------- | ------------ | ---- | ------------------- | ------------------------------------ |
+| `id`          | uuid         | no   | `gen_random_uuid()` | PK                                   |
+| `sop_id`      | uuid         | no   | -                   | FK -> `sops.id`, `ON DELETE CASCADE` |
+| `step_number` | int          | no   | -                   | SOP step number, `>= 1`              |
+| `embedding`   | vector(1536) | no   | -                   | pgvector embedding for this step     |
+| `created_at`  | timestamptz  | no   | `now()`             | row insert time                      |
+
+**Constraints:** `uq_sop_step_embedding_sop_step UNIQUE(sop_id, step_number)`.
+**Indexes:** `ix_sop_step_embedding_sop_id(sop_id)`,
+`ix_sop_step_embedding_embedding_ivfflat USING ivfflat (embedding vector_cosine_ops) WITH (lists = 10)`.
+**Extension:** migration `0008_sop_step_embedding` runs `CREATE EXTENSION IF NOT EXISTS vector`.
+
 ### `steps` JSONB shape
 
 The shape must match `SopStep` in `apps/api/app/sop_schema.py` (Pydantic) and

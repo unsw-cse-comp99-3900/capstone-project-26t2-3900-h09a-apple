@@ -55,7 +55,7 @@ docker run --name worktrace-postgres \
   -e POSTGRES_PASSWORD=secret \
   -e POSTGRES_DB=worktrace \
   -p 5432:5432 \
-  -d postgres:16
+  -d pgvector/pgvector:pg15
 ```
 
 ### MinIO (screenshot uploads)
