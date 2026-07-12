@@ -255,6 +255,9 @@ export interface SopListResponse {
   sops: SopLibraryItem[];
 }
 
+/** How the live walkthrough player should anchor a step. */
+export type WalkthroughAnchorMode = 'element' | 'screenshot' | 'none';
+
 /** Mirrors `WalkthroughStep` in `apps/api/app/sop_schema.py`. */
 export interface WalkthroughStep {
   step_number: number;
@@ -264,6 +267,8 @@ export interface WalkthroughStep {
   screenshot_url?: string | null;
   time_estimate?: number | null;
   screenshot_highlight?: ScreenshotHighlight | null;
+  /** element: css/xpath; screenshot: image fallback; none: instruction-only. */
+  anchor_mode?: WalkthroughAnchorMode;
 }
 
 /** Response returned by GET /api/v1/sops/{id}/walkthrough. */
