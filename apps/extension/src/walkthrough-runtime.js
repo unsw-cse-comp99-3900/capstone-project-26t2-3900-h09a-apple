@@ -57,7 +57,7 @@
           return { element: el, mode: 'css' };
         }
       } catch {
-        // Invalid selector — fall through.
+        // Invalid selector - fall through.
       }
     }
 
@@ -75,7 +75,7 @@
           return { element: node, mode: 'xpath' };
         }
       } catch {
-        // Invalid xpath — fall through.
+        // Invalid xpath - fall through.
       }
     }
 
