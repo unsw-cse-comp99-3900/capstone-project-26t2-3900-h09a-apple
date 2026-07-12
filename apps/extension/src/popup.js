@@ -389,7 +389,13 @@ async function beginWalkthrough() {
       return;
     }
 
-    const nextState = startWalkthrough(walkthroughState, sopId);
+    const tabId = await new Promise((resolve) => {
+      chrome.tabs?.query?.({ active: true, currentWindow: true }, (tabs) => {
+        resolve(tabs?.[0]?.id ?? null);
+      });
+    });
+
+    const nextState = startWalkthrough(walkthroughState, sopId, { tabId });
     walkthroughState = nextState;
     walkthroughStepCount = payload.steps.length;
     await chrome.storage?.session?.set({

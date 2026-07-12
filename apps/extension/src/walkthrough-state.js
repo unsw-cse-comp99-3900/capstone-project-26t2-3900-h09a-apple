@@ -11,6 +11,7 @@ export function createWalkthroughState() {
     status: WalkthroughStatus.IDLE,
     sopId: null,
     stepIndex: 0,
+    tabId: null,
   };
 }
 
@@ -28,7 +29,7 @@ export function canStopWalkthrough(state) {
   return state.status === WalkthroughStatus.PLAYING;
 }
 
-export function startWalkthrough(state, sopId) {
+export function startWalkthrough(state, sopId, { tabId = null } = {}) {
   const trimmed = typeof sopId === 'string' ? sopId.trim() : '';
   if (!trimmed || state.status === WalkthroughStatus.PLAYING) {
     return state;
@@ -38,6 +39,7 @@ export function startWalkthrough(state, sopId) {
     status: WalkthroughStatus.PLAYING,
     sopId: trimmed,
     stepIndex: 0,
+    tabId: tabId ?? null,
   };
 }
 

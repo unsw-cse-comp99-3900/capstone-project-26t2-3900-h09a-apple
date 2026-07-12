@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { JSDOM } from 'jsdom';
 
-function loadRuntime({ walkthroughState = null, walkthroughPayload = null } = {}) {
+function loadRuntime({ walkthroughState = null, walkthroughPayload = null, tabId = 1 } = {}) {
   const dom = new JSDOM(
     `
     <!DOCTYPE html>
@@ -28,8 +28,11 @@ function loadRuntime({ walkthroughState = null, walkthroughPayload = null } = {}
 
   window.chrome = {
     runtime: {
-      sendMessage: (message) => {
+      sendMessage: (message, callback) => {
         sentMessages.push(message);
+        if (message.type === 'GET_TAB_ID') {
+          callback?.({ ok: true, tabId });
+        }
       },
     },
     storage: {
@@ -207,8 +210,10 @@ test('playing walkthrough mounts overlay with previous disabled on step 1', asyn
   assert.equal(next.hidden, false);
   assert.equal(finish.hidden, true);
 
-  assert.equal(sentMessages[0]?.type, 'WALKTHROUGH_STEP_ENTERED');
-  assert.equal(sentMessages[0]?.step_number, 1);
+  assert.equal(
+    sentMessages.filter((m) => m.type === 'WALKTHROUGH_STEP_ENTERED')[0]?.step_number,
+    1,
+  );
 
   // Host is non-blocking; tooltip buttons opt back into pointer events via CSS.
   assert.match(host.shadowRoot.innerHTML, /\.backdrop\s*\{[^}]*pointer-events:\s*none/);
@@ -282,4 +287,61 @@ test('finish clears session walkthrough state and tears down overlay', async () 
   assert.equal(sessionValues().walkthroughState.status, 'idle');
   assert.equal(sessionValues().walkthroughPayload, null);
   assert.equal(document.getElementById('worktrace-walkthrough-host'), null);
+});
+
+test('mismatched tabId does not mount the overlay', async () => {
+  const payload = {
+    steps: [{ step_number: 1, instruction: 'Only step', css_selector: '#save-btn' }],
+  };
+
+  const { document, flush, window } = loadRuntime({
+    walkthroughState: { status: 'playing', sopId: 'sop-1', stepIndex: 0, tabId: 99 },
+    walkthroughPayload: payload,
+    tabId: 1,
+  });
+  await flush();
+
+  assert.equal(window.WorkTraceWalkthrough.getMyTabId(), 1);
+  assert.equal(document.getElementById('worktrace-walkthrough-host'), null);
+});
+
+test('matching tabId mounts the overlay', async () => {
+  const payload = {
+    steps: [{ step_number: 1, instruction: 'Only step', css_selector: '#save-btn' }],
+  };
+
+  const { document, flush } = loadRuntime({
+    walkthroughState: { status: 'playing', sopId: 'sop-1', stepIndex: 0, tabId: 7 },
+    walkthroughPayload: payload,
+    tabId: 7,
+  });
+  await flush();
+
+  assert.ok(document.getElementById('worktrace-walkthrough-host'));
+});
+
+test('none anchor mode hides preview even if screenshot_url is present', async () => {
+  const payload = {
+    steps: [
+      {
+        step_number: 1,
+        instruction: 'Open the home page.',
+        anchor_mode: 'none',
+        screenshot_url: 'https://example.com/should-hide.png',
+      },
+    ],
+  };
+
+  const { document, flush } = loadRuntime({
+    walkthroughState: { status: 'playing', sopId: 'sop-1', stepIndex: 0 },
+    walkthroughPayload: payload,
+  });
+  await flush();
+
+  const root = document.getElementById('worktrace-walkthrough-host').shadowRoot;
+  assert.equal(root.querySelector('.preview').hidden, true);
+  assert.equal(
+    root.querySelector('.fallback-note').textContent,
+    'No on-page target available for this step.',
+  );
 });

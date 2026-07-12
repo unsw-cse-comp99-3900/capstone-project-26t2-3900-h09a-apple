@@ -147,6 +147,9 @@ function setupPopupDom(recordingState = { status: 'ready', workflowName: '' }) {
     },
     tabs: {
       create: (options) => openedTabs.push(options),
+      query: (_query, callback) => {
+        callback([{ id: 42 }]);
+      },
     },
   };
 
@@ -514,6 +517,7 @@ test('start walkthrough fetches payload and persists session progress', async ()
   assert.equal(walkthroughStatusText.textContent, 'Playing');
   assert.equal(stopWalkthroughButton.disabled, false);
   assert.equal(getSessionStorageValues().walkthroughState.status, 'playing');
+  assert.equal(getSessionStorageValues().walkthroughState.tabId, 42);
   assert.equal(getSessionStorageValues().walkthroughPayload.steps.length, 2);
 
   stopWalkthroughButton.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));

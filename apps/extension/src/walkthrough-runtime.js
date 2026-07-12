@@ -11,7 +11,7 @@
   const STORAGE_PAYLOAD_KEY = 'walkthroughPayload';
   const HOST_ID = 'worktrace-walkthrough-host';
 
-  /** @type {{ status: string, sopId: string | null, stepIndex: number } | null} */
+  /** @type {{ status: string, sopId: string | null, stepIndex: number, tabId?: number | null } | null} */
   let activeState = null;
   /** @type {{ steps: Array<Record<string, unknown>> } | null} */
   let activePayload = null;
@@ -29,6 +29,8 @@
   /** @type {number | null} */
   let lastEnteredStepIndex = null;
   let repositionScheduled = false;
+  /** @type {number | null} */
+  let myTabId = null;
 
   function getSteps() {
     return Array.isArray(activePayload?.steps) ? activePayload.steps : [];
@@ -269,17 +271,21 @@
     lastEnteredStepIndex = null;
   }
 
-  function tearDownObservers() {
-    window.removeEventListener('scroll', scheduleReposition, true);
-    window.removeEventListener('resize', scheduleReposition);
-    if (mutationObserver) {
-      mutationObserver.disconnect();
-      mutationObserver = null;
+  function isTargetTab(state) {
+    // Legacy / tests without tabId keep previous broadcast behaviour.
+    if (state?.tabId == null) {
+      return true;
     }
+    if (myTabId == null) {
+      return false;
+    }
+    return Number(state.tabId) === Number(myTabId);
   }
 
-  function setupObservers() {
-    tearDownObservers();
+  function ensureObservers() {
+    if (mutationObserver) {
+      return;
+    }
     window.addEventListener('scroll', scheduleReposition, true);
     window.addEventListener('resize', scheduleReposition);
     mutationObserver = new MutationObserver((mutations) => {
@@ -296,6 +302,15 @@
       subtree: true,
       attributes: true,
     });
+  }
+
+  function tearDownObservers() {
+    window.removeEventListener('scroll', scheduleReposition, true);
+    window.removeEventListener('resize', scheduleReposition);
+    if (mutationObserver) {
+      mutationObserver.disconnect();
+      mutationObserver = null;
+    }
   }
 
   function scheduleReposition() {
@@ -349,6 +364,7 @@
     const fallbackNote = shadowRoot.querySelector('.fallback-note');
     const preview = shadowRoot.querySelector('.preview');
     const hasScreenshot = typeof step.screenshot_url === 'string' && Boolean(step.screenshot_url);
+    const showPreview = hasScreenshot && anchorMode !== 'none';
 
     if (resolved.element) {
       const rect = resolved.element.getBoundingClientRect();
@@ -364,7 +380,7 @@
       highlight.hidden = true;
       placeTooltip(tooltip, viewportCenterRect());
 
-      if (hasScreenshot) {
+      if (showPreview) {
         fallbackNote.hidden = false;
         fallbackNote.textContent =
           anchorMode === 'screenshot'
@@ -376,7 +392,7 @@
       }
     }
 
-    if (hasScreenshot) {
+    if (showPreview) {
       preview.hidden = false;
       preview.src = step.screenshot_url;
     } else {
@@ -384,11 +400,7 @@
       preview.removeAttribute('src');
     }
 
-    tooltip.dataset.anchorMode = resolved.element
-      ? 'element'
-      : hasScreenshot
-        ? 'screenshot'
-        : 'none';
+    tooltip.dataset.anchorMode = resolved.element ? 'element' : showPreview ? 'screenshot' : 'none';
   }
 
   function enterCurrentStep() {
@@ -421,7 +433,7 @@
   }
 
   function render() {
-    if (!activeState || activeState.status !== 'playing') {
+    if (!activeState || activeState.status !== 'playing' || !isTargetTab(activeState)) {
       teardownHost();
       return;
     }
@@ -434,7 +446,7 @@
     }
 
     const root = ensureHost();
-    setupObservers();
+    ensureObservers();
 
     const tooltip = root.querySelector('.tooltip');
     const eyebrow = root.querySelector('.eyebrow');
@@ -505,6 +517,7 @@
       status: 'idle',
       sopId: null,
       stepIndex: 0,
+      tabId: null,
     };
     activePayload = null;
     chrome.storage?.session?.set({
@@ -521,7 +534,12 @@
     activeState = state;
     activePayload = payload;
 
-    if (state?.status === 'playing' && Array.isArray(payload?.steps) && payload.steps.length > 0) {
+    if (
+      state?.status === 'playing' &&
+      Array.isArray(payload?.steps) &&
+      payload.steps.length > 0 &&
+      isTargetTab(state)
+    ) {
       render();
     } else {
       teardownHost();
@@ -535,6 +553,18 @@
     chrome.storage.session.get([STORAGE_STATE_KEY, STORAGE_PAYLOAD_KEY], (result) => {
       syncFromStorage(result);
     });
+  }
+
+  function resolveMyTabId(done) {
+    try {
+      chrome.runtime?.sendMessage?.({ type: 'GET_TAB_ID' }, (response) => {
+        myTabId = response?.tabId ?? null;
+        done?.();
+      });
+    } catch {
+      myTabId = null;
+      done?.();
+    }
   }
 
   if (chrome.storage?.onChanged) {
@@ -560,14 +590,18 @@
     });
   }
 
-  readAndSync();
+  resolveMyTabId(() => {
+    readAndSync();
+  });
 
   globalThis.WorkTraceWalkthrough = {
     resolveTarget,
     resolveAnchorMode,
+    isTargetTab,
     readAndSync,
     teardownHost,
     getActiveState: () => activeState,
+    getMyTabId: () => myTabId,
     getCurrentVisit: () => ({
       step_number: currentVisitStepNumber,
       entered_at: currentVisitEnteredAt,
