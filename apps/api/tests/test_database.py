@@ -23,6 +23,8 @@ def test_get_engine_uses_database_url(monkeypatch):
         "postgresql+psycopg://worktrace:secret@localhost:5432/worktrace_test",
     )
 
-    engine = database.get_engine()
-
-    assert engine.url.database == "worktrace_test"
+    try:
+        engine = database.get_engine()
+        assert engine.url.database == "worktrace_test"
+    finally:
+        clear_database_caches()

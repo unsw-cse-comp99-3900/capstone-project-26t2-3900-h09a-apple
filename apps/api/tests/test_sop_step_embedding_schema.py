@@ -36,14 +36,19 @@ def test_sop_step_embedding_schema_contract():
 
 @pytest.fixture
 def db_session():
-    from app.database import get_sessionmaker
+    from app import database
 
-    session = get_sessionmaker()()
+    database.get_engine.cache_clear()
+    database.get_sessionmaker.cache_clear()
+
+    session = database.get_sessionmaker()()
     try:
         yield session
     finally:
         session.rollback()
         session.close()
+        database.get_engine.cache_clear()
+        database.get_sessionmaker.cache_clear()
 
 
 def test_pgvector_extension_installed(db_session):
