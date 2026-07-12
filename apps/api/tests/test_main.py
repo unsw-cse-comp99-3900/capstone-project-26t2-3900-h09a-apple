@@ -1147,6 +1147,7 @@ def test_get_sop_walkthrough_returns_payload_for_single_step():
             "screenshot_url": "https://signed.example/screenshots/login.png",
             "time_estimate": 5,
             "screenshot_highlight": None,
+            "anchor_mode": "element",
         }
     finally:
         app.dependency_overrides[get_db] = override_get_db
@@ -1187,9 +1188,11 @@ def test_get_sop_walkthrough_returns_payload_for_25_steps():
         assert len(body["steps"]) == 25
         assert body["steps"][0]["step_number"] == 1
         assert body["steps"][0]["css_selector"] == "#step-1"
+        assert body["steps"][0]["anchor_mode"] == "element"
         assert body["steps"][24]["step_number"] == 25
         assert body["steps"][24]["instruction"] == "Perform action 25."
         assert body["steps"][24]["css_selector"] == "#step-25"
+        assert body["steps"][24]["anchor_mode"] == "element"
     finally:
         app.dependency_overrides[get_db] = override_get_db
 
@@ -1300,7 +1303,7 @@ def test_get_sop_walkthrough_returns_404_for_empty_steps():
         app.dependency_overrides[get_db] = override_get_db
 
 
-def test_get_sop_walkthrough_returns_422_when_step_has_no_selector():
+def test_get_sop_walkthrough_returns_none_anchor_when_step_has_no_selector_or_screenshot():
     fake_sop = _walkthrough_sop(
         steps=[
             {
@@ -1316,8 +1319,56 @@ def test_get_sop_walkthrough_returns_422_when_step_has_no_selector():
 
     try:
         response = client.get(f"/api/v1/sops/{WALKTHROUGH_SOP_ID}/walkthrough")
-        assert response.status_code == 422
-        assert "missing css_selector and xpath" in response.json()["detail"]
+        assert response.status_code == 200
+        step = response.json()["steps"][0]
+        assert step["css_selector"] is None
+        assert step["xpath"] is None
+        assert step["screenshot_url"] is None
+        assert step["anchor_mode"] == "none"
+    finally:
+        app.dependency_overrides[get_db] = override_get_db
+
+
+def test_get_sop_walkthrough_returns_screenshot_anchor_for_navigation_with_image():
+    fake_event = SimpleNamespace(
+        id=1,
+        seq=1,
+        session_id=WALKTHROUGH_SESSION_ID,
+        target_selector=None,
+        attrs={},
+        screenshot_id=UUID("22222222-2222-2222-2222-222222222222"),
+        timestamp_ms=1_000,
+    )
+    fake_screenshot = SimpleNamespace(
+        id=UUID("22222222-2222-2222-2222-222222222222"),
+        session_id=WALKTHROUGH_SESSION_ID,
+        object_key="screenshots/nav.png",
+    )
+    fake_sop = _walkthrough_sop(
+        steps=[
+            {
+                "order": 1,
+                "title": "Open page",
+                "instruction": "Open the home page.",
+                "source_event_ids": ["1"],
+            }
+        ],
+    )
+    db = FakeDbWithSession(
+        existing_sop=fake_sop,
+        events=[fake_event],
+        screenshot=fake_screenshot,
+    )
+    app.dependency_overrides[get_db] = lambda: db
+
+    try:
+        response = client.get(f"/api/v1/sops/{WALKTHROUGH_SOP_ID}/walkthrough")
+        assert response.status_code == 200
+        step = response.json()["steps"][0]
+        assert step["css_selector"] is None
+        assert step["xpath"] is None
+        assert step["screenshot_url"] == "https://signed.example/screenshots/nav.png"
+        assert step["anchor_mode"] == "screenshot"
     finally:
         app.dependency_overrides[get_db] = override_get_db
 
@@ -1414,6 +1465,7 @@ def test_get_sop_walkthrough_returns_xpath_only_step():
         body = response.json()
         assert body["steps"][0]["css_selector"] is None
         assert body["steps"][0]["xpath"] == "/html/body/main[1]"
+        assert body["steps"][0]["anchor_mode"] == "element"
     finally:
         app.dependency_overrides[get_db] = override_get_db
 

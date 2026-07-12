@@ -71,6 +71,11 @@ function setupPopupDom(recordingState = { status: 'ready', workflowName: '' }) {
     [CONSENT_STORAGE_KEY]: acceptedConsent,
     ...authenticatedStorage,
   };
+  let sessionStorageValues = {
+    eventBuffer: [],
+    walkthroughState: null,
+    walkthroughPayload: null,
+  };
   let storageChangeCallback = () => {};
 
   mockConsentApiFetch({ statusAccepted: true });
@@ -107,8 +112,25 @@ function setupPopupDom(recordingState = { status: 'ready', workflowName: '' }) {
         },
       },
       session: {
-        get: (_keys, callback) => callback({ eventBuffer: [] }),
-        set: () => Promise.resolve(),
+        get: (keys, callback) => {
+          const result = {};
+          for (const key of keys) {
+            result[key] = sessionStorageValues[key];
+          }
+          callback(result);
+        },
+        set: (value, callback = () => {}) => {
+          sessionStorageValues = { ...sessionStorageValues, ...value };
+          const changes = {};
+          for (const [key, nextValue] of Object.entries(value)) {
+            changes[key] = { newValue: nextValue };
+          }
+          storageChangeCallback(changes, 'session');
+          if (typeof callback === 'function') {
+            callback();
+          }
+          return Promise.resolve();
+        },
       },
       onChanged: {
         addListener: (callback) => {
@@ -125,6 +147,9 @@ function setupPopupDom(recordingState = { status: 'ready', workflowName: '' }) {
     },
     tabs: {
       create: (options) => openedTabs.push(options),
+      query: (_query, callback) => {
+        callback([{ id: 42 }]);
+      },
     },
   };
 
@@ -133,6 +158,9 @@ function setupPopupDom(recordingState = { status: 'ready', workflowName: '' }) {
     openedTabs,
     getLocalStorageValues() {
       return localStorageValues;
+    },
+    getSessionStorageValues() {
+      return sessionStorageValues;
     },
     getRecordingState() {
       return persistedRecordingState;
@@ -411,11 +439,91 @@ test('initPopup awaits recording state and event buffer before first render', ()
   assert.match(popupSource, /refreshAuthState\(\{ renderAfter: false \}\)/);
   assert.match(popupSource, /Promise\.all\(\[/);
   assert.match(popupSource, /getLocalStorage\(\['recordingState', 'sessionStorageError'\]\)/);
-  assert.match(popupSource, /getSessionStorage\(\['eventBuffer'\]\)/);
+  assert.match(
+    popupSource,
+    /getSessionStorage\(\['eventBuffer', WALKTHROUGH_STORAGE_KEY, WALKTHROUGH_PAYLOAD_KEY\]\)/,
+  );
 });
 
 test('popup exposes local session storage errors instead of hanging silently', () => {
   assert.match(popupSource, /SESSION_PAYLOAD_ERROR/);
   assert.match(popupSource, /sessionStorageError/);
   assert.match(popupSource, /Could not read captured session locally/);
+});
+
+test('start walkthrough fetches payload and persists session progress', async () => {
+  const { dom, getSessionStorageValues } = setupPopupDom();
+
+  globalThis.fetch = async (url, init = {}) => {
+    const href = String(url);
+
+    if (href.includes('/api/v1/consent/status')) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          accepted: true,
+          accepted_at: '2026-07-01T00:00:00.000Z',
+          consent_type: 'recording',
+          version: CONSENT_TERMS_VERSION,
+        }),
+      };
+    }
+
+    if (href.includes('/walkthrough')) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          steps: [
+            {
+              step_number: 1,
+              instruction: 'Click save',
+              css_selector: '#save',
+            },
+            {
+              step_number: 2,
+              instruction: 'Confirm',
+              css_selector: '#confirm',
+            },
+          ],
+        }),
+      };
+    }
+
+    return {
+      ok: false,
+      status: 404,
+      json: async () => ({ detail: 'not found' }),
+    };
+  };
+
+  await loadPopupScript();
+  await flushPromises();
+
+  const sopIdInput = dom.window.document.querySelector('#sopIdInput');
+  const startWalkthroughButton = dom.window.document.querySelector('#startWalkthroughButton');
+  const stopWalkthroughButton = dom.window.document.querySelector('#stopWalkthroughButton');
+  const walkthroughStatusText = dom.window.document.querySelector('#walkthroughStatusText');
+
+  sopIdInput.value = '11111111-1111-1111-1111-111111111111';
+  sopIdInput.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+  assert.equal(startWalkthroughButton.disabled, false);
+
+  startWalkthroughButton.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+  await flushPromises();
+  await flushPromises();
+
+  assert.equal(walkthroughStatusText.textContent, 'Playing');
+  assert.equal(stopWalkthroughButton.disabled, false);
+  assert.equal(getSessionStorageValues().walkthroughState.status, 'playing');
+  assert.equal(getSessionStorageValues().walkthroughState.tabId, 42);
+  assert.equal(getSessionStorageValues().walkthroughPayload.steps.length, 2);
+
+  stopWalkthroughButton.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+  await flushPromises();
+
+  assert.equal(walkthroughStatusText.textContent, 'Idle');
+  assert.equal(getSessionStorageValues().walkthroughState.status, 'idle');
+  assert.equal(getSessionStorageValues().walkthroughPayload, null);
 });
