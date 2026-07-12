@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 import { createSession } from '@/lib/api';
+import { postExtensionSessionSubmitted } from '@/lib/extension-bridge';
 import styles from './session-review.module.css';
 
 type SessionReviewClientProps = {
@@ -305,6 +306,7 @@ export function SessionReviewClient({ sessionId }: SessionReviewClientProps) {
 
     try {
       const createdSession = await createSession(toSubmissionPayload(session));
+      await postExtensionSessionSubmitted(session.client_session_id);
       setSubmitState('success');
       router.push(`/session/${createdSession.session_id}/generating`);
     } catch (error) {

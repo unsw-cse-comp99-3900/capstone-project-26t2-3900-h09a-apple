@@ -1,5 +1,9 @@
 import { assembleSession } from './session-assembly.js';
-import { getSessionPayload, saveSessionPayload } from './session-store.js';
+import {
+  deleteSessionPayload,
+  getSessionPayload,
+  saveSessionPayloadWithCap,
+} from './session-store.js';
 import { clearStoredAuthTokens, redeemHandoffCode } from './auth.js';
 import { clearDataCaptureConsent } from './consent.js';
 import { handleExternalAuthMessage } from './external-auth.js';
@@ -7,6 +11,7 @@ import { handleExternalAuthMessage } from './external-auth.js';
 const externalAuthHandlers = {
   redeemHandoffCode,
   clearStoredAuthTokens,
+  deleteSessionPayload,
 };
 
 let writeQueue = Promise.resolve();
@@ -139,6 +144,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.type === 'SESSION_SUBMITTED') {
+    deleteSessionPayload(message.sessionId)
+      .then(() => {
+        sendResponse({ ok: true });
+      })
+      .catch((error) => {
+        sendResponse({
+          ok: false,
+          error: error instanceof Error ? error.message : 'Failed to delete submitted session',
+        });
+      });
+
+    return true;
+  }
+
   if (RECORDED_EVENT_TYPES.has(message.type)) {
     writeQueue = writeQueue
       .then(async () => {
@@ -200,8 +220,9 @@ chrome.storage.onChanged.addListener((changes, area) => {
             screenshots: result.screenshots,
           });
 
-          await saveSessionPayload(sessionPayload);
+          await saveSessionPayloadWithCap(sessionPayload);
           await resetSessionBuffers();
+          await chrome.storage.local.remove('sessionStorageError');
           chrome.runtime
             .sendMessage({
               type: 'SESSION_PAYLOAD_READY',
@@ -213,7 +234,20 @@ chrome.storage.onChanged.addListener((changes, area) => {
             sessionPayload.client_session_id,
           );
         })
-        .catch((err) => console.error('Failed to assemble session:', err));
+        .catch((err) => {
+          const message =
+            err instanceof Error ? err.message : 'Captured session could not be saved locally.';
+          chrome.storage.local.set({
+            sessionStorageError: `Could not save captured session locally: ${message}`,
+          });
+          chrome.runtime
+            .sendMessage({
+              type: 'SESSION_PAYLOAD_ERROR',
+              error: message,
+            })
+            .catch(() => {});
+          console.error('Failed to assemble session:', err);
+        });
     }
   }
 });

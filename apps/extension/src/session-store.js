@@ -1,6 +1,7 @@
 const DB_NAME = 'worktrace-extension';
 const DB_VERSION = 1;
 const SESSION_STORE = 'sessions';
+export const MAX_STORED_SESSIONS = 5;
 
 let dbPromise = null;
 
@@ -58,6 +59,43 @@ export async function saveSessionPayload(sessionPayload) {
   }
 
   await withSessionStore('readwrite', (store) => requestToPromise(store.put(sessionPayload)));
+}
+
+export async function listSessionPayloads() {
+  return withSessionStore('readonly', (store) => requestToPromise(store.getAll()));
+}
+
+export async function deleteSessionPayload(sessionId) {
+  if (!sessionId) {
+    return;
+  }
+
+  await withSessionStore('readwrite', (store) => requestToPromise(store.delete(sessionId)));
+}
+
+export async function enforceSessionPayloadCap(maxSessions = MAX_STORED_SESSIONS) {
+  const sessions = await listSessionPayloads();
+  const overflowCount = sessions.length - maxSessions;
+
+  if (overflowCount <= 0) {
+    return [];
+  }
+
+  const evicted = [...sessions]
+    .sort((left, right) => {
+      const leftStoppedAt = new Date(left.stopped_at ?? left.started_at ?? 0).getTime();
+      const rightStoppedAt = new Date(right.stopped_at ?? right.started_at ?? 0).getTime();
+      return leftStoppedAt - rightStoppedAt;
+    })
+    .slice(0, overflowCount);
+
+  await Promise.all(evicted.map((session) => deleteSessionPayload(session.client_session_id)));
+  return evicted.map((session) => session.client_session_id);
+}
+
+export async function saveSessionPayloadWithCap(sessionPayload, maxSessions = MAX_STORED_SESSIONS) {
+  await enforceSessionPayloadCap(Math.max(0, maxSessions - 1));
+  await saveSessionPayload(sessionPayload);
 }
 
 export async function getSessionPayload(sessionId) {

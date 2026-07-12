@@ -51,6 +51,22 @@ export function handleExternalAuthMessage(message, sender, sendResponse, handler
     return true;
   }
 
+  if (message.type === 'SESSION_SUBMITTED') {
+    handlers
+      .deleteSessionPayload(message.sessionId)
+      .then(() => {
+        sendResponse({ ok: true });
+      })
+      .catch((error) => {
+        sendResponse({
+          ok: false,
+          error: error instanceof Error ? error.message : 'Failed to delete submitted session',
+        });
+      });
+
+    return true;
+  }
+
   sendResponse({ ok: false, error: 'Unknown message type' });
   return false;
 }
