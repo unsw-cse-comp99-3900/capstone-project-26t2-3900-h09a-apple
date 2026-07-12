@@ -7,8 +7,18 @@ import {
   startRecording,
   stopRecording,
 } from './recording-state.js';
+import {
+  WALKTHROUGH_PAYLOAD_KEY,
+  WALKTHROUGH_STORAGE_KEY,
+  WalkthroughStatus,
+  canStartWalkthrough,
+  canStopWalkthrough,
+  createWalkthroughState,
+  startWalkthrough,
+  stopWalkthrough,
+} from './walkthrough-state.js';
 import { WEB_APP_BASE_URL } from './config.js';
-import { AUTH_STORAGE_KEYS, getStoredAuthTokens } from './auth.js';
+import { AUTH_STORAGE_KEYS, authenticatedFetch, getStoredAuthTokens } from './auth.js';
 import {
   clearDataCaptureConsent,
   isConsentCurrent,
@@ -34,6 +44,12 @@ const consentOverlay = document.querySelector('#consentOverlay');
 const consentDeclineMessage = document.querySelector('#consentDeclineMessage');
 const consentAcceptButton = document.querySelector('#consentAcceptButton');
 const consentDeclineButton = document.querySelector('#consentDeclineButton');
+const sopIdInput = document.querySelector('#sopIdInput');
+const walkthroughHint = document.querySelector('#walkthroughHint');
+const startWalkthroughButton = document.querySelector('#startWalkthroughButton');
+const stopWalkthroughButton = document.querySelector('#stopWalkthroughButton');
+const walkthroughBadge = document.querySelector('#walkthroughBadge');
+const walkthroughStatusText = document.querySelector('#walkthroughStatusText');
 
 const statusLabels = {
   [RecordingStatus.READY]: 'Ready',
@@ -41,7 +57,15 @@ const statusLabels = {
   [RecordingStatus.COMPLETED]: 'Completed',
 };
 
+const walkthroughStatusLabels = {
+  [WalkthroughStatus.IDLE]: 'Idle',
+  [WalkthroughStatus.PLAYING]: 'Playing',
+};
+
 let state = createRecordingState();
+let walkthroughState = createWalkthroughState();
+let walkthroughStepCount = 0;
+let walkthroughBusy = false;
 let eventCount = 0;
 let reviewSessionReady = false;
 let consentRecord = null;
@@ -141,6 +165,17 @@ chrome.storage?.onChanged.addListener((changes, area) => {
     render();
   }
 
+  if (area === 'session') {
+    if (changes[WALKTHROUGH_STORAGE_KEY]) {
+      walkthroughState = changes[WALKTHROUGH_STORAGE_KEY].newValue ?? createWalkthroughState();
+      render();
+    }
+    if (changes[WALKTHROUGH_PAYLOAD_KEY]) {
+      walkthroughStepCount = changes[WALKTHROUGH_PAYLOAD_KEY].newValue?.steps?.length || 0;
+      render();
+    }
+  }
+
   if (area === 'local' && state.client_session_id) {
     if (changes.recordingState?.newValue?.status === RecordingStatus.COMPLETED) {
       checkReviewSessionReady();
@@ -236,16 +271,40 @@ function render() {
     state.status === RecordingStatus.COMPLETED && Boolean(state.client_session_id);
   const canReview = isCompleted && reviewSessionReady;
   const hasConsent = isConsentCurrent(consentRecord);
+  const isWalkthroughPlaying = walkthroughState.status === WalkthroughStatus.PLAYING;
 
   workflowNameInput.value = state.workflowName;
-  workflowNameInput.disabled = isRecording;
-  startButton.disabled = !canStartRecording(state);
+  workflowNameInput.disabled = isRecording || isWalkthroughPlaying;
+  startButton.disabled = !canStartRecording(state) || isWalkthroughPlaying;
   stopButton.disabled = !canStopRecording(state);
   reviewButton.hidden = !isCompleted;
   reviewButton.disabled = !canReview;
   reviewButton.textContent = canReview ? 'Review Session' : 'Preparing Session...';
   statusText.textContent = statusLabels[state.status];
   statusBadge.className = `status-badge status-${state.status}`;
+
+  if (sopIdInput) {
+    sopIdInput.value = walkthroughState.sopId ?? sopIdInput.value;
+    sopIdInput.disabled = isWalkthroughPlaying || isRecording || walkthroughBusy;
+  }
+
+  if (startWalkthroughButton) {
+    startWalkthroughButton.disabled =
+      walkthroughBusy ||
+      !canStartWalkthrough(walkthroughState, sopIdInput?.value ?? '', { isRecording });
+  }
+  if (stopWalkthroughButton) {
+    stopWalkthroughButton.disabled = walkthroughBusy || !canStopWalkthrough(walkthroughState);
+  }
+  if (walkthroughStatusText) {
+    walkthroughStatusText.textContent =
+      walkthroughStatusLabels[walkthroughState.status] ?? 'Idle';
+  }
+  if (walkthroughBadge) {
+    walkthroughBadge.className = `status-badge status-${
+      isWalkthroughPlaying ? 'recording' : 'ready'
+    }`;
+  }
 
   if (isRecording) {
     workflowHint.textContent = `Recording "${state.workflowName}" in progress. Captured ${eventCount} events.`;
@@ -255,8 +314,25 @@ function render() {
       `Capture completed (${eventCount} events). You can edit the name and start again.`;
   } else if (!hasConsent) {
     workflowHint.textContent = 'Accept the data capture agreement before recording can start.';
+  } else if (isWalkthroughPlaying) {
+    workflowHint.textContent = 'Stop the walkthrough before starting a new recording.';
   } else {
     workflowHint.textContent = 'Required before recording can start.';
+  }
+
+  if (walkthroughHint) {
+    if (walkthroughBusy) {
+      walkthroughHint.textContent = 'Loading walkthrough steps…';
+    } else if (isWalkthroughPlaying) {
+      walkthroughHint.textContent = `Playing step ${walkthroughState.stepIndex + 1} of ${
+        walkthroughStepCount || '?'
+      }. Use Previous / Next on the page overlay.`;
+    } else if (isRecording) {
+      walkthroughHint.textContent = 'Stop recording before starting a walkthrough.';
+    } else {
+      walkthroughHint.textContent =
+        'Starts an overlay on the current tab. Progress is kept for this browser session.';
+    }
   }
 }
 
@@ -276,12 +352,91 @@ async function beginRecording() {
   updateState(startRecording(state));
 }
 
+async function beginWalkthrough() {
+  const sopId = sopIdInput?.value?.trim() ?? '';
+  if (
+    !canStartWalkthrough(walkthroughState, sopId, {
+      isRecording: state.status === RecordingStatus.RECORDING,
+    })
+  ) {
+    return;
+  }
+
+  walkthroughBusy = true;
+  render();
+
+  try {
+    const response = await authenticatedFetch(
+      `/api/v1/sops/${encodeURIComponent(sopId)}/walkthrough`,
+    );
+    if (!response.ok) {
+      const detail =
+        response.status === 404
+          ? 'Published SOP not found for this workspace.'
+          : response.status === 422
+            ? 'Walkthrough data is incomplete for this SOP.'
+            : 'Could not load walkthrough data.';
+      if (walkthroughHint) {
+        walkthroughHint.textContent = detail;
+      }
+      return;
+    }
+
+    const payload = await response.json();
+    if (!Array.isArray(payload?.steps) || payload.steps.length === 0) {
+      if (walkthroughHint) {
+        walkthroughHint.textContent = 'This SOP has no walkthrough steps.';
+      }
+      return;
+    }
+
+    const nextState = startWalkthrough(walkthroughState, sopId);
+    walkthroughState = nextState;
+    walkthroughStepCount = payload.steps.length;
+    await chrome.storage?.session?.set({
+      [WALKTHROUGH_STORAGE_KEY]: nextState,
+      [WALKTHROUGH_PAYLOAD_KEY]: payload,
+    });
+    render();
+  } catch (error) {
+    if (walkthroughHint) {
+      walkthroughHint.textContent =
+        error instanceof Error ? error.message : 'Could not start walkthrough.';
+    }
+  } finally {
+    walkthroughBusy = false;
+    render();
+  }
+}
+
+async function endWalkthrough() {
+  if (!canStopWalkthrough(walkthroughState)) {
+    return;
+  }
+
+  walkthroughState = stopWalkthrough();
+  walkthroughStepCount = 0;
+  await chrome.storage?.session?.set({
+    [WALKTHROUGH_STORAGE_KEY]: walkthroughState,
+    [WALKTHROUGH_PAYLOAD_KEY]: null,
+  });
+  render();
+}
+
 workflowNameInput.addEventListener('input', (event) => {
   updateState(setWorkflowName(state, event.target.value));
 });
 
+sopIdInput?.addEventListener('input', () => {
+  render();
+});
+
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
+
+  if (walkthroughState.status === WalkthroughStatus.PLAYING) {
+    return;
+  }
 
   if (!isConsentCurrent(consentRecord)) {
     showConsentModal();
@@ -327,6 +482,14 @@ stopButton.addEventListener('click', () => {
   checkReviewSessionReady();
 });
 
+startWalkthroughButton?.addEventListener('click', () => {
+  void beginWalkthrough();
+});
+
+stopWalkthroughButton?.addEventListener('click', () => {
+  void endWalkthrough();
+});
+
 reviewButton.addEventListener('click', () => {
   if (
     state.status !== RecordingStatus.COMPLETED ||
@@ -345,7 +508,7 @@ async function initPopup() {
 
   const [localState, sessionState] = await Promise.all([
     getLocalStorage(['recordingState', 'sessionStorageError']),
-    getSessionStorage(['eventBuffer']),
+    getSessionStorage(['eventBuffer', WALKTHROUGH_STORAGE_KEY, WALKTHROUGH_PAYLOAD_KEY]),
   ]);
 
   if (localState.recordingState) {
@@ -357,6 +520,11 @@ async function initPopup() {
   if (sessionState.eventBuffer) {
     eventCount = sessionState.eventBuffer.length;
   }
+
+  if (sessionState[WALKTHROUGH_STORAGE_KEY]) {
+    walkthroughState = sessionState[WALKTHROUGH_STORAGE_KEY];
+  }
+  walkthroughStepCount = sessionState[WALKTHROUGH_PAYLOAD_KEY]?.steps?.length || 0;
 
   if (state.status === RecordingStatus.COMPLETED) {
     await checkReviewSessionReady();

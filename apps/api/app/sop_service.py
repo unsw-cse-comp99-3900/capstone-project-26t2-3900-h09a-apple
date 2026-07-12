@@ -142,6 +142,23 @@ def resolve_step_screenshot_url(
     return screenshot_url
 
 
+def resolve_anchor_mode(
+    css_selector: str | None,
+    xpath: str | None,
+    screenshot_url: str | None,
+) -> str:
+    """Choose how the live player should anchor a step.
+
+    Navigation-only steps often have no selector; screenshot capture can also
+    fail under throttle / inactive-tab conditions, so ``none`` is a real mode.
+    """
+    if css_selector or xpath:
+        return "element"
+    if screenshot_url:
+        return "screenshot"
+    return "none"
+
+
 def build_walkthrough_payload(sop: models.Sop, db: DBSession) -> WalkthroughPayload:
     if not sop.steps:
         raise WalkthroughDataError("SOP has no walkthrough steps")
@@ -183,10 +200,7 @@ def build_walkthrough_payload(sop: models.Sop, db: DBSession) -> WalkthroughPayl
             computed_time_estimate if computed_time_estimate is not None else llm_time_estimate
         )
 
-        if not css_selector and not xpath:
-            raise WalkthroughDataError(
-                f"Step {step['order']} is missing css_selector and xpath",
-            )
+        anchor_mode = resolve_anchor_mode(css_selector, xpath, screenshot_url)
 
         steps.append(
             WalkthroughStep(
@@ -197,6 +211,7 @@ def build_walkthrough_payload(sop: models.Sop, db: DBSession) -> WalkthroughPayl
                 screenshot_url=screenshot_url,
                 time_estimate=time_estimate,
                 screenshot_highlight=screenshot_highlight,
+                anchor_mode=anchor_mode,
             )
         )
 

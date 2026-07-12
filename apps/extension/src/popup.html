@@ -90,6 +90,46 @@
           Review Session
         </button>
 
+        <section class="walkthrough-section" aria-labelledby="walkthrough-heading">
+          <div class="walkthrough-header">
+            <div>
+              <h2 id="walkthrough-heading">Play a walkthrough</h2>
+              <p>Guide yourself on the live page with a non-blocking overlay.</p>
+            </div>
+            <div id="walkthroughBadge" class="status-badge status-ready" aria-live="polite">
+              <span class="status-dot"></span>
+              <span id="walkthroughStatusText">Idle</span>
+            </div>
+          </div>
+
+          <label for="sopIdInput">Published SOP id</label>
+          <div class="input-wrap">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 6h16M4 12h10M4 18h14"></path>
+            </svg>
+            <input
+              id="sopIdInput"
+              name="sopId"
+              type="text"
+              maxlength="80"
+              placeholder="Paste a published SOP UUID"
+              autocomplete="off"
+            />
+          </div>
+          <p id="walkthroughHint" class="field-hint">
+            Starts an overlay on the current tab. Progress is kept for this browser session.
+          </p>
+
+          <div class="actions">
+            <button id="startWalkthroughButton" class="button button-primary" type="button" disabled>
+              Start Walkthrough
+            </button>
+            <button id="stopWalkthroughButton" class="button button-secondary" type="button" disabled>
+              Stop Walkthrough
+            </button>
+          </div>
+        </section>
+
         <footer>
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path d="M12 3l7 3v5c0 4.5-3 8.5-7 10-4-1.5-7-5.5-7-10V6l7-3Z"></path>

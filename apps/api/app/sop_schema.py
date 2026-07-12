@@ -86,6 +86,8 @@ class WalkthroughStep(BaseModel):
     screenshot_url: str | None = None
     time_estimate: int | None = Field(default=None, ge=0)
     screenshot_highlight: ScreenshotHighlight | None = None
+    # element: has css/xpath; screenshot: no selector but has image; none: instruction-only.
+    anchor_mode: Literal["element", "screenshot", "none"] = "element"
 
 
 class WalkthroughPayload(BaseModel):

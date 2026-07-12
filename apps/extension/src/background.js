@@ -159,6 +159,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.type === 'WALKTHROUGH_STEP_ENTERED' || message.type === 'WALKTHROUGH_FINISHED') {
+    // H09AAPPLE-30 will persist timing / completion events from these hooks.
+    console.log('Walkthrough analytics hook:', message.type, message);
+    sendResponse({ ok: true });
+    return false;
+  }
+
   if (RECORDED_EVENT_TYPES.has(message.type)) {
     writeQueue = writeQueue
       .then(async () => {
