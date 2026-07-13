@@ -231,7 +231,6 @@
         };
 
         element.addEventListener('input', handler, {
-          once: true,
           signal,
         });
 
@@ -694,6 +693,26 @@
     currentVisitStepNumber = null;
   }
 
+  // Single source of truth for tearing down an in-progress run's bookkeeping,
+  // whether that happens via Finish or via an external stop (e.g. popup Stop
+  // clearing storage out from under us). Always finalizes the open step's
+  // left_at/duration first, then clears listeners/highlight/friction/timings
+  // so a subsequent walkthrough on the same page starts from a clean slate.
+  function resetWalkthroughState() {
+    leaveCurrentStep();
+
+    detachStepListener();
+    removeHighlight();
+
+    frictionEvents = [];
+    stepTimings = [];
+    missFrictionStepIndex = null;
+
+    currentVisitEnteredAt = null;
+    currentVisitStepNumber = null;
+    lastEnteredStepIndex = null;
+  }
+
   function recordFriction(eventType) {
     frictionEvents.push({
       step_number: currentVisitStepNumber,
@@ -784,13 +803,13 @@
     detachStepListener();
     removeHighlight();
 
-    // Push the final step's timing entry before we read frictionEvents/stepTimings
-    // for the completion message.
-    leaveCurrentStep();
-
-    // H09AAPPLE-30 owns the completion POST; emit a hook with the full
-    // friction/timing history collected during this run, then clear local state.
     try {
+      // Push the final step's timing entry before we read frictionEvents/stepTimings
+      // for the completion message.
+      leaveCurrentStep();
+
+      // H09AAPPLE-30 owns the completion POST; emit a hook with the full
+      // friction/timing history collected during this run.
       chrome.runtime?.sendMessage?.({
         type: 'WALKTHROUGH_FINISHED',
         sopId: activeState?.sopId ?? null,
@@ -799,11 +818,14 @@
       });
     } catch {
       // ignore
+    } finally {
+      // resetWalkthroughState() calls leaveCurrentStep() again internally;
+      // that second call is a guarded no-op (currentVisitEnteredAt is already
+      // null from the call above) but keeps this the single place that clears
+      // frictionEvents/stepTimings/lastEnteredStepIndex, rather than
+      // duplicating that list here too.
+      resetWalkthroughState();
     }
-
-    frictionEvents = [];
-    stepTimings = [];
-    missFrictionStepIndex = null;
 
     activeState = {
       status: 'idle',
@@ -823,8 +845,19 @@
     const state = result?.[STORAGE_STATE_KEY] ?? null;
     const payload = result?.[STORAGE_PAYLOAD_KEY] ?? null;
 
+    const wasPlaying = activeState?.status === 'playing';
+
     activeState = state;
     activePayload = payload;
+
+    // Walkthrough stopped externally (e.g. popup Stop clearing storage out
+    // from under this content script, rather than going through handleFinish).
+    // Finalize the open step's timing and clear frictionEvents/stepTimings/
+    // lastEnteredStepIndex so a subsequent run on this page doesn't inherit
+    // leftover data from the aborted one.
+    if (wasPlaying && state?.status !== 'playing') {
+      resetWalkthroughState();
+    }
 
     if (
       state?.status === 'playing' &&

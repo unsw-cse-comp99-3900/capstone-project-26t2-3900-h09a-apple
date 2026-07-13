@@ -109,6 +109,14 @@ def _resolve_step_metadata(
     screenshot_highlight = None
     expected_action = None
 
+    priority = {
+        models.EventType.click.value: 1,
+        models.EventType.input.value: 2,
+        models.EventType.submit.value: 3,
+    }
+    submit_priority = priority[models.EventType.submit.value]
+    best_priority = 0
+
     for event in _load_ordered_events(source_event_ids, session_id, tenant_id, db):
         if css_selector is None:
             selector = getattr(event, "target_selector", None)
@@ -129,18 +137,27 @@ def _resolve_step_metadata(
                 )
 
         if screenshot_highlight is None:
-            screenshot_highlight = _extract_screenshot_highlight(getattr(event, "attrs", None))
+            screenshot_highlight = _extract_screenshot_highlight(
+                getattr(event, "attrs", None)
+            )
 
-        if expected_action is None:
-            event_type = getattr(event, "type", None)
-            if event_type in {
-                models.EventType.click.value,
-                models.EventType.input.value,
-                models.EventType.submit.value,
-            }:
-                expected_action = event_type
+        event_type = getattr(event, "type", None)
+        current_priority = priority.get(event_type, 0)
 
-        if css_selector and xpath and screenshot_url and screenshot_highlight and expected_action:
+        if current_priority > best_priority:
+            best_priority = current_priority
+            expected_action = event_type
+
+        # Once all metadata is available and we've already found the
+        # highest-priority action (submit), no later event can improve
+        # the result.
+        if (
+            css_selector
+            and xpath
+            and screenshot_url
+            and screenshot_highlight
+            and best_priority == submit_priority
+        ):
             break
 
     return (
@@ -150,6 +167,7 @@ def _resolve_step_metadata(
         screenshot_highlight,
         expected_action,
     )
+
 
 
 def resolve_step_screenshot_url(
