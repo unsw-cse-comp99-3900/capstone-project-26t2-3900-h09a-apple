@@ -21,6 +21,8 @@
   let hostEl = null;
   /** @type {Element | null} */
   let currentTarget = null;
+  /** @type {{ element: Element, outline: string, outlineOffset: string } | null} */
+  let currentHighlightRestore = null;
   /** @type {MutationObserver | null} */
   let mutationObserver = null;
   /** @type {number | null} */
@@ -63,6 +65,7 @@
       }
     }
 
+    // XPath
     if (typeof step.xpath === 'string' && step.xpath.trim()) {
       try {
         const result = doc.evaluate(
@@ -82,6 +85,43 @@
     }
 
     return { element: null, mode: 'fallback' };
+  }
+
+  function removeHighlight() {
+    if (!currentHighlightRestore) {
+      return;
+    }
+
+    const { element, outline, outlineOffset } = currentHighlightRestore;
+
+    element.style.outline = outline;
+    element.style.outlineOffset = outlineOffset;
+
+    currentHighlightRestore = null;
+    currentTarget = null;
+  }
+
+  function applyHighlight(element) {
+    if (!element) {
+      return;
+    }
+
+    if (currentHighlightRestore?.element === element) {
+      return;
+    }
+
+    removeHighlight();
+
+    currentHighlightRestore = {
+      element,
+      outline: element.style.outline,
+      outlineOffset: element.style.outlineOffset,
+    };
+
+    element.style.outline = '3px solid #756eff';
+    element.style.outlineOffset = '2px';
+
+    currentTarget = element;
   }
 
   function resolveAnchorMode(step) {
@@ -260,6 +300,9 @@
 
   function teardownHost() {
     tearDownObservers();
+
+    removeHighlight();
+    
     if (hostEl) {
       hostEl.remove();
     }
@@ -359,25 +402,30 @@
 
     const anchorMode = resolveAnchorMode(step);
     const resolved = resolveTarget(step);
-    currentTarget = resolved.element;
 
     const fallbackNote = shadowRoot.querySelector('.fallback-note');
     const preview = shadowRoot.querySelector('.preview');
-    const hasScreenshot = typeof step.screenshot_url === 'string' && Boolean(step.screenshot_url);
+    const hasScreenshot =
+      typeof step.screenshot_url === 'string' && Boolean(step.screenshot_url);
     const showPreview = hasScreenshot && anchorMode !== 'none';
 
     if (resolved.element) {
       const rect = resolved.element.getBoundingClientRect();
-      highlight.hidden = false;
-      highlight.style.top = `${Math.max(0, rect.top - 4)}px`;
-      highlight.style.left = `${Math.max(0, rect.left - 4)}px`;
-      highlight.style.width = `${Math.max(0, rect.width + 8)}px`;
-      highlight.style.height = `${Math.max(0, rect.height + 8)}px`;
+
+      applyHighlight(resolved.element);
+
+      // Legacy overlay highlight kept temporarily but no longer used.
+      highlight.hidden = true;
+
       fallbackNote.hidden = true;
       fallbackNote.textContent = '';
+
       placeTooltip(tooltip, rect);
     } else {
+      removeHighlight();
+
       highlight.hidden = true;
+
       placeTooltip(tooltip, viewportCenterRect());
 
       if (showPreview) {
@@ -388,7 +436,8 @@
             : 'Target element not found on this page. Showing captured preview.';
       } else {
         fallbackNote.hidden = false;
-        fallbackNote.textContent = 'No on-page target available for this step.';
+        fallbackNote.textContent =
+          'No on-page target available for this step.';
       }
     }
 
@@ -483,6 +532,9 @@
     if (!activeState || activeState.stepIndex <= 0) {
       return;
     }
+
+    removeHighlight();
+
     persistState({
       ...activeState,
       stepIndex: activeState.stepIndex - 1,
@@ -494,6 +546,9 @@
     if (!activeState || activeState.stepIndex >= steps.length - 1) {
       return;
     }
+
+    removeHighlight();
+    
     persistState({
       ...activeState,
       stepIndex: activeState.stepIndex + 1,
@@ -501,6 +556,8 @@
   }
 
   function handleFinish() {
+    removeHighlight();
+
     // H09AAPPLE-30 owns the completion POST; emit a hook then clear local state.
     try {
       chrome.runtime?.sendMessage?.({
