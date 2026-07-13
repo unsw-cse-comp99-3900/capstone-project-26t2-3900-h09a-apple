@@ -144,9 +144,7 @@ def _resolve_step_metadata(
                 )
 
         if screenshot_highlight is None:
-            screenshot_highlight = _extract_screenshot_highlight(
-                getattr(event, "attrs", None)
-            )
+            screenshot_highlight = _extract_screenshot_highlight(getattr(event, "attrs", None))
 
         event_type = getattr(event, "type", None)
         current_priority = priority.get(event_type, 0)
@@ -176,7 +174,6 @@ def _resolve_step_metadata(
         screenshot_highlight,
         expected_action,
     )
-
 
 
 def resolve_step_screenshot_url(
