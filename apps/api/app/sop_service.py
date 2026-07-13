@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from math import ceil
+from typing import Literal
 from uuid import UUID
 
 from sqlalchemy.orm import Session as DBSession
@@ -95,17 +96,25 @@ def _resolve_step_metadata(
     session_id: UUID,
     tenant_id: UUID,
     db: DBSession,
-) -> tuple[str | None, str | None, str | None, dict | None]:
+) -> tuple[
+    str | None,
+    str | None,
+    str | None,
+    dict | None,
+    Literal["click", "input", "submit"] | None,
+]:
     css_selector = None
     xpath = None
     screenshot_url = None
     screenshot_highlight = None
+    expected_action = None
 
     for event in _load_ordered_events(source_event_ids, session_id, tenant_id, db):
         if css_selector is None:
             selector = getattr(event, "target_selector", None)
             if selector:
                 css_selector = selector
+
         if xpath is None:
             xpath = _xpath_from_attrs(getattr(event, "attrs", None))
 
@@ -122,10 +131,31 @@ def _resolve_step_metadata(
         if screenshot_highlight is None:
             screenshot_highlight = _extract_screenshot_highlight(getattr(event, "attrs", None))
 
-        if css_selector and xpath and screenshot_url and screenshot_highlight:
-            break
-    return css_selector, xpath, screenshot_url, screenshot_highlight
+        if expected_action is None:
+            event_type = getattr(event, "type", None)
+            if event_type in {
+                models.EventType.click.value,
+                models.EventType.input.value,
+                models.EventType.submit.value,
+            }:
+                expected_action = event_type
 
+        if (
+            css_selector
+            and xpath
+            and screenshot_url
+            and screenshot_highlight
+            and expected_action
+        ):
+            break
+
+    return (
+        css_selector,
+        xpath,
+        screenshot_url,
+        screenshot_highlight,
+        expected_action,
+    )
 
 def resolve_step_screenshot_url(
     source_event_ids: list[str],
@@ -133,7 +163,7 @@ def resolve_step_screenshot_url(
     session_id: UUID,
     tenant_id: UUID,
 ) -> str | None:
-    _, _, screenshot_url, _ = _resolve_step_metadata(
+    _, _, screenshot_url, *_ = _resolve_step_metadata(
         source_event_ids,
         session_id,
         tenant_id,
@@ -176,7 +206,13 @@ def build_walkthrough_payload(sop: models.Sop, db: DBSession) -> WalkthroughPayl
             raise WalkthroughDataError(f"Step {step['order']} has empty instruction")
 
         source_event_ids = step.get("source_event_ids", [])
-        css_selector, xpath, screenshot_url, screenshot_highlight = _resolve_step_metadata(
+        (
+            css_selector,
+            xpath,
+            screenshot_url,
+            screenshot_highlight,
+            expected_action,
+        ) = _resolve_step_metadata(
             source_event_ids,
             sop.session_id,
             sop.tenant_id,
@@ -212,6 +248,7 @@ def build_walkthrough_payload(sop: models.Sop, db: DBSession) -> WalkthroughPayl
                 time_estimate=time_estimate,
                 screenshot_highlight=screenshot_highlight,
                 anchor_mode=anchor_mode,
+                expected_action=expected_action,
             )
         )
 

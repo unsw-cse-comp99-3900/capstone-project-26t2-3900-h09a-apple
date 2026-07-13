@@ -345,3 +345,68 @@ test('none anchor mode hides preview even if screenshot_url is present', async (
     'No on-page target available for this step.',
   );
 });
+
+test('highlight applies outline to resolved element', async () => {
+  const payload = {
+    steps: [
+      {
+        step_number: 1,
+        instruction: 'Click Save',
+        css_selector: '#save-btn',
+      },
+    ],
+  };
+
+  const { document, flush } = loadRuntime({
+    walkthroughState: {
+      status: 'playing',
+      sopId: 'sop-1',
+      stepIndex: 0,
+    },
+    walkthroughPayload: payload,
+  });
+
+  await flush();
+
+  const button = document.getElementById('save-btn');
+
+  assert.equal(button.style.outline, '3px solid #756eff');
+  assert.equal(button.style.outlineOffset, '2px');
+});
+
+test('click action auto advances', async () => {
+  const payload = {
+    steps: [
+      {
+        step_number: 1,
+        instruction: 'Click Save',
+        css_selector: '#save-btn',
+        expected_action: 'click',
+      },
+      {
+        step_number: 2,
+        instruction: 'Done',
+      },
+    ],
+  };
+
+  const { document, flush, sessionValues } = loadRuntime({
+    walkthroughState: {
+      status: 'playing',
+      sopId: 'sop',
+      stepIndex: 0,
+    },
+    walkthroughPayload: payload,
+  });
+
+  await flush();
+
+  document.getElementById('save-btn').click();
+
+  await flush();
+
+  assert.equal(
+    sessionValues().walkthroughState.stepIndex,
+    1,
+  );
+});

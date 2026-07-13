@@ -33,6 +33,28 @@
   let repositionScheduled = false;
   /** @type {number | null} */
   let myTabId = null;
+  /** @type {AbortController | null} */
+  let currentStepListener = null;
+  /** @type {Array<{
+  *   step_number: number,
+  *   event_type: 'wrong_target' | 'wrong_page' | 'empty_input' | 'selector_miss',
+  *   occurred_at: number,
+  * }>} */
+  let frictionEvents = [];
+
+  /** @type {Array<{
+   *   step_number: number,
+   *   entered_at: number,
+   *   left_at: number,
+   *   duration_ms: number,
+   * }>} */
+  let stepTimings = [];
+
+  // Guards against re-recording selector_miss/wrong_page on every scroll,
+  // resize, or DOM mutation while the same step's target stays unresolved.
+  // Reset whenever the active step actually changes (see enterCurrentStep).
+  /** @type {number | null} */
+  let missFrictionStepIndex = null;
 
   function getSteps() {
     return Array.isArray(activePayload?.steps) ? activePayload.steps : [];
@@ -122,6 +144,121 @@
     element.style.outlineOffset = '2px';
 
     currentTarget = element;
+  }
+
+  function detachStepListener() {
+    if (!currentStepListener) {
+      return;
+    }
+
+    currentStepListener.abort();
+    currentStepListener = null;
+  }
+
+  /**
+   * Records a `wrong_target` friction event when the person clicks somewhere
+   * on the page other than the step's resolved target (or one of its
+   * descendants) while a click/submit step is active. Bound with the same
+   * AbortController signal as the step's own advance listener, so it is torn
+   * down automatically whenever detachStepListener() runs - no separate
+   * cleanup path to remember.
+   */
+  function attachWrongTargetListener(targetElement, signal) {
+    const handler = (event) => {
+      if (
+        event.target instanceof Node &&
+        (event.target === targetElement || targetElement.contains(event.target))
+      ) {
+        return;
+      }
+      // Ignore clicks on our own tooltip/overlay (Previous/Next/Finish etc.).
+      if (
+        hostEl &&
+        event.target instanceof Node &&
+        (event.target === hostEl || hostEl.contains(event.target))
+      ) {
+        return;
+      }
+      recordFriction('wrong_target');
+    };
+
+    document.addEventListener('click', handler, { capture: true, signal });
+  }
+
+  function attachStepListener(step, element) {
+    if (!step || !element || !step.expected_action) {
+      detachStepListener();
+      return;
+    }
+
+    // Already listening on this element.
+    if (
+      currentStepListener &&
+      currentHighlightRestore?.element === element
+    ) {
+      return;
+    }
+
+    detachStepListener();
+
+    currentStepListener = new AbortController();
+    const { signal } = currentStepListener;
+
+    const advance = () => {
+      detachStepListener();
+      handleNext();
+    };
+
+    switch (step.expected_action) {
+      case 'click':
+        element.addEventListener('click', advance, {
+          once: true,
+          signal,
+        });
+        attachWrongTargetListener(element, signal);
+        break;
+
+      case 'input': {
+        const handler = (event) => {
+          const target = /** @type {HTMLInputElement | HTMLTextAreaElement | null} */ (
+            event.target
+          );
+          const value = typeof target?.value === 'string' ? target.value.trim() : '';
+
+          if (!value) {
+            recordFriction('empty_input');
+            return;
+          }
+
+          advance();
+        };
+
+        element.addEventListener('input', handler, {
+          once: true,
+          signal,
+        });
+
+        break;
+      }
+      case 'submit':
+        if (element instanceof HTMLFormElement) {
+          element.addEventListener('submit', advance, {
+            once: true,
+            signal,
+          });
+        } else {
+          // Submit buttons normally emit click; the form emits submit.
+          element.addEventListener('click', advance, {
+            once: true,
+            signal,
+          });
+        }
+        attachWrongTargetListener(element, signal);
+        break;
+
+      default:
+        break;
+    }
   }
 
   function resolveAnchorMode(step) {
@@ -301,8 +438,13 @@
   function teardownHost() {
     tearDownObservers();
 
+    // Intentionally does NOT call leaveCurrentStep(): teardown is DOM/observer
+    // cleanup, not a walkthrough lifecycle event. Step-visit boundaries are
+    // owned by handlePrevious/handleNext/handleFinish, which already call
+    // leaveCurrentStep() before any state transition that leads here.
+    detachStepListener();
     removeHighlight();
-    
+
     if (hostEl) {
       hostEl.remove();
     }
@@ -336,6 +478,8 @@
         if (hostEl && (mutation.target === hostEl || hostEl.contains(mutation.target))) {
           continue;
         }
+
+        refreshHighlight();
         scheduleReposition();
         return;
       }
@@ -388,6 +532,46 @@
     tooltip.style.left = `${left}px`;
   }
 
+  // Records selector_miss/wrong_page at most once per step visit, so scroll/
+  // resize/mutation-driven re-checks (refreshHighlight, reposition) don't
+  // flood frictionEvents with duplicates for the same unresolved target.
+  function recordSelectorMissOnce(anchorMode) {
+    if (anchorMode !== 'element') {
+      return;
+    }
+    if (!activeState) {
+      return;
+    }
+    if (missFrictionStepIndex === activeState.stepIndex) {
+      return;
+    }
+    missFrictionStepIndex = activeState.stepIndex;
+    recordFriction('selector_miss');
+    recordFriction('wrong_page');
+  }
+
+  function refreshHighlight() {
+    const step = getCurrentStep();
+    if (!step) {
+      detachStepListener();
+      removeHighlight();
+      return;
+    }
+
+    const anchorMode = resolveAnchorMode(step);
+    const resolved = resolveTarget(step);
+
+    if (resolved.element) {
+      applyHighlight(resolved.element);
+      attachStepListener(step, resolved.element);
+    } else {
+      recordSelectorMissOnce(anchorMode);
+
+      detachStepListener();
+      removeHighlight();
+    }
+  }
+
   function reposition() {
     if (!shadowRoot || !activeState || activeState.status !== 'playing') {
       return;
@@ -413,6 +597,7 @@
       const rect = resolved.element.getBoundingClientRect();
 
       applyHighlight(resolved.element);
+      attachStepListener(step, resolved.element);
 
       // Legacy overlay highlight kept temporarily but no longer used.
       highlight.hidden = true;
@@ -422,7 +607,10 @@
 
       placeTooltip(tooltip, rect);
     } else {
+      recordSelectorMissOnce(anchorMode);
+
       removeHighlight();
+      detachStepListener();
 
       highlight.hidden = true;
 
@@ -465,6 +653,9 @@
       return;
     }
 
+    // New step visit: allow a fresh selector_miss/wrong_page recording for it.
+    missFrictionStepIndex = null;
+
     const stepNumber = step.step_number ?? activeState.stepIndex + 1;
     lastEnteredStepIndex = activeState.stepIndex;
     currentVisitStepNumber = stepNumber;
@@ -479,6 +670,44 @@
     } catch {
       // Background may be unavailable; player still works offline of analytics.
     }
+  }
+
+  function leaveCurrentStep() {
+    if (
+      currentVisitEnteredAt == null ||
+      currentVisitStepNumber == null
+    ) {
+      return;
+    }
+
+    const leftAt = Date.now();
+
+    stepTimings.push({
+      step_number: currentVisitStepNumber,
+      entered_at: currentVisitEnteredAt,
+      left_at: leftAt,
+      duration_ms: leftAt - currentVisitEnteredAt,
+    });
+
+    try {
+      chrome.runtime?.sendMessage?.({
+        type: 'WALKTHROUGH_STEP_LEFT',
+        step_number: currentVisitStepNumber,
+        entered_at: currentVisitEnteredAt,
+        left_at: leftAt,
+      });
+    } catch {}
+
+    currentVisitEnteredAt = null;
+    currentVisitStepNumber = null;
+  }
+
+  function recordFriction(eventType) {
+    frictionEvents.push({
+      step_number: currentVisitStepNumber,
+      event_type: eventType,
+      occurred_at: Date.now(),
+    });
   }
 
   function render() {
@@ -533,6 +762,8 @@
       return;
     }
 
+    leaveCurrentStep();
+    detachStepListener();
     removeHighlight();
 
     persistState({
@@ -547,8 +778,10 @@
       return;
     }
 
+    leaveCurrentStep();
+    detachStepListener();
     removeHighlight();
-    
+
     persistState({
       ...activeState,
       stepIndex: activeState.stepIndex + 1,
@@ -556,19 +789,29 @@
   }
 
   function handleFinish() {
+    detachStepListener();
     removeHighlight();
 
-    // H09AAPPLE-30 owns the completion POST; emit a hook then clear local state.
+    // Push the final step's timing entry before we read frictionEvents/stepTimings
+    // for the completion message.
+    leaveCurrentStep();
+
+    // H09AAPPLE-30 owns the completion POST; emit a hook with the full
+    // friction/timing history collected during this run, then clear local state.
     try {
       chrome.runtime?.sendMessage?.({
         type: 'WALKTHROUGH_FINISHED',
         sopId: activeState?.sopId ?? null,
-        step_number: currentVisitStepNumber,
-        entered_at: currentVisitEnteredAt,
+        friction_events: frictionEvents,
+        step_timings: stepTimings,
       });
     } catch {
       // ignore
     }
+
+    frictionEvents = [];
+    stepTimings = [];
+    missFrictionStepIndex = null;
 
     activeState = {
       status: 'idle',
@@ -665,3 +908,4 @@
     }),
   };
 })();
+

@@ -88,6 +88,7 @@ class WalkthroughStep(BaseModel):
     screenshot_highlight: ScreenshotHighlight | None = None
     # element: has css/xpath; screenshot: no selector but has image; none: instruction-only.
     anchor_mode: Literal["element", "screenshot", "none"] = "element"
+    expected_action: Literal["click", "input", "submit"] | None = None
 
 
 class WalkthroughPayload(BaseModel):
