@@ -36,10 +36,10 @@
   /** @type {AbortController | null} */
   let currentStepListener = null;
   /** @type {Array<{
-  *   step_number: number,
-  *   event_type: 'wrong_target' | 'wrong_page' | 'empty_input' | 'selector_miss',
-  *   occurred_at: number,
-  * }>} */
+   *   step_number: number,
+   *   event_type: 'wrong_target' | 'wrong_page' | 'empty_input' | 'selector_miss',
+   *   occurred_at: number,
+   * }>} */
   let frictionEvents = [];
 
   /** @type {Array<{
@@ -192,10 +192,7 @@
     }
 
     // Already listening on this element.
-    if (
-      currentStepListener &&
-      currentHighlightRestore?.element === element
-    ) {
+    if (currentStepListener && currentHighlightRestore?.element === element) {
       return;
     }
 
@@ -589,8 +586,7 @@
 
     const fallbackNote = shadowRoot.querySelector('.fallback-note');
     const preview = shadowRoot.querySelector('.preview');
-    const hasScreenshot =
-      typeof step.screenshot_url === 'string' && Boolean(step.screenshot_url);
+    const hasScreenshot = typeof step.screenshot_url === 'string' && Boolean(step.screenshot_url);
     const showPreview = hasScreenshot && anchorMode !== 'none';
 
     if (resolved.element) {
@@ -624,8 +620,7 @@
             : 'Target element not found on this page. Showing captured preview.';
       } else {
         fallbackNote.hidden = false;
-        fallbackNote.textContent =
-          'No on-page target available for this step.';
+        fallbackNote.textContent = 'No on-page target available for this step.';
       }
     }
 
@@ -673,10 +668,7 @@
   }
 
   function leaveCurrentStep() {
-    if (
-      currentVisitEnteredAt == null ||
-      currentVisitStepNumber == null
-    ) {
+    if (currentVisitEnteredAt == null || currentVisitStepNumber == null) {
       return;
     }
 
@@ -908,4 +900,3 @@
     }),
   };
 })();
-

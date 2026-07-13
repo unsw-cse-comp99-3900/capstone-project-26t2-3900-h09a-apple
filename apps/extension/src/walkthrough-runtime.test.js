@@ -405,8 +405,5 @@ test('click action auto advances', async () => {
 
   await flush();
 
-  assert.equal(
-    sessionValues().walkthroughState.stepIndex,
-    1,
-  );
+  assert.equal(sessionValues().walkthroughState.stepIndex, 1);
 });
