@@ -76,6 +76,7 @@
       return { element: null, mode: 'fallback' };
     }
 
+    // CSS selector
     if (typeof step.css_selector === 'string' && step.css_selector.trim()) {
       try {
         const el = doc.querySelector(step.css_selector);
@@ -103,6 +104,45 @@
         }
       } catch {
         // Invalid xpath - fall through.
+      }
+    }
+
+    // Basic label fallback.
+    if (typeof step.target_label === 'string' && step.target_label.trim()) {
+      const label = step.target_label.trim().toLowerCase();
+
+      const candidates = doc.querySelectorAll(
+        'input, textarea, select, button, a, label'
+      );
+
+      for (const element of candidates) {
+        const values = [
+          element.textContent,
+          element.getAttribute('aria-label'),
+          element.getAttribute('placeholder'),
+          element.getAttribute('title'),
+        ];
+
+        if (
+          values.some(
+            (value) =>
+              typeof value === 'string' &&
+              value.trim().toLowerCase() === label,
+          )
+        ) {
+          // If we matched a <label for="...">, return the associated control.
+          if (element.tagName === 'LABEL') {
+            const htmlFor = element.getAttribute('for');
+            if (htmlFor) {
+              const control = doc.getElementById(htmlFor);
+              if (control) {
+                return { element: control, mode: 'label' };
+              }
+            }
+          }
+
+          return { element, mode: 'label' };
+        }
       }
     }
 

@@ -267,6 +267,7 @@ export interface WalkthroughStep {
   instruction: string;
   css_selector?: string | null;
   xpath?: string | null;
+  target_label: string | null;
   screenshot_url?: string | null;
   time_estimate?: number | null;
   screenshot_highlight?: ScreenshotHighlight | null;

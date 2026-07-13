@@ -100,11 +100,13 @@ def _resolve_step_metadata(
     str | None,
     str | None,
     str | None,
+    str | None,
     dict | None,
     Literal["click", "input", "submit"] | None,
 ]:
     css_selector = None
     xpath = None
+    target_label = None
     screenshot_url = None
     screenshot_highlight = None
     expected_action = None
@@ -125,6 +127,11 @@ def _resolve_step_metadata(
 
         if xpath is None:
             xpath = _xpath_from_attrs(getattr(event, "attrs", None))
+
+        if target_label is None:
+            label = getattr(event, "target_label", None)
+            if label:
+                target_label = label.strip()
 
         if screenshot_url is None:
             screenshot_id = getattr(event, "screenshot_id", None)
@@ -154,6 +161,7 @@ def _resolve_step_metadata(
         if (
             css_selector
             and xpath
+            and target_label
             and screenshot_url
             and screenshot_highlight
             and best_priority == submit_priority
@@ -163,6 +171,7 @@ def _resolve_step_metadata(
     return (
         css_selector,
         xpath,
+        target_label,
         screenshot_url,
         screenshot_highlight,
         expected_action,
@@ -176,7 +185,7 @@ def resolve_step_screenshot_url(
     session_id: UUID,
     tenant_id: UUID,
 ) -> str | None:
-    _, _, screenshot_url, *_ = _resolve_step_metadata(
+    _, _, _, screenshot_url, *_ = _resolve_step_metadata(
         source_event_ids,
         session_id,
         tenant_id,
@@ -222,6 +231,7 @@ def build_walkthrough_payload(sop: models.Sop, db: DBSession) -> WalkthroughPayl
         (
             css_selector,
             xpath,
+            target_label,
             screenshot_url,
             screenshot_highlight,
             expected_action,
@@ -257,6 +267,7 @@ def build_walkthrough_payload(sop: models.Sop, db: DBSession) -> WalkthroughPayl
                 instruction=instruction,
                 css_selector=css_selector,
                 xpath=xpath,
+                target_label=target_label,
                 screenshot_url=screenshot_url,
                 time_estimate=time_estimate,
                 screenshot_highlight=screenshot_highlight,
