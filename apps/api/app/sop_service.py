@@ -140,13 +140,7 @@ def _resolve_step_metadata(
             }:
                 expected_action = event_type
 
-        if (
-            css_selector
-            and xpath
-            and screenshot_url
-            and screenshot_highlight
-            and expected_action
-        ):
+        if css_selector and xpath and screenshot_url and screenshot_highlight and expected_action:
             break
 
     return (
@@ -156,6 +150,7 @@ def _resolve_step_metadata(
         screenshot_highlight,
         expected_action,
     )
+
 
 def resolve_step_screenshot_url(
     source_event_ids: list[str],
