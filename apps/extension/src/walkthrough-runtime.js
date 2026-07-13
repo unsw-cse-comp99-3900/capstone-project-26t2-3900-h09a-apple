@@ -111,9 +111,7 @@
     if (typeof step.target_label === 'string' && step.target_label.trim()) {
       const label = step.target_label.trim().toLowerCase();
 
-      const candidates = doc.querySelectorAll(
-        'input, textarea, select, button, a, label'
-      );
+      const candidates = doc.querySelectorAll('input, textarea, select, button, a, label');
 
       for (const element of candidates) {
         const values = [
@@ -124,11 +122,7 @@
         ];
 
         if (
-          values.some(
-            (value) =>
-              typeof value === 'string' &&
-              value.trim().toLowerCase() === label,
-          )
+          values.some((value) => typeof value === 'string' && value.trim().toLowerCase() === label)
         ) {
           // If we matched a <label for="...">, return the associated control.
           if (element.tagName === 'LABEL') {
