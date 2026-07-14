@@ -4,14 +4,20 @@ import {
   getSessionPayload,
   saveSessionPayloadWithCap,
 } from './session-store.js';
-import { clearStoredAuthTokens, redeemHandoffCode } from './auth.js';
+import { authenticatedFetch, clearStoredAuthTokens, redeemHandoffCode } from './auth.js';
 import { clearDataCaptureConsent } from './consent.js';
 import { handleExternalAuthMessage } from './external-auth.js';
+import {
+  WALKTHROUGH_PAYLOAD_KEY,
+  WALKTHROUGH_STORAGE_KEY,
+  startWalkthrough,
+} from './walkthrough-state.js';
 
 const externalAuthHandlers = {
   redeemHandoffCode,
   clearStoredAuthTokens,
   deleteSessionPayload,
+  startWalkthroughFromSop,
 };
 
 let writeQueue = Promise.resolve();
@@ -22,6 +28,8 @@ const SCREENSHOT_THROTTLE_MS = 500;
 const SCREENSHOT_FORMAT = 'jpeg';
 const SCREENSHOT_QUALITY = 50;
 const RECORDED_EVENT_TYPES = new Set(['CLICK', 'NAVIGATION', 'INPUT']);
+const URL_PATTERN =
+  /\bhttps?:\/\/[^\s)]+|\b(?:www\.)?[a-z0-9][a-z0-9-]*(?:\.[a-z0-9][a-z0-9-]*)+(?:\/[^\s)]*)?/i;
 
 function resetSessionBuffers() {
   lastScreenshotAt = 0;
@@ -38,6 +46,107 @@ function parseScreenshotDataUrl(dataUrl) {
   return {
     content_type: match[1],
     data_base64: match[2],
+  };
+}
+
+function normalizeLaunchUrl(value) {
+  if (!value) {
+    return null;
+  }
+
+  const trimmed = String(value)
+    .trim()
+    .replace(/[.,;:!?]+$/, '');
+  if (!trimmed) {
+    return null;
+  }
+
+  const parseable = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  try {
+    return new URL(parseable).toString();
+  } catch {
+    return null;
+  }
+}
+
+function inferLaunchUrl(payload) {
+  const steps = Array.isArray(payload?.steps) ? payload.steps : [];
+  for (const step of steps) {
+    const instruction = typeof step?.instruction === 'string' ? step.instruction : '';
+    const match = instruction.match(URL_PATTERN);
+    const url = normalizeLaunchUrl(match?.[0]);
+    if (url) {
+      return url;
+    }
+  }
+  return null;
+}
+
+function getActiveTab() {
+  return new Promise((resolve) => {
+    chrome.tabs?.query?.({ active: true, currentWindow: true }, (tabs) => {
+      resolve(tabs?.[0] ?? null);
+    });
+  });
+}
+
+async function resolveWalkthroughTab(payload) {
+  const launchUrl = inferLaunchUrl(payload);
+  if (launchUrl) {
+    return chrome.tabs.create({ url: launchUrl, active: true });
+  }
+
+  const activeTab = await getActiveTab();
+  if (activeTab?.id != null) {
+    await chrome.tabs.update(activeTab.id, { active: true });
+    return activeTab;
+  }
+
+  return chrome.tabs.create({ url: 'about:blank', active: true });
+}
+
+async function startWalkthroughFromSop(sopId) {
+  const trimmedSopId = typeof sopId === 'string' ? sopId.trim() : '';
+  if (!trimmedSopId) {
+    throw new Error('Missing SOP id');
+  }
+
+  const response = await authenticatedFetch(
+    `/api/v1/sops/${encodeURIComponent(trimmedSopId)}/walkthrough`,
+  );
+  if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error('Sign in to the WorkTrace extension before starting walkthroughs.');
+    }
+    if (response.status === 404) {
+      throw new Error('Published SOP not found for this workspace.');
+    }
+    if (response.status === 422) {
+      throw new Error('Walkthrough data is incomplete for this SOP.');
+    }
+    throw new Error('Could not load walkthrough data.');
+  }
+
+  const payload = await response.json();
+  if (!Array.isArray(payload?.steps) || payload.steps.length === 0) {
+    throw new Error('This SOP has no walkthrough steps.');
+  }
+
+  const tab = await resolveWalkthroughTab(payload);
+  const nextState = startWalkthrough(
+    { status: 'idle', sopId: null, stepIndex: 0, tabId: null },
+    trimmedSopId,
+    { tabId: tab?.id ?? null },
+  );
+
+  await chrome.storage?.session?.set({
+    [WALKTHROUGH_STORAGE_KEY]: nextState,
+    [WALKTHROUGH_PAYLOAD_KEY]: payload,
+  });
+
+  return {
+    sopId: trimmedSopId,
+    tabId: tab?.id ?? null,
   };
 }
 

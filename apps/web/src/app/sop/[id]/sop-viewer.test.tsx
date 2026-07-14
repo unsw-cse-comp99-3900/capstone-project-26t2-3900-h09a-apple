@@ -155,6 +155,7 @@ describe('SopViewer', () => {
     const markup = renderToStaticMarkup(<SopViewer sop={sop} />);
 
     expect(markup).toContain('Invoice Approval SOP');
+    expect(markup).toContain('Start walkthrough');
     expect(markup).toContain('v2');
     expect(markup).toContain('3 total');
     expect(markup.indexOf('Check invoice')).toBeLessThan(markup.indexOf('Choose approval path'));
