@@ -21,6 +21,8 @@
   let hostEl = null;
   /** @type {Element | null} */
   let currentTarget = null;
+  /** @type {{ element: Element, outline: string, outlineOffset: string } | null} */
+  let currentHighlightRestore = null;
   /** @type {MutationObserver | null} */
   let mutationObserver = null;
   /** @type {number | null} */
@@ -31,6 +33,28 @@
   let repositionScheduled = false;
   /** @type {number | null} */
   let myTabId = null;
+  /** @type {AbortController | null} */
+  let currentStepListener = null;
+  /** @type {Array<{
+   *   step_number: number,
+   *   event_type: 'wrong_target' | 'wrong_page' | 'empty_input' | 'selector_miss',
+   *   occurred_at: number,
+   * }>} */
+  let frictionEvents = [];
+
+  /** @type {Array<{
+   *   step_number: number,
+   *   entered_at: number,
+   *   left_at: number,
+   *   duration_ms: number,
+   * }>} */
+  let stepTimings = [];
+
+  // Guards against re-recording selector_miss/wrong_page on every scroll,
+  // resize, or DOM mutation while the same step's target stays unresolved.
+  // Reset whenever the active step actually changes (see enterCurrentStep).
+  /** @type {number | null} */
+  let missFrictionStepIndex = null;
 
   function getSteps() {
     return Array.isArray(activePayload?.steps) ? activePayload.steps : [];
@@ -52,6 +76,7 @@
       return { element: null, mode: 'fallback' };
     }
 
+    // CSS selector
     if (typeof step.css_selector === 'string' && step.css_selector.trim()) {
       try {
         const el = doc.querySelector(step.css_selector);
@@ -63,6 +88,7 @@
       }
     }
 
+    // XPath
     if (typeof step.xpath === 'string' && step.xpath.trim()) {
       try {
         const result = doc.evaluate(
@@ -81,7 +107,188 @@
       }
     }
 
+    // Basic label fallback.
+    if (typeof step.target_label === 'string' && step.target_label.trim()) {
+      const label = step.target_label.trim().toLowerCase();
+
+      const candidates = doc.querySelectorAll('input, textarea, select, button, a, label');
+
+      for (const element of candidates) {
+        const values = [
+          element.textContent,
+          element.getAttribute('aria-label'),
+          element.getAttribute('placeholder'),
+          element.getAttribute('title'),
+        ];
+
+        if (
+          values.some((value) => typeof value === 'string' && value.trim().toLowerCase() === label)
+        ) {
+          // If we matched a <label for="...">, return the associated control.
+          if (element.tagName === 'LABEL') {
+            const htmlFor = element.getAttribute('for');
+            if (htmlFor) {
+              const control = doc.getElementById(htmlFor);
+              if (control) {
+                return { element: control, mode: 'label' };
+              }
+            }
+          }
+
+          return { element, mode: 'label' };
+        }
+      }
+    }
+
     return { element: null, mode: 'fallback' };
+  }
+
+  function removeHighlight() {
+    if (!currentHighlightRestore) {
+      return;
+    }
+
+    const { element, outline, outlineOffset } = currentHighlightRestore;
+
+    element.style.outline = outline;
+    element.style.outlineOffset = outlineOffset;
+
+    currentHighlightRestore = null;
+    currentTarget = null;
+  }
+
+  function applyHighlight(element) {
+    if (!element) {
+      return;
+    }
+
+    if (currentHighlightRestore?.element === element) {
+      return;
+    }
+
+    removeHighlight();
+
+    currentHighlightRestore = {
+      element,
+      outline: element.style.outline,
+      outlineOffset: element.style.outlineOffset,
+    };
+
+    element.style.outline = '3px solid #756eff';
+    element.style.outlineOffset = '2px';
+
+    currentTarget = element;
+  }
+
+  function detachStepListener() {
+    if (!currentStepListener) {
+      return;
+    }
+
+    currentStepListener.abort();
+    currentStepListener = null;
+  }
+
+  /**
+   * Records a `wrong_target` friction event when the person clicks somewhere
+   * on the page other than the step's resolved target (or one of its
+   * descendants) while a click/submit step is active. Bound with the same
+   * AbortController signal as the step's own advance listener, so it is torn
+   * down automatically whenever detachStepListener() runs - no separate
+   * cleanup path to remember.
+   */
+  function attachWrongTargetListener(targetElement, signal) {
+    const handler = (event) => {
+      if (
+        event.target instanceof Node &&
+        (event.target === targetElement || targetElement.contains(event.target))
+      ) {
+        return;
+      }
+      // Ignore clicks on our own tooltip/overlay (Previous/Next/Finish etc.).
+      if (
+        hostEl &&
+        event.target instanceof Node &&
+        (event.target === hostEl || hostEl.contains(event.target))
+      ) {
+        return;
+      }
+      recordFriction('wrong_target');
+    };
+
+    document.addEventListener('click', handler, { capture: true, signal });
+  }
+
+  function attachStepListener(step, element) {
+    if (!step || !element || !step.expected_action) {
+      detachStepListener();
+      return;
+    }
+
+    // Already listening on this element.
+    if (currentStepListener && currentHighlightRestore?.element === element) {
+      return;
+    }
+
+    detachStepListener();
+
+    currentStepListener = new AbortController();
+    const { signal } = currentStepListener;
+
+    const advance = () => {
+      detachStepListener();
+      handleNext();
+    };
+
+    switch (step.expected_action) {
+      case 'click':
+        element.addEventListener('click', advance, {
+          once: true,
+          signal,
+        });
+        attachWrongTargetListener(element, signal);
+        break;
+
+      case 'input': {
+        const handler = (event) => {
+          const target = /** @type {HTMLInputElement | HTMLTextAreaElement | null} */ (
+            event.target
+          );
+          const value = typeof target?.value === 'string' ? target.value.trim() : '';
+
+          if (!value) {
+            recordFriction('empty_input');
+            return;
+          }
+
+          advance();
+        };
+
+        element.addEventListener('input', handler, {
+          signal,
+        });
+
+        break;
+      }
+      case 'submit':
+        if (element instanceof HTMLFormElement) {
+          element.addEventListener('submit', advance, {
+            once: true,
+            signal,
+          });
+        } else {
+          // Submit buttons normally emit click; the form emits submit.
+          element.addEventListener('click', advance, {
+            once: true,
+            signal,
+          });
+        }
+        attachWrongTargetListener(element, signal);
+        break;
+
+      default:
+        break;
+    }
   }
 
   function resolveAnchorMode(step) {
@@ -260,6 +467,14 @@
 
   function teardownHost() {
     tearDownObservers();
+
+    // Intentionally does NOT call leaveCurrentStep(): teardown is DOM/observer
+    // cleanup, not a walkthrough lifecycle event. Step-visit boundaries are
+    // owned by handlePrevious/handleNext/handleFinish, which already call
+    // leaveCurrentStep() before any state transition that leads here.
+    detachStepListener();
+    removeHighlight();
+
     if (hostEl) {
       hostEl.remove();
     }
@@ -293,6 +508,8 @@
         if (hostEl && (mutation.target === hostEl || hostEl.contains(mutation.target))) {
           continue;
         }
+
+        refreshHighlight();
         scheduleReposition();
         return;
       }
@@ -345,6 +562,46 @@
     tooltip.style.left = `${left}px`;
   }
 
+  // Records selector_miss/wrong_page at most once per step visit, so scroll/
+  // resize/mutation-driven re-checks (refreshHighlight, reposition) don't
+  // flood frictionEvents with duplicates for the same unresolved target.
+  function recordSelectorMissOnce(anchorMode) {
+    if (anchorMode !== 'element') {
+      return;
+    }
+    if (!activeState) {
+      return;
+    }
+    if (missFrictionStepIndex === activeState.stepIndex) {
+      return;
+    }
+    missFrictionStepIndex = activeState.stepIndex;
+    recordFriction('selector_miss');
+    recordFriction('wrong_page');
+  }
+
+  function refreshHighlight() {
+    const step = getCurrentStep();
+    if (!step) {
+      detachStepListener();
+      removeHighlight();
+      return;
+    }
+
+    const anchorMode = resolveAnchorMode(step);
+    const resolved = resolveTarget(step);
+
+    if (resolved.element) {
+      applyHighlight(resolved.element);
+      attachStepListener(step, resolved.element);
+    } else {
+      recordSelectorMissOnce(anchorMode);
+
+      detachStepListener();
+      removeHighlight();
+    }
+  }
+
   function reposition() {
     if (!shadowRoot || !activeState || activeState.status !== 'playing') {
       return;
@@ -359,7 +616,6 @@
 
     const anchorMode = resolveAnchorMode(step);
     const resolved = resolveTarget(step);
-    currentTarget = resolved.element;
 
     const fallbackNote = shadowRoot.querySelector('.fallback-note');
     const preview = shadowRoot.querySelector('.preview');
@@ -368,16 +624,25 @@
 
     if (resolved.element) {
       const rect = resolved.element.getBoundingClientRect();
-      highlight.hidden = false;
-      highlight.style.top = `${Math.max(0, rect.top - 4)}px`;
-      highlight.style.left = `${Math.max(0, rect.left - 4)}px`;
-      highlight.style.width = `${Math.max(0, rect.width + 8)}px`;
-      highlight.style.height = `${Math.max(0, rect.height + 8)}px`;
+
+      applyHighlight(resolved.element);
+      attachStepListener(step, resolved.element);
+
+      // Legacy overlay highlight kept temporarily but no longer used.
+      highlight.hidden = true;
+
       fallbackNote.hidden = true;
       fallbackNote.textContent = '';
+
       placeTooltip(tooltip, rect);
     } else {
+      recordSelectorMissOnce(anchorMode);
+
+      removeHighlight();
+      detachStepListener();
+
       highlight.hidden = true;
+
       placeTooltip(tooltip, viewportCenterRect());
 
       if (showPreview) {
@@ -416,6 +681,9 @@
       return;
     }
 
+    // New step visit: allow a fresh selector_miss/wrong_page recording for it.
+    missFrictionStepIndex = null;
+
     const stepNumber = step.step_number ?? activeState.stepIndex + 1;
     lastEnteredStepIndex = activeState.stepIndex;
     currentVisitStepNumber = stepNumber;
@@ -430,6 +698,61 @@
     } catch {
       // Background may be unavailable; player still works offline of analytics.
     }
+  }
+
+  function leaveCurrentStep() {
+    if (currentVisitEnteredAt == null || currentVisitStepNumber == null) {
+      return;
+    }
+
+    const leftAt = Date.now();
+
+    stepTimings.push({
+      step_number: currentVisitStepNumber,
+      entered_at: currentVisitEnteredAt,
+      left_at: leftAt,
+      duration_ms: leftAt - currentVisitEnteredAt,
+    });
+
+    try {
+      chrome.runtime?.sendMessage?.({
+        type: 'WALKTHROUGH_STEP_LEFT',
+        step_number: currentVisitStepNumber,
+        entered_at: currentVisitEnteredAt,
+        left_at: leftAt,
+      });
+    } catch {}
+
+    currentVisitEnteredAt = null;
+    currentVisitStepNumber = null;
+  }
+
+  // Single source of truth for tearing down an in-progress run's bookkeeping,
+  // whether that happens via Finish or via an external stop (e.g. popup Stop
+  // clearing storage out from under us). Always finalizes the open step's
+  // left_at/duration first, then clears listeners/highlight/friction/timings
+  // so a subsequent walkthrough on the same page starts from a clean slate.
+  function resetWalkthroughState() {
+    leaveCurrentStep();
+
+    detachStepListener();
+    removeHighlight();
+
+    frictionEvents = [];
+    stepTimings = [];
+    missFrictionStepIndex = null;
+
+    currentVisitEnteredAt = null;
+    currentVisitStepNumber = null;
+    lastEnteredStepIndex = null;
+  }
+
+  function recordFriction(eventType) {
+    frictionEvents.push({
+      step_number: currentVisitStepNumber,
+      event_type: eventType,
+      occurred_at: Date.now(),
+    });
   }
 
   function render() {
@@ -483,6 +806,11 @@
     if (!activeState || activeState.stepIndex <= 0) {
       return;
     }
+
+    leaveCurrentStep();
+    detachStepListener();
+    removeHighlight();
+
     persistState({
       ...activeState,
       stepIndex: activeState.stepIndex - 1,
@@ -494,6 +822,11 @@
     if (!activeState || activeState.stepIndex >= steps.length - 1) {
       return;
     }
+
+    leaveCurrentStep();
+    detachStepListener();
+    removeHighlight();
+
     persistState({
       ...activeState,
       stepIndex: activeState.stepIndex + 1,
@@ -501,16 +834,31 @@
   }
 
   function handleFinish() {
-    // H09AAPPLE-30 owns the completion POST; emit a hook then clear local state.
+    detachStepListener();
+    removeHighlight();
+
     try {
+      // Push the final step's timing entry before we read frictionEvents/stepTimings
+      // for the completion message.
+      leaveCurrentStep();
+
+      // H09AAPPLE-30 owns the completion POST; emit a hook with the full
+      // friction/timing history collected during this run.
       chrome.runtime?.sendMessage?.({
         type: 'WALKTHROUGH_FINISHED',
         sopId: activeState?.sopId ?? null,
-        step_number: currentVisitStepNumber,
-        entered_at: currentVisitEnteredAt,
+        friction_events: frictionEvents,
+        step_timings: stepTimings,
       });
     } catch {
       // ignore
+    } finally {
+      // resetWalkthroughState() calls leaveCurrentStep() again internally;
+      // that second call is a guarded no-op (currentVisitEnteredAt is already
+      // null from the call above) but keeps this the single place that clears
+      // frictionEvents/stepTimings/lastEnteredStepIndex, rather than
+      // duplicating that list here too.
+      resetWalkthroughState();
     }
 
     activeState = {
@@ -531,8 +879,19 @@
     const state = result?.[STORAGE_STATE_KEY] ?? null;
     const payload = result?.[STORAGE_PAYLOAD_KEY] ?? null;
 
+    const wasPlaying = activeState?.status === 'playing';
+
     activeState = state;
     activePayload = payload;
+
+    // Walkthrough stopped externally (e.g. popup Stop clearing storage out
+    // from under this content script, rather than going through handleFinish).
+    // Finalize the open step's timing and clear frictionEvents/stepTimings/
+    // lastEnteredStepIndex so a subsequent run on this page doesn't inherit
+    // leftover data from the aborted one.
+    if (wasPlaying && state?.status !== 'playing') {
+      resetWalkthroughState();
+    }
 
     if (
       state?.status === 'playing' &&

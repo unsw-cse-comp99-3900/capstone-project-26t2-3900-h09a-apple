@@ -1144,10 +1144,12 @@ def test_get_sop_walkthrough_returns_payload_for_single_step():
             "instruction": "Click the login button.",
             "css_selector": "#login-button",
             "xpath": "/html/body/button[1]",
+            "target_label": None,
             "screenshot_url": "https://signed.example/screenshots/login.png",
             "time_estimate": 5,
             "screenshot_highlight": None,
             "anchor_mode": "element",
+            "expected_action": None,
         }
     finally:
         app.dependency_overrides[get_db] = override_get_db
