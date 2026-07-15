@@ -562,10 +562,25 @@
     tooltip.style.left = `${left}px`;
   }
 
+  function isWrongPage(step) {
+    if (typeof step?.expected_url !== 'string' || !step.expected_url) {
+      return false;
+    }
+
+    try {
+      const current = new URL(window.location.href);
+      const expected = new URL(step.expected_url);
+
+      return current.origin !== expected.origin || current.pathname !== expected.pathname;
+    } catch {
+      return false;
+    }
+  }
+
   // Records selector_miss/wrong_page at most once per step visit, so scroll/
   // resize/mutation-driven re-checks (refreshHighlight, reposition) don't
   // flood frictionEvents with duplicates for the same unresolved target.
-  function recordSelectorMissOnce(anchorMode) {
+  function recordSelectorMissOnce(step, anchorMode) {
     if (anchorMode !== 'element') {
       return;
     }
@@ -577,7 +592,10 @@
     }
     missFrictionStepIndex = activeState.stepIndex;
     recordFriction('selector_miss');
-    recordFriction('wrong_page');
+
+    if (isWrongPage(step)) {
+      recordFriction('wrong_page');
+    }
   }
 
   function refreshHighlight() {
@@ -595,7 +613,7 @@
       applyHighlight(resolved.element);
       attachStepListener(step, resolved.element);
     } else {
-      recordSelectorMissOnce(anchorMode);
+      recordSelectorMissOnce(step, anchorMode);
 
       detachStepListener();
       removeHighlight();
@@ -636,7 +654,7 @@
 
       placeTooltip(tooltip, rect);
     } else {
-      recordSelectorMissOnce(anchorMode);
+      recordSelectorMissOnce(step, anchorMode);
 
       removeHighlight();
       detachStepListener();

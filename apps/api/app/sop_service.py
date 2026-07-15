@@ -150,13 +150,20 @@ def _resolve_step_metadata(
                 getattr(event, "attrs", None)
             )
 
+        # Record the first page URL associated with this step so the
+        # walkthrough runtime can distinguish selector misses from
+        # genuine navigation to the wrong page.
+        if expected_url is None:
+            url = getattr(event, "url", None)
+            if url:
+                expected_url = url
+
         event_type = getattr(event, "type", None)
         current_priority = priority.get(event_type, 0)
 
         if current_priority > best_priority:
             best_priority = current_priority
             expected_action = event_type
-            expected_url = getattr(event, "url", None)
 
         # Once all metadata is available and we've already found the
         # highest-priority action (submit), no later event can improve
@@ -167,6 +174,7 @@ def _resolve_step_metadata(
             and target_label
             and screenshot_url
             and screenshot_highlight
+            and expected_url
             and best_priority == submit_priority
         ):
             break
