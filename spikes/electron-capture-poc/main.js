@@ -50,7 +50,12 @@ function getForegroundContext() {
 
   try {
     const getActiveWindow = loadActiveWinSync();
-    const win = getActiveWindow({ accessibilityPermission: true, screenRecordingPermission: false });
+    // macOS: active-win returns empty title unless screenRecordingPermission is true
+    // (see active-win readme). Step 3 already needs Screen Recording for desktopCapturer.
+    const win = getActiveWindow({
+      accessibilityPermission: true,
+      screenRecordingPermission: process.platform === 'darwin',
+    });
     if (!win) {
       return { foreground_app: 'unknown', window_title: null };
     }

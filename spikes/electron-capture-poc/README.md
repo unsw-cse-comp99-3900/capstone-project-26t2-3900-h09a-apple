@@ -47,7 +47,14 @@ Screenshots: `output/screenshots/*.png` (gitignored)
 
 ## macOS notes
 
-Expect **Accessibility** permission (and possibly **Screen Recording** for `desktopCapturer`).
+Expect **Accessibility** and **Screen Recording** permissions:
+
+- **Accessibility** — global hooks (`uiohook`) and browser tab URL (optional).
+- **Screen Recording** — required for `desktopCapturer` **and** for `active-win` to return
+  `window_title` (macOS 10.15+ returns empty title without it).
+
+In dev, add **Electron** (not just Terminal) under System Settings → Privacy & Security.
+
 Record every prompt (text, steps, restart required?) and add to
 `docs/spikes/electron-desktop-capture-review.md` §7.4.
 
