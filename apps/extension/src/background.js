@@ -4,11 +4,7 @@ import {
   getSessionPayload,
   saveSessionPayloadWithCap,
 } from './session-store.js';
-import {
-  authenticatedFetch,
-  clearStoredAuthTokens,
-  redeemHandoffCode,
-} from './auth.js';
+import { authenticatedFetch, clearStoredAuthTokens, redeemHandoffCode } from './auth.js';
 import { clearDataCaptureConsent } from './consent.js';
 import { handleExternalAuthMessage } from './external-auth.js';
 
@@ -171,10 +167,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return false;
   }
 
-  if (
-    message.type === 'WALKTHROUGH_STEP_ENTERED' ||
-    message.type === 'WALKTHROUGH_STEP_LEFT'
-  ) {
+  if (message.type === 'WALKTHROUGH_STEP_ENTERED' || message.type === 'WALKTHROUGH_STEP_LEFT') {
     console.log('Walkthrough analytics hook:', message.type, message);
     sendResponse({ ok: true });
     return false;
@@ -188,22 +181,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           0,
         );
 
-        const response = await authenticatedFetch(
-          '/api/v1/walkthroughs/complete',
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              sop_id: message.sopId,
-              completed_at: new Date().toISOString(),
-              duration_seconds: Math.round(durationMs / 1000),
-              friction_events: message.friction_events ?? [],
-              step_timings: message.step_timings ?? [],
-            }),
+        const response = await authenticatedFetch('/api/v1/walkthroughs/complete', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
           },
-        );
+          body: JSON.stringify({
+            sop_id: message.sopId,
+            completed_at: new Date().toISOString(),
+            duration_seconds: Math.round(durationMs / 1000),
+            friction_events: message.friction_events ?? [],
+            step_timings: message.step_timings ?? [],
+          }),
+        });
 
         if (!response.ok) {
           throw new Error(`Completion upload failed: ${response.status}`);
@@ -211,10 +201,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
         const body = await response.json();
 
-        console.log(
-          'Walkthrough completion uploaded:',
-          body.completion_id,
-        );
+        console.log('Walkthrough completion uploaded:', body.completion_id);
 
         sendResponse({
           ok: true,
@@ -224,10 +211,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         console.error('Failed to upload walkthrough completion:', error);
         sendResponse({
           ok: false,
-          error:
-            error instanceof Error
-              ? error.message
-              : 'Failed to upload walkthrough completion',
+          error: error instanceof Error ? error.message : 'Failed to upload walkthrough completion',
         });
       }
     })();
