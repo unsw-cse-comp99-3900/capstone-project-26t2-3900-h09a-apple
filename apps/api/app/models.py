@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import enum
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     BigInteger,
     CheckConstraint,
@@ -388,6 +389,11 @@ class Sop(Base):
     gen_duration_ms = Column(Integer)
 
     session = relationship("Session", back_populates="sops")
+    step_embeddings = relationship(
+        "SopStepEmbedding",
+        back_populates="sop",
+        cascade="all, delete-orphan",
+    )
 
     __table_args__ = (
         UniqueConstraint("session_id", "version", name="uq_sops_session_version"),
@@ -407,6 +413,36 @@ class Sop(Base):
             "generation_mode IN ('llm','fallback')",
             name="ck_sops_generation_mode",
         ),
+    )
+
+
+class SopStepEmbedding(Base):
+    __tablename__ = "sop_step_embedding"
+
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    sop_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("sops.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    step_number = Column(Integer, nullable=False)
+    embedding = Column(Vector(1536), nullable=False)
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=text("now()"),
+    )
+
+    sop = relationship("Sop", back_populates="step_embeddings")
+
+    __table_args__ = (
+        UniqueConstraint("sop_id", "step_number", name="uq_sop_step_embedding_sop_step"),
+        CheckConstraint("step_number >= 1", name="ck_sop_step_embedding_step_number_pos"),
+        Index("ix_sop_step_embedding_sop_id", "sop_id"),
     )
 
 
@@ -516,6 +552,7 @@ __all__ = [
     "Session",
     "SessionStatus",
     "Sop",
+    "SopStepEmbedding",
     "SopStatus",
     "CodificationJob",
     "CodificationJobStatus",

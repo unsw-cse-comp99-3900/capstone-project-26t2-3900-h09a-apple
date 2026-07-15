@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from math import ceil
+from typing import Literal
 from uuid import UUID
 
 from sqlalchemy.orm import Session as DBSession
@@ -95,19 +96,42 @@ def _resolve_step_metadata(
     session_id: UUID,
     tenant_id: UUID,
     db: DBSession,
-) -> tuple[str | None, str | None, str | None, dict | None]:
+) -> tuple[
+    str | None,
+    str | None,
+    str | None,
+    str | None,
+    dict | None,
+    Literal["click", "input", "submit"] | None,
+]:
     css_selector = None
     xpath = None
+    target_label = None
     screenshot_url = None
     screenshot_highlight = None
+    expected_action = None
+
+    priority = {
+        models.EventType.click.value: 1,
+        models.EventType.input.value: 2,
+        models.EventType.submit.value: 3,
+    }
+    submit_priority = priority[models.EventType.submit.value]
+    best_priority = 0
 
     for event in _load_ordered_events(source_event_ids, session_id, tenant_id, db):
         if css_selector is None:
             selector = getattr(event, "target_selector", None)
             if selector:
                 css_selector = selector
+
         if xpath is None:
             xpath = _xpath_from_attrs(getattr(event, "attrs", None))
+
+        if target_label is None:
+            label = getattr(event, "target_label", None)
+            if label:
+                target_label = label.strip()
 
         if screenshot_url is None:
             screenshot_id = getattr(event, "screenshot_id", None)
@@ -122,9 +146,34 @@ def _resolve_step_metadata(
         if screenshot_highlight is None:
             screenshot_highlight = _extract_screenshot_highlight(getattr(event, "attrs", None))
 
-        if css_selector and xpath and screenshot_url and screenshot_highlight:
+        event_type = getattr(event, "type", None)
+        current_priority = priority.get(event_type, 0)
+
+        if current_priority > best_priority:
+            best_priority = current_priority
+            expected_action = event_type
+
+        # Once all metadata is available and we've already found the
+        # highest-priority action (submit), no later event can improve
+        # the result.
+        if (
+            css_selector
+            and xpath
+            and target_label
+            and screenshot_url
+            and screenshot_highlight
+            and best_priority == submit_priority
+        ):
             break
-    return css_selector, xpath, screenshot_url, screenshot_highlight
+
+    return (
+        css_selector,
+        xpath,
+        target_label,
+        screenshot_url,
+        screenshot_highlight,
+        expected_action,
+    )
 
 
 def resolve_step_screenshot_url(
@@ -133,13 +182,30 @@ def resolve_step_screenshot_url(
     session_id: UUID,
     tenant_id: UUID,
 ) -> str | None:
-    _, _, screenshot_url, _ = _resolve_step_metadata(
+    _, _, _, screenshot_url, *_ = _resolve_step_metadata(
         source_event_ids,
         session_id,
         tenant_id,
         db,
     )
     return screenshot_url
+
+
+def resolve_anchor_mode(
+    css_selector: str | None,
+    xpath: str | None,
+    screenshot_url: str | None,
+) -> str:
+    """Choose how the live player should anchor a step.
+
+    Navigation-only steps often have no selector; screenshot capture can also
+    fail under throttle / inactive-tab conditions, so ``none`` is a real mode.
+    """
+    if css_selector or xpath:
+        return "element"
+    if screenshot_url:
+        return "screenshot"
+    return "none"
 
 
 def build_walkthrough_payload(sop: models.Sop, db: DBSession) -> WalkthroughPayload:
@@ -159,7 +225,14 @@ def build_walkthrough_payload(sop: models.Sop, db: DBSession) -> WalkthroughPayl
             raise WalkthroughDataError(f"Step {step['order']} has empty instruction")
 
         source_event_ids = step.get("source_event_ids", [])
-        css_selector, xpath, screenshot_url, screenshot_highlight = _resolve_step_metadata(
+        (
+            css_selector,
+            xpath,
+            target_label,
+            screenshot_url,
+            screenshot_highlight,
+            expected_action,
+        ) = _resolve_step_metadata(
             source_event_ids,
             sop.session_id,
             sop.tenant_id,
@@ -183,10 +256,7 @@ def build_walkthrough_payload(sop: models.Sop, db: DBSession) -> WalkthroughPayl
             computed_time_estimate if computed_time_estimate is not None else llm_time_estimate
         )
 
-        if not css_selector and not xpath:
-            raise WalkthroughDataError(
-                f"Step {step['order']} is missing css_selector and xpath",
-            )
+        anchor_mode = resolve_anchor_mode(css_selector, xpath, screenshot_url)
 
         steps.append(
             WalkthroughStep(
@@ -194,9 +264,12 @@ def build_walkthrough_payload(sop: models.Sop, db: DBSession) -> WalkthroughPayl
                 instruction=instruction,
                 css_selector=css_selector,
                 xpath=xpath,
+                target_label=target_label,
                 screenshot_url=screenshot_url,
                 time_estimate=time_estimate,
                 screenshot_highlight=screenshot_highlight,
+                anchor_mode=anchor_mode,
+                expected_action=expected_action,
             )
         )
 

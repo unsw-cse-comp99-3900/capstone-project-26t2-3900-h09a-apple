@@ -28,8 +28,7 @@ cp .env.example .env
 cp apps/web/.env.example apps/web/.env.local
 cp apps/api/.env.example apps/api/.env
 
-./scripts/install-githooks.sh   # optional: blocks AI co-author trailers on git commit
-./scripts/install-cursor-hooks.sh   # optional: local Cursor agent git block (not committed)
+./scripts/install-githooks.sh   # optional: pre-commit CI checks + AI trailer block on commit
 ```
 
 Python dependencies:
@@ -55,7 +54,7 @@ docker run --name worktrace-postgres \
   -e POSTGRES_PASSWORD=secret \
   -e POSTGRES_DB=worktrace \
   -p 5432:5432 \
-  -d postgres:16
+  -d pgvector/pgvector:pg15
 ```
 
 ### MinIO (screenshot uploads)
@@ -211,8 +210,8 @@ Quit `psql` with `\q`.
 
 PRs must not contain AI agent trailers (`Co-authored-by: Cursor`, Copilot, Codex,
 etc.) in commit messages. CI runs the `commit-policy` check; install local hooks
-with `./scripts/install-githooks.sh`. Optional Cursor setup (local only, not in git):
-`./scripts/install-cursor-hooks.sh`. Details: [`docs/commit-policy.md`](docs/commit-policy.md).
+with `./scripts/install-githooks.sh`. Before push, run `bash scripts/ci/pre-commit-check.sh`
+to mirror CI locally. Details: [`docs/commit-policy.md`](docs/commit-policy.md).
 
 ## Branches
 

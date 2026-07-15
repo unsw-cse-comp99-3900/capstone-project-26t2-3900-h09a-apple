@@ -22,7 +22,7 @@
 
 body {
   width: 380px;
-  min-height: 486px;
+  min-height: 640px;
   margin: 0;
   background:
     radial-gradient(circle at 90% 5%, rgb(116 114 255 / 16%), transparent 34%),
@@ -35,7 +35,7 @@ input {
 }
 
 .popup-shell {
-  min-height: 486px;
+  min-height: 640px;
   padding: 24px;
 }
 
@@ -306,6 +306,45 @@ footer {
   color: #4b58c5;
   background: #eef1ff;
   border-color: #cbd5ff;
+}
+
+.walkthrough-section {
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid rgb(213 217 237 / 80%);
+}
+
+.walkthrough-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.walkthrough-section h2 {
+  margin-bottom: 6px;
+  font-size: 16px;
+}
+
+.walkthrough-section > p,
+.walkthrough-header p {
+  margin-bottom: 0;
+  color: #667087;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.walkthrough-section label {
+  display: block;
+  margin-bottom: 8px;
+  color: #3d4663;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.walkthrough-section .actions {
+  margin-top: 4px;
 }
 
 .button-review:hover:not(:disabled) {

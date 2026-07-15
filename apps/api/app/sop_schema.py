@@ -83,9 +83,13 @@ class WalkthroughStep(BaseModel):
     instruction: str = Field(..., min_length=1)
     css_selector: str | None = None
     xpath: str | None = None
+    target_label: str | None = None
     screenshot_url: str | None = None
     time_estimate: int | None = Field(default=None, ge=0)
     screenshot_highlight: ScreenshotHighlight | None = None
+    # element: has css/xpath; screenshot: no selector but has image; none: instruction-only.
+    anchor_mode: Literal["element", "screenshot", "none"] = "element"
+    expected_action: Literal["click", "input", "submit"] | None = None
 
 
 class WalkthroughPayload(BaseModel):
