@@ -724,12 +724,13 @@
     }
 
     const leftAt = Date.now();
+    const durationMs = leftAt - currentVisitEnteredAt;
 
     stepTimings.push({
       step_number: currentVisitStepNumber,
       entered_at: currentVisitEnteredAt,
       left_at: leftAt,
-      duration_ms: leftAt - currentVisitEnteredAt,
+      duration_ms: durationMs,
     });
 
     try {
@@ -738,6 +739,7 @@
         step_number: currentVisitStepNumber,
         entered_at: currentVisitEnteredAt,
         left_at: leftAt,
+        duration_ms: durationMs,
       });
     } catch {}
 
