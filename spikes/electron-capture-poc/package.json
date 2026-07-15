@@ -1,0 +1,23 @@
+{
+  "name": "electron-capture-poc",
+  "version": "0.1.0",
+  "private": true,
+  "description": "H09AAPPLE-70 throwaway prototype — global capture feasibility",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "start:step1": "cross-env VALIDATION_STEP=1 electron .",
+    "start:step2": "cross-env VALIDATION_STEP=2 electron .",
+    "start:step3": "cross-env VALIDATION_STEP=3 electron .",
+    "postinstall": "node scripts/postinstall.js"
+  },
+  "dependencies": {
+    "active-win": "^8.2.1",
+    "electron": "^33.2.1",
+    "uiohook-napi": "^1.5.4"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^3.7.1",
+    "cross-env": "^7.0.3"
+  }
+}
