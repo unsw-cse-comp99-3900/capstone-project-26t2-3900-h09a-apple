@@ -1,5 +1,5 @@
 /**
- * H09AAPPLE-70 — minimal Electron global-capture feasibility prototype.
+ * H09AAPPLE-70  -  minimal Electron global-capture feasibility prototype.
  *
  * Set VALIDATION_STEP=1|2|3 to verify incrementally:
  *   1 = uiohook global click/keydown only
@@ -193,7 +193,7 @@ function createProbeWindow() {
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.hide();
-    console.log('[H09AAPPLE-70] Electron window hidden — testing capture without focus');
+    console.log('[H09AAPPLE-70] Electron window hidden  -  testing capture without focus');
   });
 }
 

@@ -1,6 +1,6 @@
 # Electron global capture POC (H09AAPPLE-70)
 
-Throwaway prototype — **not** part of the monorepo build. Validates global click/key capture,
+Throwaway prototype - **not** part of the monorepo build. Validates global click/key capture,
 foreground app identification, and throttled full-screen screenshots from a hidden Electron app.
 
 ## Prerequisites
@@ -49,8 +49,8 @@ Screenshots: `output/screenshots/*.png` (gitignored)
 
 Expect **Accessibility** and **Screen Recording** permissions:
 
-- **Accessibility** — global hooks (`uiohook`) and browser tab URL (optional).
-- **Screen Recording** — required for `desktopCapturer` **and** for `active-win` to return
+- **Accessibility** - global hooks (`uiohook`) and browser tab URL (optional).
+- **Screen Recording** - required for `desktopCapturer` **and** for `active-win` to return
   `window_title` (macOS 10.15+ returns empty title without it).
 
 In dev, add **Electron** (not just Terminal) under System Settings → Privacy & Security.

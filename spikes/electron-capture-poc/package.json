@@ -2,7 +2,7 @@
   "name": "electron-capture-poc",
   "version": "0.1.0",
   "private": true,
-  "description": "H09AAPPLE-70 throwaway prototype — global capture feasibility",
+  "description": "H09AAPPLE-70 throwaway prototype  -  global capture feasibility",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
