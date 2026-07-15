@@ -258,17 +258,22 @@ export interface SopListResponse {
 /** How the live walkthrough player should anchor a step. */
 export type WalkthroughAnchorMode = 'element' | 'screenshot' | 'none';
 
+/** How the player should auto-advance for this step. */
+export type WalkthroughExpectedAction = 'click' | 'input' | 'submit';
+
 /** Mirrors `WalkthroughStep` in `apps/api/app/sop_schema.py`. */
 export interface WalkthroughStep {
   step_number: number;
   instruction: string;
   css_selector?: string | null;
   xpath?: string | null;
+  target_label: string | null;
   screenshot_url?: string | null;
   time_estimate?: number | null;
   screenshot_highlight?: ScreenshotHighlight | null;
   /** element: css/xpath; screenshot: image fallback; none: instruction-only. */
   anchor_mode?: WalkthroughAnchorMode;
+  expected_action?: WalkthroughExpectedAction | null;
 }
 
 /** Response returned by GET /api/v1/sops/{id}/walkthrough. */
