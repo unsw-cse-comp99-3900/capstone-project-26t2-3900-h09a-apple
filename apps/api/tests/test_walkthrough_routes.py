@@ -172,6 +172,7 @@ def valid_payload():
         ],
     }
 
+
 def test_complete_requires_auth(walkthrough_db):
     add_sop(walkthrough_db)
 

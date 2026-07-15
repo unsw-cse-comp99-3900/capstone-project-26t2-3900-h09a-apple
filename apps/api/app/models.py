@@ -121,6 +121,7 @@ class WalkthroughFrictionType(str, enum.Enum):
     empty_input = "empty_input"
     selector_miss = "selector_miss"
 
+
 # ---------------------------------------------------------------------------
 # sessions
 # ---------------------------------------------------------------------------

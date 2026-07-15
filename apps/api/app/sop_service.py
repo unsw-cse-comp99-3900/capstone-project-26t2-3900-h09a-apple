@@ -146,9 +146,7 @@ def _resolve_step_metadata(
                 )
 
         if screenshot_highlight is None:
-            screenshot_highlight = _extract_screenshot_highlight(
-                getattr(event, "attrs", None)
-            )
+            screenshot_highlight = _extract_screenshot_highlight(getattr(event, "attrs", None))
 
         # Record the first page URL associated with this step so the
         # walkthrough runtime can distinguish selector misses from
