@@ -30,6 +30,9 @@ importers:
 
   apps/desktop:
     dependencies:
+      '@h09a/desktop-storage':
+        specifier: workspace:*
+        version: link:../../packages/desktop-storage
       active-win:
         specifier: ^8.2.1
         version: 8.2.1(encoding@0.1.13)

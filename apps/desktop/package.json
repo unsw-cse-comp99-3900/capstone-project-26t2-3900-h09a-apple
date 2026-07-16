@@ -9,12 +9,14 @@
     "build": "electron-vite build",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
+    "rebuild:native": "electron-builder install-app-deps",
     "package": "electron-vite build && electron-builder",
     "package:dir": "electron-vite build && electron-builder --dir",
     "package:win": "electron-vite build && electron-builder --win",
     "package:mac": "electron-vite build && electron-builder --mac"
   },
   "dependencies": {
+    "@h09a/desktop-storage": "workspace:*",
     "active-win": "^8.2.1",
     "uiohook-napi": "^1.5.4"
   },

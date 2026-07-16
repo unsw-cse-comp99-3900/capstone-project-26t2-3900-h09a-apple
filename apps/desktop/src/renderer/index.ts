@@ -1,12 +1,161 @@
-function setText(id: string, value: string): void {
+function requireElement<T extends HTMLElement>(id: string): T {
   const element = document.getElementById(id);
 
-  if (element) {
-    element.textContent = value;
+  if (!element) {
+    throw new Error(`Missing renderer element: ${id}`);
+  }
+
+  return element as T;
+}
+
+const startButton = requireElement<HTMLButtonElement>('start-recording');
+const stopButton = requireElement<HTMLButtonElement>('stop-recording');
+const reviewButton = requireElement<HTMLButtonElement>('review-session');
+const floatingOrbShell = requireElement<HTMLDivElement>('floating-orb-shell');
+const collapseButton = requireElement<HTMLButtonElement>('collapse-window');
+const closeButton = requireElement<HTMLButtonElement>('close-window');
+const statusLabel = requireElement<HTMLSpanElement>('status-label');
+const statusMessage = requireElement<HTMLParagraphElement>('status-message');
+const eventCount = requireElement<HTMLParagraphElement>('event-count');
+const sessionResult = requireElement<HTMLDivElement>('session-result');
+const sessionPath = requireElement<HTMLElement>('session-path');
+const platform = requireElement<HTMLSpanElement>('platform');
+
+let busy = false;
+let dragPointerId: number | null = null;
+let dragStart = { x: 0, y: 0 };
+let dragMoved = false;
+let suppressOrbClick = false;
+
+const DRAG_THRESHOLD_PX = 4;
+
+const stateLabels: Record<RecorderState, string> = {
+  idle: 'Ready',
+  recording: 'Recording',
+  paused: 'Paused',
+  error: 'Error',
+};
+
+function renderStatus(status: RecordingStatus): void {
+  document.body.dataset.state = status.state;
+  statusLabel.textContent = stateLabels[status.state];
+  eventCount.textContent = String(status.eventCount);
+
+  startButton.disabled = busy || status.state === 'recording';
+  stopButton.disabled = busy || status.state === 'idle';
+  reviewButton.disabled = busy || status.state !== 'idle' || !status.sessionPath;
+
+  if (status.error) {
+    statusMessage.textContent = status.error;
+  } else if (status.state === 'recording') {
+    statusMessage.textContent = 'Capturing activity from other desktop applications.';
+  } else if (status.sessionPath) {
+    statusMessage.textContent = 'Recording complete. Your local session is ready.';
+  } else {
+    statusMessage.textContent = 'Ready to capture your desktop workflow.';
+  }
+
+  sessionResult.hidden = !status.sessionPath;
+  sessionPath.textContent = status.sessionPath ?? '';
+  sessionPath.title = status.sessionPath ?? '';
+}
+
+async function runAction(action: () => Promise<RecordingStatus>): Promise<void> {
+  busy = true;
+  startButton.disabled = true;
+  stopButton.disabled = true;
+  reviewButton.disabled = true;
+
+  try {
+    renderStatus(await action());
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    statusMessage.textContent = message;
+    document.body.dataset.state = 'error';
+    statusLabel.textContent = 'Error';
+  } finally {
+    busy = false;
+    renderStatus(await window.desktopAPI.getRecordingStatus());
   }
 }
 
-setText('platform', window.desktopAPI.platform);
-setText('electron-version', window.desktopAPI.versions.electron);
-setText('chrome-version', window.desktopAPI.versions.chrome);
-setText('node-version', window.desktopAPI.versions.node);
+startButton.addEventListener('click', () => {
+  void runAction(() => window.desktopAPI.startRecording());
+});
+
+stopButton.addEventListener('click', () => {
+  void runAction(() => window.desktopAPI.stopRecording());
+});
+
+reviewButton.addEventListener('click', () => {
+  void runAction(() => window.desktopAPI.reviewSession());
+});
+
+floatingOrbShell.addEventListener('pointerdown', (event) => {
+  if (event.button !== 0 || dragPointerId !== null) return;
+
+  dragPointerId = event.pointerId;
+  dragStart = { x: event.screenX, y: event.screenY };
+  dragMoved = false;
+  floatingOrbShell.setPointerCapture(event.pointerId);
+  window.desktopAPI.beginWindowDrag();
+});
+
+floatingOrbShell.addEventListener('pointermove', (event) => {
+  if (event.pointerId !== dragPointerId) return;
+
+  if (Math.hypot(event.screenX - dragStart.x, event.screenY - dragStart.y) >= DRAG_THRESHOLD_PX) {
+    dragMoved = true;
+    floatingOrbShell.classList.add('is-dragging');
+  }
+
+  if (dragMoved) {
+    window.desktopAPI.updateWindowDrag();
+  }
+});
+
+floatingOrbShell.addEventListener('pointerup', (event) => {
+  if (event.pointerId !== dragPointerId) return;
+
+  suppressOrbClick = dragMoved;
+  floatingOrbShell.releasePointerCapture(event.pointerId);
+  window.desktopAPI.endWindowDrag();
+  dragPointerId = null;
+  floatingOrbShell.classList.remove('is-dragging');
+});
+
+floatingOrbShell.addEventListener('pointercancel', (event) => {
+  if (event.pointerId !== dragPointerId) return;
+
+  window.desktopAPI.endWindowDrag();
+  dragPointerId = null;
+  dragMoved = false;
+  floatingOrbShell.classList.remove('is-dragging');
+});
+
+floatingOrbShell.addEventListener('click', async () => {
+  if (suppressOrbClick) {
+    suppressOrbClick = false;
+    return;
+  }
+
+  document.body.dataset.windowMode = await window.desktopAPI.setWindowMode('expanded');
+});
+
+collapseButton.addEventListener('click', async () => {
+  document.body.dataset.windowMode = await window.desktopAPI.setWindowMode('compact');
+});
+
+closeButton.addEventListener('click', () => {
+  void window.desktopAPI.closeWindow();
+});
+
+platform.textContent = window.desktopAPI.platform;
+
+void window.desktopAPI.getRecordingStatus().then(renderStatus);
+
+window.setInterval(() => {
+  if (!busy) {
+    void window.desktopAPI.getRecordingStatus().then(renderStatus);
+  }
+}, 500);
