@@ -9,6 +9,12 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as DBSession
 
 from app.auth.deps import get_current_user
+from app.auth.google import (
+    GoogleAuthError,
+    build_google_authorization_url,
+    exchange_google_code_for_id_token,
+    verify_google_id_token,
+)
 from app.auth.handoff_store import (
     HANDOFF_CODE_EXPIRE_SECONDS,
     HandoffCodeError,
@@ -26,9 +32,9 @@ from app.auth.password import hash_password, verify_login_password
 from app.auth.rate_limit import auth_rate_limiter
 from app.auth.user_lookup import find_user_by_email, touch_user_lookup
 from app.auth_schema import (
-    GoogleAuthCodeRequest,
     ExtensionHandoffCreateResponse,
     ExtensionHandoffRedeemRequest,
+    GoogleAuthCodeRequest,
     LoginRequest,
     LoginResponse,
     MeResponse,
@@ -40,13 +46,6 @@ from app.auth_schema import (
 from app.database import get_db
 from app.models import User, UserRole
 from app.settings import SettingsError, get_default_tenant_id
-
-from app.auth.google import (
-    GoogleAuthError,
-    build_google_authorization_url,
-    exchange_google_code_for_id_token,
-    verify_google_id_token,
-)
 
 router = APIRouter(
     prefix="/api/v1/auth",

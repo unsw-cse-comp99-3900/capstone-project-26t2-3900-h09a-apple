@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
 from jose import jwt
-from types import SimpleNamespace
-import app.auth.routes as auth_routes
-from app.auth.rate_limit import clear_auth_rate_limit_state
+
 import app.auth.routes as auth_routes
 from app.auth.jwt import (
     ACCESS_TOKEN_EXPIRE_SECONDS,
