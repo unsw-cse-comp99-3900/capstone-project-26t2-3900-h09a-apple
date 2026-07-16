@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark" />
+    <title>WorkTrace Desktop</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body data-state="idle" data-window-mode="compact">
+    <div id="floating-orb-shell" class="floating-orb-shell">
+      <button
+        id="floating-orb"
+        class="floating-orb"
+        type="button"
+        aria-label="Open WorkTrace AI recorder"
+        title="Open WorkTrace AI"
+      >
+        <span class="orb-letter" aria-hidden="true">W</span>
+        <span class="orb-status" aria-hidden="true"></span>
+      </button>
+    </div>
+
+    <main class="recorder-card">
+      <header class="brand-row">
+        <div class="brand-mark" aria-hidden="true">W</div>
+        <div class="brand-copy">
+          <p class="brand-name">WorkTrace AI</p>
+          <h1>Desktop Recorder</h1>
+        </div>
+        <div id="status-pill" class="status-pill" aria-live="polite">
+          <span class="status-dot"></span>
+          <span id="status-label">Ready</span>
+        </div>
+        <div class="window-actions">
+          <button
+            id="collapse-window"
+            class="window-action"
+            type="button"
+            aria-label="Collapse recorder to floating orb"
+            title="Collapse"
+          >
+            &minus;
+          </button>
+          <button
+            id="close-window"
+            class="window-action window-action-close"
+            type="button"
+            aria-label="Close WorkTrace AI"
+            title="Close"
+          >
+            &times;
+          </button>
+        </div>
+      </header>
+
+      <section class="recording-summary" aria-label="Recording summary">
+        <div>
+          <p class="summary-label">Captured events</p>
+          <p id="event-count" class="event-count">0</p>
+        </div>
+        <p id="status-message" class="status-message">Ready to capture your desktop workflow.</p>
+      </section>
+
+      <div class="actions">
+        <button id="start-recording" class="button button-primary" type="button">
+          <span class="record-icon" aria-hidden="true"></span>
+          Start Recording
+        </button>
+        <button id="stop-recording" class="button button-secondary" type="button" disabled>
+          <span class="stop-icon" aria-hidden="true"></span>
+          Stop Recording
+        </button>
+        <button id="review-session" class="button button-review" type="button" disabled>
+          <span class="review-icon" aria-hidden="true"></span>
+          Review Session
+        </button>
+      </div>
+
+      <div id="session-result" class="session-result" hidden>
+        <span>Saved</span>
+        <code id="session-path"></code>
+      </div>
+
+      <footer>
+        <span>Local capture</span>
+        <span id="platform" class="platform"></span>
+      </footer>
+    </main>
+
+    <script type="module" src="./index.ts"></script>
+  </body>
+</html>

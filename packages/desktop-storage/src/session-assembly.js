@@ -42,26 +42,6 @@ function buildEventAttrs(event) {
   return attrs;
 }
 
-function comparableEvent(event) {
-  return {
-    type: event.type,
-    target_selector: event.target_selector ?? null,
-    target_label: event.target_label ?? null,
-    value: event.value ?? null,
-    url: event.url ?? null,
-  };
-}
-
-function isDuplicateAdjacentEvent(previousEvent, currentEvent) {
-  if (!previousEvent) {
-    return false;
-  }
-
-  return (
-    JSON.stringify(comparableEvent(previousEvent)) === JSON.stringify(comparableEvent(currentEvent))
-  );
-}
-
 export function assembleSessionFromRows({ session, events }) {
   if (!session) {
     throw new Error('Cannot assemble a session without session metadata');
@@ -75,17 +55,13 @@ export function assembleSessionFromRows({ session, events }) {
     return left.timestamp_ms - right.timestamp_ms;
   });
 
-  const dedupedEvents = sortedEvents.filter(
-    (event, index) => !isDuplicateAdjacentEvent(sortedEvents[index - 1], event),
-  );
-
   return {
     client_session_id: session.client_session_id,
     workflow_name: session.workflow_name,
     recorded_by: normalizeRecordedBy(session.recorded_by),
     started_at: toIsoString(session.started_at_ms),
     stopped_at: toIsoString(session.stopped_at_ms),
-    events: dedupedEvents.map((event) =>
+    events: sortedEvents.map((event) =>
       removeUndefined({
         type: event.type,
         target_selector: event.target_selector ?? null,
