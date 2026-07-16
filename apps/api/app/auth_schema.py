@@ -22,7 +22,6 @@ class RegisterRequest(BaseModel):
 
     email: NormalizedEmail
     password: str = Field(min_length=1)
-    
 
 
 class RegisterResponse(BaseModel):

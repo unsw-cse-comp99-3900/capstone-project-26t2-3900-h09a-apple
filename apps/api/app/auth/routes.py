@@ -61,15 +61,12 @@ def _role_enum(role_value: str) -> UserRole:
     response_model=RegisterResponse,
 )
 def register(payload: RegisterRequest, db: DB_DEPENDENCY) -> RegisterResponse:
-    
     hashed_password = hash_password(payload.password)
     tenant_id = get_default_tenant_id()
     role = UserRole.employee
 
     existing = (
-        db.query(User)
-        .filter(User.email == payload.email, User.tenant_id == tenant_id)
-        .first()
+        db.query(User).filter(User.email == payload.email, User.tenant_id == tenant_id).first()
     )
     touch_user_lookup(db)
     if existing is not None:

@@ -32,6 +32,7 @@ client = TestClient(app)
 TENANT_ID = UUID("22222222-2222-2222-2222-222222222222")
 OTHER_TENANT_ID = UUID("33333333-3333-3333-3333-333333333333")
 
+
 def _matches_criterion(item: User, criterion) -> bool:
     left_key = criterion.left.key
     right = criterion.right
@@ -116,7 +117,7 @@ def auth_db(monkeypatch):
 def register_payload(**overrides) -> dict:
     payload = {
         "email": "newuser@example.com",
-        "password": "secret-password", 
+        "password": "secret-password",
     }
     payload.update(overrides)
     return payload
@@ -151,6 +152,7 @@ def test_register_ignores_client_supplied_role_and_tenant(auth_db):
     user = auth_db.users[0]
     assert user.role == UserRole.employee.value
     assert user.tenant_id == TENANT_ID
+
 
 def test_register_returns_409_for_duplicate_email_in_tenant(auth_db):
     auth_db.users.append(
