@@ -92,6 +92,8 @@ export function isLastStep(state, stepCount) {
 /**
  * Hook for H09AAPPLE-30: re-entering a step (including via Previous → Next)
  * should start a fresh visit with a new entered_at, not duplicate an open timing record.
+ * Previous also discards the abandoned forward step's timing (see runtime
+ * abandonCurrentStep / retractPathToStep).
  */
 export function markStepEntered(stepNumber, enteredAt = Date.now()) {
   return {
