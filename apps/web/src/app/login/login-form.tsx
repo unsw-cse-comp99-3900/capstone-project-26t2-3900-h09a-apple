@@ -27,7 +27,7 @@ export function LoginForm() {
       setError('Google sign-in failed. Please try again.');
     }
   }, []);
-  
+
   useEffect(() => {
     if (!loading && user) {
       router.replace(redirectPathForRole(user.role));
