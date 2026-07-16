@@ -1,0 +1,57 @@
+{
+  "purpose": "H09AAPPLE-73 empirical OCR vs vision comparison fixtures",
+  "scoring": "Case passes OCR if all ocr_expected_contains tokens appear in normalized OCR text. Vision passes if any vision_expected_contains_any token appears in normalized model answer. Icon-only OCR is expected to fail (empty/wrong) - scored separately.",
+  "hardware_note": "Record host machine specs in results/run-meta.json",
+  "cases": [
+    {
+      "id": "01-icon-only-delete",
+      "file": "01-icon-only-delete.png",
+      "category": "icon_only",
+      "description": "Toolbar-style delete control with trash icon and no label text",
+      "expected_labels": ["delete", "trash", "remove", "bin"],
+      "ocr_expected_contains": [],
+      "vision_expected_contains_any": ["delete", "trash", "remove", "bin", "garbage"],
+      "notes": "Step-2 vision case; Step-1 OCR should not invent a confident label"
+    },
+    {
+      "id": "02-small-text-settings",
+      "file": "02-small-text-settings.png",
+      "category": "small_text",
+      "description": "Small UI label Advanced settings",
+      "expected_labels": ["advanced settings", "settings"],
+      "ocr_expected_contains": ["advanced", "settings"],
+      "vision_expected_contains_any": ["advanced", "settings"],
+      "notes": "OCR should pick up text; vision should also name the control"
+    },
+    {
+      "id": "03-clear-button-continue",
+      "file": "03-clear-button-continue.png",
+      "category": "clear_button_text",
+      "description": "Primary button labelled Continue",
+      "expected_labels": ["continue"],
+      "ocr_expected_contains": ["continue"],
+      "vision_expected_contains_any": ["continue"],
+      "notes": "Baseline easy case for both OCR and vision"
+    },
+    {
+      "id": "04-cluttered-toolbar-insert",
+      "file": "04-cluttered-toolbar-insert.png",
+      "category": "cluttered_toolbar",
+      "description": "Dense toolbar; red marker on Insert",
+      "expected_labels": ["insert"],
+      "ocr_expected_contains": ["insert"],
+      "vision_expected_contains_any": ["insert"],
+      "notes": "Must identify Insert near the red marker, not just any toolbar word"
+    },
+    {
+      "id": "05-icon-with-caption-share",
+      "file": "05-icon-with-caption-share.png",
+      "category": "icon_with_caption",
+      "description": "Share icon with small caption",
+      "expected_labels": ["share"],
+      "ocr_expected_contains": ["share"],
+      "vision_expected_contains_any": ["share"],
+      "notes": "OCR may get caption; vision should resolve even if OCR misses"
+    }
+  ]
+}

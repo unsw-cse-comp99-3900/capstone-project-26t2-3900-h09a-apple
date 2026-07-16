@@ -169,7 +169,7 @@ test('stores, reads, and assembles a completed desktop session', () => {
   assert.equal(payload.client_session_id, 'desktop-session-1');
   assert.equal(payload.workflow_name, 'Desktop onboarding workflow');
   assert.equal(payload.recorded_by, RECORDED_BY_USER_ID);
-  assert.equal(payload.events.length, 10);
+  assert.equal(payload.events.length, 11);
   assert.equal(payload.events[0].type, 'click');
   assert.equal(payload.events[0].attrs.source, 'user');
   assert.equal(payload.events[0].attrs.layer, 'desktop');
@@ -180,6 +180,8 @@ test('stores, reads, and assembles a completed desktop session', () => {
     y: 238,
   });
   assert.equal(payload.events[7].screenshot_id, null);
+  assert.equal(payload.events[10].target_label, 'Done');
+  assert.equal(payload.events[10].timestamp_ms, BASE_TIME_MS + 11_000);
   assert.deepEqual(payload.screenshots, []);
 
   db.close();
