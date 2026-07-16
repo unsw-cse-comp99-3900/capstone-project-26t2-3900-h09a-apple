@@ -692,9 +692,9 @@
       return;
     }
 
-    // Only emit when the step index changes. Leaving and returning (Previous → Next)
-    // clears lastEnteredStepIndex via the index change, so a new entered_at is issued
-    // for H09AAPPLE-30 without duplicating the open visit.
+    // Only emit when the step index changes. Previous abandons the forward step
+    // and retracts its timing; re-entering the destination issues a fresh
+    // entered_at without keeping a duplicate open visit.
     if (lastEnteredStepIndex === activeState.stepIndex) {
       return;
     }
@@ -718,6 +718,16 @@
     }
   }
 
+  function clearCurrentVisit() {
+    currentVisitEnteredAt = null;
+    currentVisitStepNumber = null;
+  }
+
+  /**
+   * Finalize the open visit into stepTimings (Next / Finish).
+   * Previous uses abandonCurrentStep() instead so a retreat does not keep
+   * the step being left.
+   */
   function leaveCurrentStep() {
     if (currentVisitEnteredAt == null || currentVisitStepNumber == null) {
       return;
@@ -743,8 +753,22 @@
       });
     } catch {}
 
-    currentVisitEnteredAt = null;
-    currentVisitStepNumber = null;
+    clearCurrentVisit();
+  }
+
+  /** Drop the open visit without recording it (Previous retreat). */
+  function abandonCurrentStep() {
+    clearCurrentVisit();
+  }
+
+  /**
+   * After Previous to destinationStepNumber, drop timings for that step and
+   * any later ones so the destination can be re-timed, and drop friction that
+   * only happened on abandoned forward steps.
+   */
+  function retractPathToStep(destinationStepNumber) {
+    stepTimings = stepTimings.filter((t) => t.step_number < destinationStepNumber);
+    frictionEvents = frictionEvents.filter((e) => e.step_number <= destinationStepNumber);
   }
 
   // Single source of truth for tearing down an in-progress run's bookkeeping,
@@ -827,13 +851,20 @@
       return;
     }
 
-    leaveCurrentStep();
+    const destinationIndex = activeState.stepIndex - 1;
+    const destinationStep = getSteps()[destinationIndex];
+    const destinationStepNumber = destinationStep?.step_number ?? destinationIndex + 1;
+
+    // Retreat: discard the step being left (e.g. 8) and reopen the destination
+    // (e.g. 7) so completion keeps one timing row per step on the final path.
+    abandonCurrentStep();
+    retractPathToStep(destinationStepNumber);
     detachStepListener();
     removeHighlight();
 
     persistState({
       ...activeState,
-      stepIndex: activeState.stepIndex - 1,
+      stepIndex: destinationIndex,
     });
   }
 

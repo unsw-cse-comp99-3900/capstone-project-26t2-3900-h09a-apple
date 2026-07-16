@@ -289,6 +289,57 @@ test('finish clears session walkthrough state and tears down overlay', async () 
   assert.equal(document.getElementById('worktrace-walkthrough-host'), null);
 });
 
+test('previous discards abandoned forward step timing; finish has one row per step', async () => {
+  const payload = {
+    steps: [
+      { step_number: 1, instruction: 'One', css_selector: '#save-btn' },
+      { step_number: 2, instruction: 'Two', css_selector: '#name-field' },
+      { step_number: 3, instruction: 'Three', css_selector: '#save-btn' },
+    ],
+  };
+
+  const { document, flush, sentMessages } = loadRuntime({
+    walkthroughState: { status: 'playing', sopId: 'sop-1', stepIndex: 0 },
+    walkthroughPayload: payload,
+  });
+  await flush();
+
+  const host = document.getElementById('worktrace-walkthrough-host');
+  const next = host.shadowRoot.querySelector('[data-action="next"]');
+  const previous = host.shadowRoot.querySelector('[data-action="previous"]');
+
+  // 1 → 2 → 3, then Previous back to 2 (discard step 3), then Next → 3 → Finish
+  next.click();
+  await flush();
+  next.click();
+  await flush();
+  previous.click();
+  await flush();
+  next.click();
+  await flush();
+
+  host.shadowRoot.querySelector('[data-action="finish"]').click();
+  await flush();
+
+  const finished = sentMessages.find((m) => m.type === 'WALKTHROUGH_FINISHED');
+  assert.ok(finished);
+
+  const timings = finished.step_timings;
+  assert.equal(timings.length, 3);
+  assert.equal(timings[0].step_number, 1);
+  assert.equal(timings[1].step_number, 2);
+  assert.equal(timings[2].step_number, 3);
+
+  const leftMessages = sentMessages.filter((m) => m.type === 'WALKTHROUGH_STEP_LEFT');
+  // Next from 1, Next from 2 (first visit), Next from 2 (after Previous), Finish on 3.
+  // Previous must not emit STEP_LEFT for the abandoned visit to step 3.
+  assert.equal(leftMessages.length, 4);
+  assert.equal(leftMessages[0].step_number, 1);
+  assert.equal(leftMessages[1].step_number, 2);
+  assert.equal(leftMessages[2].step_number, 2);
+  assert.equal(leftMessages[3].step_number, 3);
+});
+
 test('mismatched tabId does not mount the overlay', async () => {
   const payload = {
     steps: [{ step_number: 1, instruction: 'Only step', css_selector: '#save-btn' }],
