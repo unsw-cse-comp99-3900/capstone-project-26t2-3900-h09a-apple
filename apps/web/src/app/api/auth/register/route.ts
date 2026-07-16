@@ -2,7 +2,7 @@ import type { LoginResponse } from '@h09a/types';
 import { NextResponse } from 'next/server';
 
 import { backendFetch } from '@/lib/auth/backend';
-import { defaultTenantId } from '@/lib/auth/constants';
+
 import { setAuthCookies } from '@/lib/auth/cookies';
 import { formatApiDetail } from '@/lib/auth/errors';
 
@@ -19,8 +19,6 @@ export async function POST(request: Request): Promise<NextResponse> {
     body: JSON.stringify({
       email: body.email,
       password: body.password,
-      role: 'EMPLOYEE',
-      tenant_id: defaultTenantId(),
     }),
   });
 
