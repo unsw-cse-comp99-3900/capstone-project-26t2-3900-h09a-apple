@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 import pytest
@@ -236,6 +237,68 @@ def test_login_returns_tokens_for_valid_credentials(auth_db):
 
     refresh_payload = verify_refresh_token(body["refresh_token"])
     assert refresh_payload["user_id"] == str(user.id)
+
+
+def test_google_callback_logs_into_existing_password_account(auth_db, monkeypatch):
+    user = User(
+        id=UUID("11111111-1111-1111-1111-111111111111"),
+        email="employee@example.com",
+        hashed_password=hash_password("secret-password"),
+        role=UserRole.reviewer.value,
+        tenant_id=TENANT_ID,
+    )
+    auth_db.users.append(user)
+
+    monkeypatch.setattr(auth_routes, "exchange_google_code_for_id_token", lambda *_: "id-token")
+    monkeypatch.setattr(
+        auth_routes,
+        "verify_google_id_token",
+        lambda _: SimpleNamespace(email="employee@example.com"),
+    )
+
+    response = client.post(
+        "/api/v1/auth/google/callback",
+        json={
+            "code": "auth-code",
+            "redirect_uri": "http://localhost:3000/api/auth/google/callback",
+        },
+    )
+
+    assert response.status_code == 200
+    assert len(auth_db.users) == 1
+
+    payload = verify_token(response.json()["access_token"])
+    assert payload["user_id"] == str(user.id)
+    assert payload["role"] == UserRole.reviewer.value
+
+
+def test_google_callback_creates_employee_in_default_tenant(auth_db, monkeypatch):
+    monkeypatch.setattr(auth_routes, "exchange_google_code_for_id_token", lambda *_: "id-token")
+    monkeypatch.setattr(
+        auth_routes,
+        "verify_google_id_token",
+        lambda _: SimpleNamespace(email="google-user@example.com"),
+    )
+
+    response = client.post(
+        "/api/v1/auth/google/callback",
+        json={
+            "code": "auth-code",
+            "redirect_uri": "http://localhost:3000/api/auth/google/callback",
+        },
+    )
+
+    assert response.status_code == 200
+    assert len(auth_db.users) == 1
+
+    user = auth_db.users[0]
+    assert user.email == "google-user@example.com"
+    assert user.role == UserRole.employee.value
+    assert user.tenant_id == TENANT_ID
+
+    payload = verify_token(response.json()["access_token"])
+    assert payload["user_id"] == str(user.id)
+    assert payload["role"] == UserRole.employee.value
 
 
 def test_login_returns_401_for_wrong_password(auth_db):
