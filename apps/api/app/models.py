@@ -78,6 +78,17 @@ class CodificationJobStatus(str, enum.Enum):
     failed = "failed"
 
 
+class CodificationJobType(str, enum.Enum):
+    generate = "generate"
+    embed = "embed"
+
+
+class EmbeddingStatus(str, enum.Enum):
+    pending = "pending"
+    complete = "complete"
+    failed = "failed"
+
+
 class UserRole(str, enum.Enum):
     employee = "EMPLOYEE"
     reviewer = "REVIEWER"
@@ -312,6 +323,18 @@ class CodificationJob(Base):
         nullable=False,
         index=True,
     )
+    job_type = Column(
+        String(32),
+        nullable=False,
+        server_default=CodificationJobType.generate.value,
+        index=True,
+    )
+    sop_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("sops.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
     status = Column(
         String(32),
         nullable=False,
@@ -334,6 +357,10 @@ class CodificationJob(Base):
         CheckConstraint(
             f"status IN ({_csv(CodificationJobStatus)})",
             name="ck_codification_jobs_status",
+        ),
+        CheckConstraint(
+            f"job_type IN ({_csv(CodificationJobType)})",
+            name="ck_codification_jobs_job_type",
         ),
         Index("ix_codification_jobs_status_created", "status", "created_at"),
     )
@@ -387,6 +414,7 @@ class Sop(Base):
         nullable=True,
     )
     gen_duration_ms = Column(Integer)
+    embedding_status = Column(String(32), nullable=True)
 
     session = relationship("Session", back_populates="sops")
     step_embeddings = relationship(
@@ -412,6 +440,10 @@ class Sop(Base):
         CheckConstraint(
             "generation_mode IN ('llm','fallback')",
             name="ck_sops_generation_mode",
+        ),
+        CheckConstraint(
+            f"embedding_status IS NULL OR embedding_status IN ({_csv(EmbeddingStatus)})",
+            name="ck_sops_embedding_status",
         ),
     )
 

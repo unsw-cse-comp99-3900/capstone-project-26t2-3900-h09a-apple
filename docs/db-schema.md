@@ -216,23 +216,25 @@ stores only the key.
 
 ## Table: `sops`
 
-| Column            | Type         | Null | Default                                | PII          | Notes                                                       |
-| ----------------- | ------------ | ---- | -------------------------------------- | ------------ | ----------------------------------------------------------- |
-| `id`              | uuid         | no   | `gen_random_uuid()`                    | —            | PK                                                          |
-| `session_id`      | uuid         | no   | —                                      | —            | FK → sessions, **RESTRICT**, indexed                        |
-| `tenant_id`       | uuid         | no   | `22222222-2222-2222-2222-222222222222` | —            | logical org scope; **no FK**; indexed (`DEFAULT_TENANT_ID`) |
-| `title`           | varchar(300) | no   | —                                      | —            |                                                             |
-| `version`         | int          | no   | `1`                                    | —            | bumps on regenerate / edit, `>= 1`                          |
-| `status`          | varchar(32)  | no   | `draft`                                | —            | enum below                                                  |
-| `steps`           | jsonb        | no   | `'[]'`                                 | **PII-risk** | step text may echo captured data; `jsonb_typeof = 'array'`  |
-| `warnings`        | jsonb        | no   | `'[]'`                                 | —            | matches `SopWarning` in `apps/api/app/sop_schema.py`        |
-| `generated_at`    | timestamptz  | no   | `now()`                                | —            |                                                             |
-| `published_at`    | timestamptz  | yes  | —                                      | —            | null until approved SOP is published                        |
-| `gen_duration_ms` | int          | yes  | —                                      | —            | proves the <60s budget, `>= 0`                              |
+| Column             | Type         | Null | Default                                | PII          | Notes                                                                |
+| ------------------ | ------------ | ---- | -------------------------------------- | ------------ | -------------------------------------------------------------------- |
+| `id`               | uuid         | no   | `gen_random_uuid()`                    | —            | PK                                                                   |
+| `session_id`       | uuid         | no   | —                                      | —            | FK → sessions, **RESTRICT**, indexed                                 |
+| `tenant_id`        | uuid         | no   | `22222222-2222-2222-2222-222222222222` | —            | logical org scope; **no FK**; indexed (`DEFAULT_TENANT_ID`)          |
+| `title`            | varchar(300) | no   | —                                      | —            |                                                                      |
+| `version`          | int          | no   | `1`                                    | —            | bumps on regenerate / edit, `>= 1`                                   |
+| `status`           | varchar(32)  | no   | `draft`                                | —            | enum below                                                           |
+| `steps`            | jsonb        | no   | `'[]'`                                 | **PII-risk** | step text may echo captured data; `jsonb_typeof = 'array'`           |
+| `warnings`         | jsonb        | no   | `'[]'`                                 | —            | matches `SopWarning` in `apps/api/app/sop_schema.py`                 |
+| `generated_at`     | timestamptz  | no   | `now()`                                | —            |                                                                      |
+| `published_at`     | timestamptz  | yes  | —                                      | —            | null until approved SOP is published                                 |
+| `gen_duration_ms`  | int          | yes  | —                                      | —            | proves the <60s budget, `>= 0`                                       |
+| `embedding_status` | varchar(32)  | yes  | -                                      | -            | `pending` / `complete` / `failed` (H09AAPPLE-35); null until publish |
 
 **Constraints:** `uq_sops_session_version UNIQUE(session_id, version)`.
 **Indexes:** `ix_sops_session_status(session_id, status)`, `ix_sops_tenant_id(tenant_id)`.
 **Allowed `status` values:** `draft` · `needs_review` · `approved` · `published`.
+**Allowed `embedding_status` values:** `pending` · `complete` · `failed` (or null).
 
 ## Table: `sop_step_embedding` (H09AAPPLE-34)
 
@@ -252,9 +254,13 @@ one row per SOP step, not a single whole-SOP embedding column on `sops`.
 `ix_sop_step_embedding_embedding_ivfflat USING ivfflat (embedding vector_cosine_ops) WITH (lists = 10)`.
 **Extension:** migration `0008_sop_step_embedding` runs `CREATE EXTENSION IF NOT EXISTS vector`.
 
-**Write contract (H09AAPPLE-35):** upsert embeddings by `(sop_id, step.order)`;
-store `step.order` in `step_number`. The DB does not validate that `step_number`
-matches a row in `sops.steps`; the embedding write path must map explicitly.
+**Write contract (H09AAPPLE-35):** on publish (and `POST /api/v1/sops/{id}/embed`),
+enqueue a `codification_jobs` row with `job_type=embed`, set
+`sops.embedding_status=pending`, then BackgroundTasks embeds each step with
+`text-embedding-3-small` (input title, newline, instruction). Replace prior
+rows for that SOP; store `step.order` in `step_number`. Retries use the same
+`1s / 2s / 4s` backoff as H09AAPPLE-24. `embedding_status` becomes `complete`
+when every step succeeds, else `failed`.
 
 **IVFFlat query note (H09AAPPLE-36/-37):** with `lists = 10`, cosine `ORDER BY
 embedding <=> query` via a freshly built IVFFlat index can return **zero rows** when

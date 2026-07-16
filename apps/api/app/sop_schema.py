@@ -58,6 +58,13 @@ class SopPublishResponse(BaseModel):
     status: str
     published_at: datetime
     library_url: str
+    embedding_status: str | None = None
+
+
+class SopEmbedResponse(BaseModel):
+    id: str
+    job_id: str
+    embedding_status: str
 
 
 class SopLibraryItem(BaseModel):

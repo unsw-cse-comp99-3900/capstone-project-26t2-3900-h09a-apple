@@ -14,7 +14,11 @@ MODEL_PRICING_USD_PER_1M_TOKENS = {
         "gpt-4o": {
             "input": Decimal("5.00"),
             "output": Decimal("15.00"),
-        }
+        },
+        "text-embedding-3-small": {
+            "input": Decimal("0.02"),
+            "output": Decimal("0"),
+        },
     },
     "anthropic": {
         "claude-3-5-sonnet-20241022": {
