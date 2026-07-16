@@ -6,6 +6,16 @@ function toIsoString(timestampMs) {
   return new Date(timestampMs).toISOString();
 }
 
+function normalizeRecordedBy(recordedBy) {
+  if (recordedBy == null || recordedBy === '') {
+    return null;
+  }
+
+  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  return uuidPattern.test(recordedBy) ? recordedBy : null;
+}
+
 function removeUndefined(value) {
   return Object.fromEntries(
     Object.entries(value).filter(([, entryValue]) => entryValue !== undefined),
@@ -32,6 +42,26 @@ function buildEventAttrs(event) {
   return attrs;
 }
 
+function comparableEvent(event) {
+  return {
+    type: event.type,
+    target_selector: event.target_selector ?? null,
+    target_label: event.target_label ?? null,
+    value: event.value ?? null,
+    url: event.url ?? null,
+  };
+}
+
+function isDuplicateAdjacentEvent(previousEvent, currentEvent) {
+  if (!previousEvent) {
+    return false;
+  }
+
+  return (
+    JSON.stringify(comparableEvent(previousEvent)) === JSON.stringify(comparableEvent(currentEvent))
+  );
+}
+
 export function assembleSessionFromRows({ session, events }) {
   if (!session) {
     throw new Error('Cannot assemble a session without session metadata');
@@ -45,13 +75,17 @@ export function assembleSessionFromRows({ session, events }) {
     return left.timestamp_ms - right.timestamp_ms;
   });
 
+  const dedupedEvents = sortedEvents.filter(
+    (event, index) => !isDuplicateAdjacentEvent(sortedEvents[index - 1], event),
+  );
+
   return {
     client_session_id: session.client_session_id,
     workflow_name: session.workflow_name,
-    recorded_by: session.recorded_by ?? null,
+    recorded_by: normalizeRecordedBy(session.recorded_by),
     started_at: toIsoString(session.started_at_ms),
     stopped_at: toIsoString(session.stopped_at_ms),
-    events: sortedEvents.map((event) =>
+    events: dedupedEvents.map((event) =>
       removeUndefined({
         type: event.type,
         target_selector: event.target_selector ?? null,
@@ -59,7 +93,7 @@ export function assembleSessionFromRows({ session, events }) {
         value: event.value ?? null,
         url: event.url ?? null,
         attrs: buildEventAttrs(event),
-        screenshot_id: event.screenshot_id ?? null,
+        screenshot_id: null,
         timestamp_ms: event.timestamp_ms,
       }),
     ),

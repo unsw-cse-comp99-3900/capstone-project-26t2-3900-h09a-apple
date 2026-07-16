@@ -12,12 +12,14 @@ import {
 } from '../src/index.js';
 
 const BASE_TIME_MS = Date.UTC(2026, 0, 1, 10, 0, 0);
+const RECORDED_BY_USER_ID = '11111111-1111-4111-8111-111111111111';
+const EVENT_SCREENSHOT_ID = '88888888-8888-4888-8888-888888888888';
 
 function makeSession(overrides = {}) {
   return {
     client_session_id: 'desktop-session-1',
     workflow_name: 'Desktop onboarding workflow',
-    recorded_by: 'employee@example.com',
+    recorded_by: RECORDED_BY_USER_ID,
     started_at_ms: BASE_TIME_MS,
     stopped_at_ms: BASE_TIME_MS + 60_000,
     status: 'completed',
@@ -115,7 +117,7 @@ test('stores, reads, and assembles a completed desktop session', () => {
       category: 'mouse',
       type: 'click',
       target_label: 'Submit',
-      screenshot_id: 'screenshot-8',
+      screenshot_id: EVENT_SCREENSHOT_ID,
     }),
     makeEvent({
       seq: 9,
@@ -130,6 +132,15 @@ test('stores, reads, and assembles a completed desktop session', () => {
       category: 'mouse',
       type: 'click',
       target_label: 'Done',
+      target_selector: 'button[name="Done"]',
+      identification_source: 'ocr',
+    }),
+    makeEvent({
+      seq: 11,
+      category: 'mouse',
+      type: 'click',
+      target_label: 'Done',
+      target_selector: 'button[name="Done"]',
       identification_source: 'ocr',
     }),
   ];
@@ -141,7 +152,7 @@ test('stores, reads, and assembles a completed desktop session', () => {
   const stored = getSessionWithEvents(db, 'desktop-session-1');
 
   assert.equal(stored.session.client_session_id, 'desktop-session-1');
-  assert.equal(stored.events.length, 10);
+  assert.equal(stored.events.length, 11);
   assert.equal(stored.events[0].source, 'user');
   assert.equal(stored.events[0].layer, 'desktop');
   assert.equal(stored.events[0].category, 'mouse');
@@ -149,6 +160,7 @@ test('stores, reads, and assembles a completed desktop session', () => {
   const unidentifiedEvent = stored.events.find((event) => event.seq === 5);
 
   assert.equal(unidentifiedEvent.is_identified, false);
+  assert.equal(unidentifiedEvent.identification_source, 'unidentified');
   assert.equal(unidentifiedEvent.raw_x, 412);
   assert.equal(unidentifiedEvent.raw_y, 238);
 
@@ -156,6 +168,7 @@ test('stores, reads, and assembles a completed desktop session', () => {
 
   assert.equal(payload.client_session_id, 'desktop-session-1');
   assert.equal(payload.workflow_name, 'Desktop onboarding workflow');
+  assert.equal(payload.recorded_by, RECORDED_BY_USER_ID);
   assert.equal(payload.events.length, 10);
   assert.equal(payload.events[0].type, 'click');
   assert.equal(payload.events[0].attrs.source, 'user');
@@ -166,6 +179,67 @@ test('stores, reads, and assembles a completed desktop session', () => {
     x: 412,
     y: 238,
   });
+  assert.equal(payload.events[7].screenshot_id, null);
+  assert.deepEqual(payload.screenshots, []);
+
+  db.close();
+});
+
+test('normalizes non-uuid recorded_by values to null during assembly', () => {
+  const db = openLocalBuffer();
+
+  saveSession(db, makeSession({ recorded_by: 'employee@example.com' }));
+  saveEvent(db, makeEvent({ seq: 1 }));
+
+  const payload = assembleSessionFromRows(getSessionWithEvents(db, 'desktop-session-1'));
+
+  assert.equal(payload.recorded_by, null);
+
+  db.close();
+});
+
+test('rejects unsupported identification_source values', () => {
+  const db = openLocalBuffer();
+
+  saveSession(db, makeSession());
+
+  assert.throws(
+    () =>
+      saveEvent(
+        db,
+        makeEvent({
+          seq: 1,
+          identification_source: 'bad_source',
+        }),
+      ),
+    /Invalid identification_source/,
+  );
+
+  db.close();
+});
+
+test('falls back to empty attrs when attrs_json is corrupt', () => {
+  const db = openLocalBuffer();
+
+  saveSession(db, makeSession());
+  saveEvent(db, makeEvent({ seq: 1, attrs: { ok: true } }));
+
+  db.prepare('UPDATE events SET attrs_json = ? WHERE id = ?').run('{bad json', 'event-1');
+
+  const stored = getSessionWithEvents(db, 'desktop-session-1');
+
+  assert.deepEqual(stored.events[0].attrs, {});
+
+  db.close();
+});
+
+test('rejects duplicate seq values in the same session', () => {
+  const db = openLocalBuffer();
+
+  saveSession(db, makeSession());
+  saveEvent(db, makeEvent({ id: 'event-1', seq: 1 }));
+
+  assert.throws(() => saveEvent(db, makeEvent({ id: 'event-2', seq: 1 })));
 
   db.close();
 });

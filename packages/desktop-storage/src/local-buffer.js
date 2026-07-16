@@ -1,5 +1,12 @@
 import Database from 'better-sqlite3';
 
+const IDENTIFICATION_SOURCES = new Set([
+  'accessibility_api',
+  'ocr',
+  'vision_model',
+  'unidentified',
+]);
+
 function nullable(value) {
   return value === undefined ? null : value;
 }
@@ -9,7 +16,11 @@ function parseJson(value) {
     return {};
   }
 
-  return JSON.parse(value);
+  try {
+    return JSON.parse(value);
+  } catch {
+    return {};
+  }
 }
 
 function ensureColumn(db, tableName, columnName, definition) {
@@ -47,13 +58,17 @@ export function initSchema(db) {
       value TEXT,
       url TEXT,
       screenshot_id TEXT,
-      is_identified INTEGER NOT NULL DEFAULT 0,
-      identification_source TEXT,
+      is_identified INTEGER NOT NULL DEFAULT 0 CHECK (is_identified IN (0, 1)),
+      identification_source TEXT CHECK (
+        identification_source IS NULL OR
+        identification_source IN ('accessibility_api', 'ocr', 'vision_model', 'unidentified')
+      ),
       raw_x REAL,
       raw_y REAL,
       attrs_json TEXT NOT NULL DEFAULT '{}',
-      created_at_ms INTEGER NOT NULL,
-      FOREIGN KEY (session_id) REFERENCES sessions(client_session_id) ON DELETE CASCADE
+    created_at_ms INTEGER NOT NULL,
+    FOREIGN KEY (session_id) REFERENCES sessions(client_session_id) ON DELETE CASCADE,
+    UNIQUE(session_id, seq)
     );
 
     CREATE INDEX IF NOT EXISTS idx_events_session_seq ON events(session_id, seq);
@@ -200,7 +215,7 @@ export function saveEvent(db, event) {
     url: nullable(event.url),
     screenshot_id: nullable(event.screenshot_id),
     is_identified: event.is_identified ? 1 : 0,
-    identification_source: nullable(event.identification_source),
+    identification_source: normalizeIdentificationSource(event),
     raw_x: nullable(event.raw_x),
     raw_y: nullable(event.raw_y),
     attrs_json: JSON.stringify(event.attrs ?? {}),
@@ -262,4 +277,18 @@ export function evictStoppedSessions(db, { maxStoppedSessions }) {
   deleteMany(sessionsToDelete);
 
   return sessionsToDelete.length;
+}
+
+function normalizeIdentificationSource(event) {
+  const source = event.identification_source;
+
+  if (source == null || source === '') {
+    return event.is_identified ? null : 'unidentified';
+  }
+
+  if (!IDENTIFICATION_SOURCES.has(source)) {
+    throw new Error(`Invalid identification_source: ${source}`);
+  }
+
+  return source;
 }
