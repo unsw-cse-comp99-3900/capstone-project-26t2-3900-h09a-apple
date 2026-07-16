@@ -18,12 +18,10 @@ NormalizedEmail = Annotated[EmailStr, BeforeValidator(normalize_email)]
 
 
 class RegisterRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
 
     email: NormalizedEmail
     password: str = Field(min_length=1)
-    role: UserRole
-    tenant_id: UUID
 
 
 class RegisterResponse(BaseModel):

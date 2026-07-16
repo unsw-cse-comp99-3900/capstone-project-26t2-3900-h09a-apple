@@ -7,6 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 from jose import jwt
 
+import app.auth.routes as auth_routes
 from app.auth.jwt import (
     ACCESS_TOKEN_EXPIRE_SECONDS,
     ALGORITHM,
@@ -20,6 +21,7 @@ from app.auth.jwt import (
     verify_token,
 )
 from app.auth.password import hash_password
+from app.auth.rate_limit import clear_auth_rate_limit_state
 from app.database import get_db
 from app.main import app
 from app.models import User, UserRole
@@ -28,6 +30,7 @@ from app.settings import get_secret_key
 client = TestClient(app)
 
 TENANT_ID = UUID("22222222-2222-2222-2222-222222222222")
+OTHER_TENANT_ID = UUID("33333333-3333-3333-3333-333333333333")
 
 
 def _matches_criterion(item: User, criterion) -> bool:
@@ -86,25 +89,35 @@ class AuthFakeDb:
 
 
 @pytest.fixture
-def auth_db():
+def auth_db(monkeypatch):
+    monkeypatch.setenv("DEFAULT_TENANT_ID", str(TENANT_ID))
+    monkeypatch.setenv("AUTH_RATE_LIMIT_DISABLED", "true")
+    monkeypatch.setattr(auth_routes, "get_default_tenant_id", lambda: TENANT_ID)
+    clear_auth_rate_limit_state()
+
     db = AuthFakeDb()
+    had_previous = get_db in app.dependency_overrides
     previous = app.dependency_overrides.get(get_db)
 
     def _override():
         yield db
 
     app.dependency_overrides[get_db] = _override
-    yield db
-    if previous is not None:
-        app.dependency_overrides[get_db] = previous
+
+    try:
+        yield db
+    finally:
+        clear_auth_rate_limit_state()
+        if had_previous:
+            app.dependency_overrides[get_db] = previous
+        else:
+            app.dependency_overrides.pop(get_db, None)
 
 
 def register_payload(**overrides) -> dict:
     payload = {
         "email": "newuser@example.com",
         "password": "secret-password",
-        "role": "EMPLOYEE",
-        "tenant_id": str(TENANT_ID),
     }
     payload.update(overrides)
     return payload
@@ -119,6 +132,26 @@ def test_register_returns_201_with_user_id_and_role(auth_db):
     assert body["user_id"]
     assert "password" not in body
     assert auth_db.committed
+    user = auth_db.users[0]
+    assert user.role == UserRole.employee.value
+    assert user.tenant_id == TENANT_ID
+
+
+def test_register_ignores_client_supplied_role_and_tenant(auth_db):
+    response = client.post(
+        "/api/v1/auth/register",
+        json=register_payload(
+            role=UserRole.manager.value,
+            tenant_id=str(OTHER_TENANT_ID),
+        ),
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["role"] == UserRole.employee.value
+    user = auth_db.users[0]
+    assert user.role == UserRole.employee.value
+    assert user.tenant_id == TENANT_ID
 
 
 def test_register_returns_409_for_duplicate_email_in_tenant(auth_db):
