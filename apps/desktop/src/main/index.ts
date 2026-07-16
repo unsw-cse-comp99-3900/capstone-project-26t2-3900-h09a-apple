@@ -1,5 +1,8 @@
 import { app, BrowserWindow } from 'electron';
 import { join } from 'node:path';
+import { RecordingService } from './recording-service';
+
+const recordingService = new RecordingService();
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
@@ -23,11 +26,22 @@ function createWindow(): void {
 void app.whenReady().then(() => {
   createWindow();
 
+  try {
+    recordingService.start();
+  } catch {
+    // Keep the UI open when the native hook cannot start. A later UI step will
+    // surface this capture or permission error to the user.
+  }
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow();
     }
   });
+});
+
+app.on('before-quit', () => {
+  recordingService.stop();
 });
 
 app.on('window-all-closed', () => {
