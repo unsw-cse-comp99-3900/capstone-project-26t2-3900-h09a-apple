@@ -1,0 +1,13 @@
+{
+  "card": "H09AAPPLE-73",
+  "started_at": "2026-07-16T09:13:16.227Z",
+  "platform": "win32",
+  "arch": "x64",
+  "node": "v24.13.0",
+  "cpu_count": 20,
+  "total_mem_gb": 31.7,
+  "hostname": "redacted",
+  "engines_requested": ["tesseract", "moondream", "gpt4o"],
+  "finished_at": "2026-07-16T09:13:34.963Z",
+  "cpu_class": "dev-laptop"
+}
