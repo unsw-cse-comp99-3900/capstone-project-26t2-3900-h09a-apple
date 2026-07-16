@@ -22,6 +22,13 @@ export function LoginForm() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('google') === 'failed') {
+      setError('Google sign-in failed. Please try again.');
+    }
+  }, []);
+
+  useEffect(() => {
     if (!loading && user) {
       router.replace(redirectPathForRole(user.role));
     }
@@ -84,6 +91,17 @@ export function LoginForm() {
               submitLabel="Sign in"
               submittingLabel="Signing in..."
             />
+
+            <div className={styles.oauthDivider}>
+              <span>or</span>
+            </div>
+
+            <a className={styles.googleButton} href="/api/auth/google/start">
+              <span className={styles.googleMark} aria-hidden="true">
+                G
+              </span>
+              Sign in with Google
+            </a>
           </AuthFormCard>
         )}
       </AuthFormPanel>

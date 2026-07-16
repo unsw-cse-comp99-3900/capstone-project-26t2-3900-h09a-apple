@@ -32,3 +32,17 @@ def get_secret_key() -> str:
 
 def get_llm_provider() -> str:
     return os.getenv("LLM_PROVIDER", "mock").strip().lower()
+
+
+def get_google_client_id() -> str:
+    client_id = os.getenv("GOOGLE_CLIENT_ID")
+    if not client_id:
+        raise SettingsError("GOOGLE_CLIENT_ID is not configured")
+    return client_id
+
+
+def get_google_client_secret() -> str:
+    client_secret = os.getenv("GOOGLE_CLIENT_SECRET")
+    if not client_secret:
+        raise SettingsError("GOOGLE_CLIENT_SECRET is not configured")
+    return client_secret
