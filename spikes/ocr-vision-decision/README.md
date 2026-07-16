@@ -11,6 +11,13 @@ Throwaway benchmark for the §2.5 / §3.5 local-vs-external decision in
 | `moondream` via Ollama              | Step 2 local VLM | `ollama pull moondream` |
 | GPT-4o vision (OpenRouter / OpenAI) | Step 2 external  | reads `apps/api/.env`   |
 
+Moondream2 was used as the first local VLM candidate because it is small, fast,
+and practical to run via Ollama on a pilot laptop without a dedicated GPU.
+SmolVLM, Qwen2-VL-7B-Instruct, and Llama vision variants were not benchmarked
+in this pass; comparing stronger local VLMs is deferred to a follow-up task.
+This spike's deliverable is the local-first vs external compliance decision,
+not production model selection.
+
 ## Setup
 
     cd spikes/ocr-vision-decision

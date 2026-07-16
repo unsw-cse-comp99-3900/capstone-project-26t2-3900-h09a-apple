@@ -93,6 +93,11 @@ Empirical harness: `spikes/ocr-vision-decision/` (5 synthetic crops, ground trut
 dev laptop (stronger than typical pilot hardware); treat latencies as optimistic. Full table:
 `spikes/ocr-vision-decision/results/SUMMARY.md`.
 
+Moondream2 was the first local VLM candidate because it is small, fast, and practical to run via
+Ollama on a pilot laptop without a dedicated GPU. SmolVLM, Qwen2-VL-7B-Instruct, and Llama vision
+variants were not benchmarked in this pass; stronger local VLMs are a follow-up. This card closes
+the local-first vs external compliance decision, not production model selection.
+
 | Tier                            | Choice                                                               | Evidence                                                                                                                                      |
 | ------------------------------- | -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
 | Step 1 OCR (crop text)          | **Local `tesseract.js`**                                             | 3/5 cases passed against ground truth; warm ~8-50 ms; cold worker load ~0.3-0.7 s; $0; no pixels leave the device                             |
