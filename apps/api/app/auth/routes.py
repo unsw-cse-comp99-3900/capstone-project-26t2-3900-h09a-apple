@@ -50,6 +50,7 @@ from app.auth_schema import (
 from app.database import get_db
 from app.email.sender import build_password_reset_email, get_email_sender
 from app.models import User, UserRole
+from app.settings import get_default_tenant_id
 
 router = APIRouter(
     prefix="/api/v1/auth",
@@ -85,14 +86,12 @@ def _issue_login_tokens(db: DBSession, user: User) -> LoginResponse:
     response_model=RegisterResponse,
 )
 def register(payload: RegisterRequest, db: DB_DEPENDENCY) -> RegisterResponse:
-    # TODO: Lock down register - reject client-supplied role/tenant_id; default to
-    # employee + server-derived tenant, or require admin invite (follow-up ticket).
     hashed_password = hash_password(payload.password)
+    tenant_id = get_default_tenant_id()
+    role = UserRole.employee
 
     existing = (
-        db.query(User)
-        .filter(User.email == payload.email, User.tenant_id == payload.tenant_id)
-        .first()
+        db.query(User).filter(User.email == payload.email, User.tenant_id == tenant_id).first()
     )
     touch_user_lookup(db)
     if existing is not None:
@@ -104,8 +103,8 @@ def register(payload: RegisterRequest, db: DB_DEPENDENCY) -> RegisterResponse:
     user = User(
         email=payload.email,
         hashed_password=hashed_password,
-        role=payload.role.value,
-        tenant_id=payload.tenant_id,
+        role=role.value,
+        tenant_id=tenant_id,
     )
     db.add(user)
 
@@ -122,7 +121,7 @@ def register(payload: RegisterRequest, db: DB_DEPENDENCY) -> RegisterResponse:
         db.rollback()
         raise
 
-    return RegisterResponse(user_id=user.id, role=_role_enum(user.role))
+    return RegisterResponse(user_id=user.id, role=role)
 
 
 @router.post("/login", response_model=LoginResponse)
