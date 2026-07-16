@@ -57,6 +57,37 @@ class RefreshResponse(BaseModel):
     expires_in: int
 
 
+class LogoutRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    refresh_token: str = Field(min_length=1)
+
+
+class LogoutResponse(BaseModel):
+    ok: bool = True
+
+
+class ForgotPasswordRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    email: NormalizedEmail
+
+
+class ForgotPasswordResponse(BaseModel):
+    detail: str = "If an account exists for that email, a reset link has been sent."
+
+
+class ResetPasswordRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    token: str = Field(min_length=1)
+    new_password: str = Field(min_length=1)
+
+
+class ResetPasswordResponse(BaseModel):
+    ok: bool = True
+
+
 class MeResponse(BaseModel):
     id: UUID
     email: NormalizedEmail

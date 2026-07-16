@@ -32,3 +32,10 @@ def get_secret_key() -> str:
 
 def get_llm_provider() -> str:
     return os.getenv("LLM_PROVIDER", "mock").strip().lower()
+
+
+def get_web_base_url() -> str:
+    raw = os.getenv("WEB_BASE_URL", "").strip()
+    if not raw:
+        raise SettingsError("WEB_BASE_URL is not configured")
+    return raw.rstrip("/")

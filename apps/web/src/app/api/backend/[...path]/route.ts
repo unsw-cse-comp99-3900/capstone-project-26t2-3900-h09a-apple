@@ -3,7 +3,6 @@ import { NextResponse } from 'next/server';
 
 import { backendFetch } from '@/lib/auth/backend';
 import { ACCESS_TOKEN_COOKIE } from '@/lib/auth/constants';
-import { clearAuthCookies } from '@/lib/auth/cookies';
 
 type RouteContext = {
   params: Promise<{ path: string[] }>;
@@ -46,10 +45,7 @@ async function proxy(request: Request, context: RouteContext): Promise<NextRespo
     response.headers.set(key, value);
   });
 
-  if (upstream.status === 401) {
-    clearAuthCookies(response);
-  }
-
+  // Do not clear cookies on 401; the client refresh-and-retry path owns session teardown.
   return response;
 }
 
