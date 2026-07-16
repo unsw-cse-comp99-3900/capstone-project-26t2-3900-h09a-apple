@@ -6,9 +6,8 @@ from uuid import UUID, uuid4
 import pytest
 from fastapi.testclient import TestClient
 from jose import jwt
-import app.auth.routes as auth_routes
-from app.auth.rate_limit import clear_auth_rate_limit_state
 
+import app.auth.routes as auth_routes
 from app.auth.jwt import (
     ACCESS_TOKEN_EXPIRE_SECONDS,
     ALGORITHM,
@@ -22,6 +21,7 @@ from app.auth.jwt import (
     verify_token,
 )
 from app.auth.password import hash_password
+from app.auth.rate_limit import clear_auth_rate_limit_state
 from app.database import get_db
 from app.main import app
 from app.models import User, UserRole
