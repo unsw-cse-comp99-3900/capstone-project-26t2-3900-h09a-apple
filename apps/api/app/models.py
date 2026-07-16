@@ -167,6 +167,13 @@ class PasswordResetToken(Base):
     )
 
 
+class WalkthroughFrictionType(str, enum.Enum):
+    wrong_target = "wrong_target"
+    wrong_page = "wrong_page"
+    empty_input = "empty_input"
+    selector_miss = "selector_miss"
+
+
 # ---------------------------------------------------------------------------
 # sessions
 # ---------------------------------------------------------------------------
@@ -594,6 +601,176 @@ class ConsentAcceptance(Base):
     )
 
 
+# ---------------------------------------------------------------------------
+# walkthrough_completions (H09AAPPLE-30)
+# ---------------------------------------------------------------------------
+class WalkthroughCompletion(Base):
+    __tablename__ = "walkthrough_completions"
+
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    tenant_id = Column(
+        UUID(as_uuid=True),
+        nullable=False,
+        index=True,
+    )
+    sop_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("sops.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    employee_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    completed_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
+    duration_seconds = Column(
+        Integer,
+        nullable=False,
+    )
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=text("now()"),
+    )
+
+    friction_events = relationship(
+        "WalkthroughFrictionEvent",
+        back_populates="completion",
+        cascade="all, delete-orphan",
+    )
+    step_timings = relationship(
+        "WalkthroughStepTiming",
+        back_populates="completion",
+        cascade="all, delete-orphan",
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "duration_seconds >= 0",
+            name="ck_walkthrough_completion_duration_nonneg",
+        ),
+        Index(
+            "ix_walkthrough_completion_sop_employee",
+            "sop_id",
+            "employee_id",
+        ),
+    )
+
+
+# ---------------------------------------------------------------------------
+# walkthrough_friction_events (H09AAPPLE-30)
+# ---------------------------------------------------------------------------
+class WalkthroughFrictionEvent(Base):
+    __tablename__ = "walkthrough_friction_events"
+
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    completion_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("walkthrough_completions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    step_number = Column(
+        Integer,
+        nullable=False,
+    )
+    event_type = Column(
+        String(32),
+        nullable=False,
+    )
+    occurred_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
+
+    completion = relationship(
+        "WalkthroughCompletion",
+        back_populates="friction_events",
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "step_number >= 1",
+            name="ck_walkthrough_friction_step_number_pos",
+        ),
+        CheckConstraint(
+            f"event_type IN ({_csv(WalkthroughFrictionType)})",
+            name="ck_walkthrough_friction_event_type",
+        ),
+        Index(
+            "ix_walkthrough_friction_completion_step",
+            "completion_id",
+            "step_number",
+        ),
+    )
+
+
+# ---------------------------------------------------------------------------
+# walkthrough_step_timings (H09AAPPLE-30)
+# ---------------------------------------------------------------------------
+class WalkthroughStepTiming(Base):
+    __tablename__ = "walkthrough_step_timings"
+
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    completion_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("walkthrough_completions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    step_number = Column(
+        Integer,
+        nullable=False,
+    )
+    duration_ms = Column(
+        Integer,
+        nullable=False,
+    )
+
+    completion = relationship(
+        "WalkthroughCompletion",
+        back_populates="step_timings",
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "step_number >= 1",
+            name="ck_walkthrough_step_timing_step_number_pos",
+        ),
+        CheckConstraint(
+            "duration_ms >= 0",
+            name="ck_walkthrough_step_timing_duration_nonneg",
+        ),
+        UniqueConstraint(
+            "completion_id",
+            "step_number",
+            name="uq_walkthrough_step_timing_completion_step",
+        ),
+        Index(
+            "ix_walkthrough_step_timing_completion",
+            "completion_id",
+        ),
+    )
+
+
 __all__ = [
     "Base",
     "ConsentAcceptance",
@@ -610,5 +787,11 @@ __all__ = [
     "CodificationJobStatus",
     "User",
     "UserRole",
+    "RefreshToken",
+    "PasswordResetToken",
     "LlmAuditLog",
+    "WalkthroughCompletion",
+    "WalkthroughFrictionEvent",
+    "WalkthroughStepTiming",
+    "WalkthroughFrictionType",
 ]

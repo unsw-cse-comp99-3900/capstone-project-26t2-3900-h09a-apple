@@ -1,3 +1,8 @@
 packages:
   - 'apps/*'
   - 'packages/*'
+
+onlyBuiltDependencies:
+  - active-win
+  - better-sqlite3
+  - uiohook-napi

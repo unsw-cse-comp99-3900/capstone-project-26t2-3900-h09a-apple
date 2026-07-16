@@ -39,3 +39,17 @@ def get_web_base_url() -> str:
     if not raw:
         raise SettingsError("WEB_BASE_URL is not configured")
     return raw.rstrip("/")
+
+
+def get_google_client_id() -> str:
+    client_id = os.getenv("GOOGLE_CLIENT_ID")
+    if not client_id:
+        raise SettingsError("GOOGLE_CLIENT_ID is not configured")
+    return client_id
+
+
+def get_google_client_secret() -> str:
+    client_secret = os.getenv("GOOGLE_CLIENT_SECRET")
+    if not client_secret:
+        raise SettingsError("GOOGLE_CLIENT_SECRET is not configured")
+    return client_secret

@@ -1,7 +1,7 @@
 """Add refresh_tokens and password_reset_tokens (H09AAPPLE-63).
 
-Revision ID: 0009_auth_token_tables
-Revises: 0008_sop_step_embedding
+Revision ID: 0010_auth_token_tables
+Revises: 0009_walkthrough_completion
 Create Date: 2026-07-16
 """
 
@@ -12,8 +12,8 @@ from sqlalchemy.dialects import postgresql
 
 from alembic import op
 
-revision = "0009_auth_token_tables"
-down_revision = "0008_sop_step_embedding"
+revision = "0010_auth_token_tables"
+down_revision = "0009_walkthrough_completion"
 branch_labels = None
 depends_on = None
 

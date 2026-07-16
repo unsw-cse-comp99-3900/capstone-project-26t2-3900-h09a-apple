@@ -1,0 +1,6 @@
+node_modules/
+results/raw/
+results/benchmark-20*.json
+*.traineddata
+.env
+*.log

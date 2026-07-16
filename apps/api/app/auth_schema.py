@@ -44,6 +44,13 @@ class LoginResponse(BaseModel):
     user_id: UUID
 
 
+class GoogleAuthCodeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    code: str = Field(min_length=1)
+    redirect_uri: str = Field(min_length=1)
+
+
 class RefreshRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

@@ -480,7 +480,7 @@ reset can revoke sessions without a denylist-only design.
 - Current jti revoked on `POST /api/v1/auth/logout`
 - All jtis for a user revoked on successful password reset
 
-**Revision:** `0009_auth_token_tables`
+**Revision:** `0010_auth_token_tables`
 
 ---
 
@@ -503,4 +503,4 @@ is stored; the raw token is emailed once via SES (or the mock sender in local/CI
 - `POST /api/v1/auth/forgot-password` - always 200; creates token + sends email when user exists
 - `POST /api/v1/auth/reset-password` - validates token, updates password, marks used, revokes refresh tokens
 
-**Revision:** `0009_auth_token_tables`
+**Revision:** `0010_auth_token_tables`

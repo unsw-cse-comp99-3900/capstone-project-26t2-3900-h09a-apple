@@ -2,13 +2,20 @@ from __future__ import annotations
 
 import secrets
 from typing import Annotated
-from uuid import UUID
+from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import RedirectResponse
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as DBSession
 
 from app.auth.deps import get_current_user
+from app.auth.google import (
+    GoogleAuthError,
+    build_google_authorization_url,
+    exchange_google_code_for_id_token,
+    verify_google_id_token,
+)
 from app.auth.handoff_store import (
     HANDOFF_CODE_EXPIRE_SECONDS,
     HandoffCodeError,
@@ -35,6 +42,7 @@ from app.auth_schema import (
     ExtensionHandoffRedeemRequest,
     ForgotPasswordRequest,
     ForgotPasswordResponse,
+    GoogleAuthCodeRequest,
     LoginRequest,
     LoginResponse,
     LogoutRequest,
@@ -50,7 +58,7 @@ from app.auth_schema import (
 from app.database import get_db
 from app.email.sender import build_password_reset_email, get_email_sender
 from app.models import User, UserRole
-from app.settings import get_default_tenant_id
+from app.settings import SettingsError, get_default_tenant_id
 
 router = APIRouter(
     prefix="/api/v1/auth",
@@ -136,6 +144,78 @@ def login(payload: LoginRequest, db: DB_DEPENDENCY) -> LoginResponse:
         )
 
     return _issue_login_tokens(db, user)
+
+
+@router.post("/google/callback", response_model=LoginResponse)
+def google_callback(payload: GoogleAuthCodeRequest, db: DB_DEPENDENCY) -> LoginResponse:
+    try:
+        id_token = exchange_google_code_for_id_token(payload.code, payload.redirect_uri)
+        google_identity = verify_google_id_token(id_token)
+    except SettingsError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from None
+    except GoogleAuthError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid Google sign-in",
+            headers=_UNAUTHORIZED_HEADERS,
+        ) from None
+
+    user = find_user_by_email(db, google_identity.email)
+
+    if user is None:
+        role = UserRole.employee
+
+        try:
+            tenant_id = get_default_tenant_id()
+        except SettingsError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=str(exc),
+            ) from None
+
+        user = User(
+            email=google_identity.email,
+            hashed_password=hash_password(uuid4().hex),
+            role=role.value,
+            tenant_id=tenant_id,
+        )
+        db.add(user)
+
+        try:
+            db.flush()
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            user = find_user_by_email(db, google_identity.email)
+            if user is None:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=_REGISTRATION_FAILED,
+                ) from None
+        except Exception:
+            db.rollback()
+            raise
+
+    return _issue_login_tokens(db, user)
+
+
+@router.get("/google/authorize")
+def google_authorize(
+    redirect_uri: str = Query(..., min_length=1),
+    state: str | None = Query(default=None),
+) -> RedirectResponse:
+    try:
+        authorization_url = build_google_authorization_url(redirect_uri, state)
+    except SettingsError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from None
+
+    return RedirectResponse(authorization_url)
 
 
 @router.get("/me", response_model=MeResponse)
