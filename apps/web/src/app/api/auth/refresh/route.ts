@@ -27,7 +27,7 @@ export async function POST(): Promise<NextResponse> {
   }
 
   const payload = (await upstream.json()) as RefreshResponse;
-  const response = NextResponse.json({ ok: true });
+  const response = NextResponse.json({ ok: true, expires_in: payload.expires_in });
   setAccessCookie(response, payload.access_token, payload.expires_in);
   return response;
 }

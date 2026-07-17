@@ -45,6 +45,7 @@ from app.sop_service import (
     resolve_step_time_estimate,
 )
 from app.storage import ObjectStorage, get_storage
+from app.walkthrough_routes import router as walkthrough_router
 
 load_dotenv()
 
@@ -69,6 +70,7 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(feedback_router)
 app.include_router(consent_router)
+app.include_router(walkthrough_router)
 
 
 @app.get("/health")

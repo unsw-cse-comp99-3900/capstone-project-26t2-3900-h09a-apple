@@ -103,6 +103,7 @@ def _resolve_step_metadata(
     str | None,
     dict | None,
     Literal["click", "input", "submit"] | None,
+    str | None,
 ]:
     css_selector = None
     xpath = None
@@ -110,6 +111,7 @@ def _resolve_step_metadata(
     screenshot_url = None
     screenshot_highlight = None
     expected_action = None
+    expected_url = None
 
     priority = {
         models.EventType.click.value: 1,
@@ -146,6 +148,14 @@ def _resolve_step_metadata(
         if screenshot_highlight is None:
             screenshot_highlight = _extract_screenshot_highlight(getattr(event, "attrs", None))
 
+        # Record the first page URL associated with this step so the
+        # walkthrough runtime can distinguish selector misses from
+        # genuine navigation to the wrong page.
+        if expected_url is None:
+            url = getattr(event, "url", None)
+            if url:
+                expected_url = url
+
         event_type = getattr(event, "type", None)
         current_priority = priority.get(event_type, 0)
 
@@ -162,6 +172,7 @@ def _resolve_step_metadata(
             and target_label
             and screenshot_url
             and screenshot_highlight
+            and expected_url
             and best_priority == submit_priority
         ):
             break
@@ -173,6 +184,7 @@ def _resolve_step_metadata(
         screenshot_url,
         screenshot_highlight,
         expected_action,
+        expected_url,
     )
 
 
@@ -232,6 +244,7 @@ def build_walkthrough_payload(sop: models.Sop, db: DBSession) -> WalkthroughPayl
             screenshot_url,
             screenshot_highlight,
             expected_action,
+            expected_url,
         ) = _resolve_step_metadata(
             source_event_ids,
             sop.session_id,
@@ -270,6 +283,7 @@ def build_walkthrough_payload(sop: models.Sop, db: DBSession) -> WalkthroughPayl
                 screenshot_highlight=screenshot_highlight,
                 anchor_mode=anchor_mode,
                 expected_action=expected_action,
+                expected_url=expected_url,
             )
         )
 

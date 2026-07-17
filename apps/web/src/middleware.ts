@@ -9,7 +9,7 @@ import {
 } from '@/lib/auth/constants';
 import { isProtectedPath } from '@/lib/auth/protected-paths';
 
-const PUBLIC_PATHS = new Set(['/login', '/register']);
+const PUBLIC_PATHS = new Set(['/login', '/register', '/forgot-password', '/reset-password']);
 
 function isAuthenticated(request: NextRequest): boolean {
   return Boolean(

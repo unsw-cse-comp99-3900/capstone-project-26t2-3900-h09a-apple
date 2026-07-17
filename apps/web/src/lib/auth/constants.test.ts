@@ -1,14 +1,19 @@
 import { describe, expect, it } from 'vitest';
 
-import { decodeBase64Url, roleLandingPath, roleFromAccessToken } from '@/lib/auth/constants';
+import {
+  decodeBase64Url,
+  expiresInFromAccessToken,
+  roleLandingPath,
+  roleFromAccessToken,
+} from '@/lib/auth/constants';
 
 function encodeBase64Url(value: string): string {
   return btoa(value).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
 }
 
-function makeToken(role: string): string {
+function makeToken(role: string, exp?: number): string {
   const header = encodeBase64Url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
-  const payload = encodeBase64Url(JSON.stringify({ role }));
+  const payload = encodeBase64Url(JSON.stringify({ role, exp }));
   return `${header}.${payload}.signature`;
 }
 
@@ -34,10 +39,18 @@ describe('auth constants', () => {
     expect(roleFromAccessToken(makeToken('MANAGER'))).toBe('MANAGER');
   });
 
+  it('computes seconds until access token expiry', () => {
+    const exp = Math.floor(Date.now() / 1000) + 120;
+    const remaining = expiresInFromAccessToken(makeToken('EMPLOYEE', exp));
+    expect(remaining).toBeGreaterThan(100);
+    expect(remaining).toBeLessThanOrEqual(120);
+  });
+
   it('returns null for missing or invalid jwt roles', () => {
     expect(roleFromAccessToken(undefined)).toBeNull();
     expect(roleFromAccessToken('')).toBeNull();
     expect(roleFromAccessToken('not-a-jwt')).toBeNull();
+    expect(expiresInFromAccessToken(undefined)).toBeNull();
     expect(roleFromAccessToken(makeToken('ADMIN'))).toBeNull();
     expect(roleFromAccessToken(`${encodeBase64Url('{}')}.bad.${encodeBase64Url('{}')}`)).toBeNull();
   });

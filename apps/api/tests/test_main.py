@@ -1198,6 +1198,7 @@ def test_get_sop_walkthrough_returns_payload_for_single_step():
             "screenshot_highlight": None,
             "anchor_mode": "element",
             "expected_action": None,
+            "expected_url": None,
         }
     finally:
         app.dependency_overrides[get_db] = override_get_db
