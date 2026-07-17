@@ -57,3 +57,25 @@ export function roleFromAccessToken(token: string | undefined): UserRole | null 
 
   return null;
 }
+
+/** Seconds until access-token exp claim; null when missing/invalid. */
+export function expiresInFromAccessToken(token: string | undefined): number | null {
+  if (!token) {
+    return null;
+  }
+
+  const parts = token.split('.');
+  if (parts.length < 2) {
+    return null;
+  }
+
+  try {
+    const payload = JSON.parse(decodeBase64Url(parts[1])) as { exp?: unknown };
+    if (typeof payload.exp !== 'number' || !Number.isFinite(payload.exp)) {
+      return null;
+    }
+    return Math.max(0, Math.floor(payload.exp - Date.now() / 1000));
+  } catch {
+    return null;
+  }
+}

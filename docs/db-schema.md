@@ -456,3 +456,51 @@ Consent proof is `{user_id, tenant_id, consent_type, version, accepted_at}` only
   the current terms version for that type (`accepted`, `accepted_at`)
 
 **Revision:** `0007_consent_acceptance`
+
+---
+
+## Table: `refresh_tokens` (H09AAPPLE-63)
+
+Server-side registry of issued refresh JWT `jti` values so logout and password
+reset can revoke sessions without a denylist-only design.
+
+| Column       | Type        | Null | Default             | Notes                                 |
+| ------------ | ----------- | ---- | ------------------- | ------------------------------------- |
+| `id`         | uuid        | no   | `gen_random_uuid()` | PK                                    |
+| `jti`        | uuid        | no   | -                   | JWT `jti` claim; **UNIQUE**           |
+| `user_id`    | uuid        | no   | -                   | FK -> `users.id` **CASCADE**; indexed |
+| `expires_at` | timestamptz | no   | -                   | mirrors refresh JWT expiry            |
+| `revoked_at` | timestamptz | yes  | -                   | set on logout or bulk revoke          |
+| `created_at` | timestamptz | no   | `now()`             |                                       |
+
+**API**
+
+- Issued on `POST /api/v1/auth/login` and extension handoff redeem
+- Checked on `POST /api/v1/auth/refresh`
+- Current jti revoked on `POST /api/v1/auth/logout`
+- All jtis for a user revoked on successful password reset
+
+**Revision:** `0010_auth_token_tables`
+
+---
+
+## Table: `password_reset_tokens` (H09AAPPLE-63)
+
+One-time password reset tokens. Only a SHA-256 hash (peppered with `SECRET_KEY`)
+is stored; the raw token is emailed once via SES (or the mock sender in local/CI).
+
+| Column       | Type        | Null | Default             | Notes                                 |
+| ------------ | ----------- | ---- | ------------------- | ------------------------------------- |
+| `id`         | uuid        | no   | `gen_random_uuid()` | PK                                    |
+| `user_id`    | uuid        | no   | -                   | FK -> `users.id` **CASCADE**; indexed |
+| `token_hash` | varchar(64) | no   | -                   | hex digest; **UNIQUE**                |
+| `expires_at` | timestamptz | no   | -                   | 30 minutes from issue                 |
+| `used_at`    | timestamptz | yes  | -                   | set after successful reset            |
+| `created_at` | timestamptz | no   | `now()`             |                                       |
+
+**API**
+
+- `POST /api/v1/auth/forgot-password` - always 200; creates token + sends email when user exists
+- `POST /api/v1/auth/reset-password` - validates token, updates password, marks used, revokes refresh tokens
+
+**Revision:** `0010_auth_token_tables`

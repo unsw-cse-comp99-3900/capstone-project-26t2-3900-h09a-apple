@@ -3,8 +3,8 @@ import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 
 import { backendFetch } from '@/lib/auth/backend';
-import { ACCESS_TOKEN_COOKIE } from '@/lib/auth/constants';
-import { clearAuthCookies } from '@/lib/auth/cookies';
+import { ACCESS_TOKEN_COOKIE, expiresInFromAccessToken } from '@/lib/auth/constants';
+import { clearAccessCookie } from '@/lib/auth/cookies';
 
 export async function GET(): Promise<NextResponse> {
   const cookieStore = await cookies();
@@ -22,11 +22,16 @@ export async function GET(): Promise<NextResponse> {
   if (!upstream.ok) {
     const response = NextResponse.json({ detail: 'Not authenticated' }, { status: 401 });
     if (upstream.status === 401) {
-      clearAuthCookies(response);
+      // Keep refresh cookie so the client can silent-refresh.
+      clearAccessCookie(response);
     }
     return response;
   }
 
   const user = (await upstream.json()) as MeResponse;
-  return NextResponse.json(user);
+  const expiresIn = expiresInFromAccessToken(accessToken);
+  return NextResponse.json({
+    ...user,
+    expires_in: expiresIn,
+  });
 }

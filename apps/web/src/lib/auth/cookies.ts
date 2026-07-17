@@ -41,7 +41,7 @@ export function setAccessCookie(
   });
 }
 
-export function clearAuthCookies(response: NextResponse): void {
+export function clearAccessCookie(response: NextResponse): void {
   response.cookies.set(ACCESS_TOKEN_COOKIE, '', {
     httpOnly: true,
     secure: SECURE,
@@ -49,6 +49,10 @@ export function clearAuthCookies(response: NextResponse): void {
     path: '/',
     maxAge: 0,
   });
+}
+
+export function clearAuthCookies(response: NextResponse): void {
+  clearAccessCookie(response);
 
   response.cookies.set(REFRESH_TOKEN_COOKIE, '', {
     httpOnly: true,

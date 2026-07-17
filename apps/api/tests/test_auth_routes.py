@@ -21,11 +21,14 @@ from app.auth.jwt import (
     verify_refresh_token,
     verify_token,
 )
-from app.auth.password import hash_password
+from app.auth.password import hash_password, verify_password
+from app.auth.password_reset import hash_reset_token
 from app.auth.rate_limit import clear_auth_rate_limit_state
+from app.auth.refresh_tokens import issue_refresh_token
 from app.database import get_db
+from app.email import clear_mock_email_outbox, get_mock_email_outbox
 from app.main import app
-from app.models import User, UserRole
+from app.models import PasswordResetToken, RefreshToken, User, UserRole
 from app.settings import get_secret_key
 
 client = TestClient(app)
@@ -34,16 +37,16 @@ TENANT_ID = UUID("22222222-2222-2222-2222-222222222222")
 OTHER_TENANT_ID = UUID("33333333-3333-3333-3333-333333333333")
 
 
-def _matches_criterion(item: User, criterion) -> bool:
+def _matches_criterion(item, criterion) -> bool:
     left_key = criterion.left.key
     right = criterion.right
     value = right.value if hasattr(right, "value") else right
     return getattr(item, left_key) == value
 
 
-class UserQuery:
-    def __init__(self, users: list[User]):
-        self._users = users
+class ModelQuery:
+    def __init__(self, items: list):
+        self._items = items
         self._criteria: list = []
 
     def filter(self, *criteria):
@@ -51,33 +54,48 @@ class UserQuery:
         return self
 
     def first(self):
-        for user in self._users:
-            if all(_matches_criterion(user, criterion) for criterion in self._criteria):
-                return user
-        return None
+        matched = self.all()
+        return matched[0] if matched else None
+
+    def all(self):
+        return [
+            item
+            for item in self._items
+            if all(_matches_criterion(item, criterion) for criterion in self._criteria)
+        ]
 
 
 class AuthFakeDb:
     def __init__(self, users: list[User] | None = None):
         self.users = list(users or [])
-        self.pending: list[User] = []
+        self.refresh_tokens: list[RefreshToken] = []
+        self.password_reset_tokens: list[PasswordResetToken] = []
+        self.pending: list = []
         self.committed = False
         self.rolled_back = False
 
     def query(self, model):
         if model is User:
-            return UserQuery(self.users)
-        return UserQuery([])
+            return ModelQuery(self.users)
+        if model is RefreshToken:
+            return ModelQuery(self.refresh_tokens)
+        if model is PasswordResetToken:
+            return ModelQuery(self.password_reset_tokens)
+        return ModelQuery([])
 
     def add(self, item):
         self.pending.append(item)
 
     def flush(self):
-        for user in self.pending:
-            if user.id is None:
-                user.id = uuid4()
-            if user not in self.users:
-                self.users.append(user)
+        for item in self.pending:
+            if getattr(item, "id", None) is None:
+                item.id = uuid4()
+            if isinstance(item, User) and item not in self.users:
+                self.users.append(item)
+            elif isinstance(item, RefreshToken) and item not in self.refresh_tokens:
+                self.refresh_tokens.append(item)
+            elif isinstance(item, PasswordResetToken) and item not in self.password_reset_tokens:
+                self.password_reset_tokens.append(item)
         self.pending.clear()
 
     def commit(self):
@@ -92,9 +110,12 @@ class AuthFakeDb:
 @pytest.fixture
 def auth_db(monkeypatch):
     monkeypatch.setenv("DEFAULT_TENANT_ID", str(TENANT_ID))
+    monkeypatch.setenv("WEB_BASE_URL", "http://localhost:3000")
+    monkeypatch.setenv("EMAIL_PROVIDER", "mock")
     monkeypatch.setenv("AUTH_RATE_LIMIT_DISABLED", "true")
     monkeypatch.setattr(auth_routes, "get_default_tenant_id", lambda: TENANT_ID)
     clear_auth_rate_limit_state()
+    clear_mock_email_outbox()
 
     db = AuthFakeDb()
     had_previous = get_db in app.dependency_overrides
@@ -104,11 +125,11 @@ def auth_db(monkeypatch):
         yield db
 
     app.dependency_overrides[get_db] = _override
-
     try:
         yield db
     finally:
         clear_auth_rate_limit_state()
+        clear_mock_email_outbox()
         if had_previous:
             app.dependency_overrides[get_db] = previous
         else:
@@ -122,6 +143,16 @@ def register_payload(**overrides) -> dict:
     }
     payload.update(overrides)
     return payload
+
+
+def _employee(email: str = "employee@example.com", password: str = "secret-password") -> User:
+    return User(
+        id=UUID("11111111-1111-1111-1111-111111111111"),
+        email=email,
+        hashed_password=hash_password(password),
+        role=UserRole.employee.value,
+        tenant_id=TENANT_ID,
+    )
 
 
 def test_register_returns_201_with_user_id_and_role(auth_db):
@@ -210,13 +241,7 @@ def test_login_accepts_normalized_email(auth_db):
 
 def test_login_returns_tokens_for_valid_credentials(auth_db):
     password = "secret-password"
-    user = User(
-        id=UUID("11111111-1111-1111-1111-111111111111"),
-        email="employee@example.com",
-        hashed_password=hash_password(password),
-        role=UserRole.employee.value,
-        tenant_id=TENANT_ID,
-    )
+    user = _employee(password=password)
     auth_db.users.append(user)
 
     response = client.post(
@@ -231,12 +256,14 @@ def test_login_returns_tokens_for_valid_credentials(auth_db):
     assert body["access_token"]
     assert body["refresh_token"]
     assert "password" not in body
+    assert len(auth_db.refresh_tokens) == 1
 
     access_payload = verify_token(body["access_token"])
     assert access_payload["user_id"] == str(user.id)
 
     refresh_payload = verify_refresh_token(body["refresh_token"])
     assert refresh_payload["user_id"] == str(user.id)
+    assert refresh_payload["jti"] == str(auth_db.refresh_tokens[0].jti)
 
 
 def test_google_callback_logs_into_existing_password_account(auth_db, monkeypatch):
@@ -302,13 +329,7 @@ def test_google_callback_creates_employee_in_default_tenant(auth_db, monkeypatch
 
 
 def test_login_returns_401_for_wrong_password(auth_db):
-    user = User(
-        id=uuid4(),
-        email="employee@example.com",
-        hashed_password=hash_password("secret-password"),
-        role=UserRole.employee.value,
-        tenant_id=TENANT_ID,
-    )
+    user = _employee()
     auth_db.users.append(user)
 
     response = client.post(
@@ -339,7 +360,7 @@ def test_refresh_returns_new_access_token(auth_db):
         tenant_id=TENANT_ID,
     )
     auth_db.users.append(user)
-    refresh_token = generate_refresh_token(user.id, UserRole.reviewer, user.tenant_id)
+    refresh_token = issue_refresh_token(auth_db, user, UserRole.reviewer)
 
     response = client.post("/api/v1/auth/refresh", json={"refresh_token": refresh_token})
 
@@ -354,18 +375,24 @@ def test_refresh_returns_new_access_token(auth_db):
 
 
 def test_refresh_returns_401_for_access_token(auth_db):
-    user = User(
-        id=uuid4(),
-        email="employee@example.com",
-        hashed_password="hashed",
-        role=UserRole.employee.value,
-        tenant_id=TENANT_ID,
-    )
+    user = _employee()
     auth_db.users.append(user)
     access_token = generate_token(user.id, UserRole.employee, user.tenant_id)
 
     response = client.post("/api/v1/auth/refresh", json={"refresh_token": access_token})
 
+    assert response.status_code == 401
+
+
+def test_refresh_returns_401_for_revoked_token(auth_db):
+    user = _employee()
+    auth_db.users.append(user)
+    refresh_token = issue_refresh_token(auth_db, user, UserRole.employee)
+
+    logout = client.post("/api/v1/auth/logout", json={"refresh_token": refresh_token})
+    assert logout.status_code == 200
+
+    response = client.post("/api/v1/auth/refresh", json={"refresh_token": refresh_token})
     assert response.status_code == 401
 
 
@@ -378,6 +405,7 @@ def test_refresh_returns_401_for_expired_refresh_token():
             "role": "EMPLOYEE",
             "tenant_id": str(TENANT_ID),
             "type": TOKEN_TYPE_REFRESH,
+            "jti": str(uuid4()),
             "exp": expire,
         },
         get_secret_key(),
@@ -389,21 +417,22 @@ def test_refresh_returns_401_for_expired_refresh_token():
     assert response.status_code == 401
 
 
-def test_generate_refresh_token_has_refresh_type():
+def test_generate_refresh_token_has_refresh_type_and_jti():
     user_id = UUID("11111111-1111-1111-1111-111111111111")
-    token = generate_refresh_token(user_id, UserRole.employee, TENANT_ID)
-    payload = jwt.decode(token, get_secret_key(), algorithms=[ALGORITHM])
+    issued = generate_refresh_token(user_id, UserRole.employee, TENANT_ID)
+    payload = jwt.decode(issued.token, get_secret_key(), algorithms=[ALGORITHM])
 
     assert payload["type"] == TOKEN_TYPE_REFRESH
     assert payload["user_id"] == str(user_id)
+    assert payload["jti"] == str(issued.jti)
 
 
 def test_verify_token_rejects_refresh_token():
     user_id = UUID("11111111-1111-1111-1111-111111111111")
-    token = generate_refresh_token(user_id, UserRole.employee, TENANT_ID)
+    issued = generate_refresh_token(user_id, UserRole.employee, TENANT_ID)
 
     with pytest.raises(InvalidTokenError):
-        verify_token(token)
+        verify_token(issued.token)
 
 
 def test_access_token_has_access_type():
@@ -417,8 +446,8 @@ def test_access_token_has_access_type():
 def test_refresh_token_expires_in_seven_days():
     user_id = UUID("11111111-1111-1111-1111-111111111111")
     before = datetime.now(UTC)
-    token = generate_refresh_token(user_id, UserRole.employee, TENANT_ID)
-    payload = jwt.decode(token, get_secret_key(), algorithms=[ALGORITHM])
+    issued = generate_refresh_token(user_id, UserRole.employee, TENANT_ID)
+    payload = jwt.decode(issued.token, get_secret_key(), algorithms=[ALGORITHM])
     exp = datetime.fromtimestamp(payload["exp"], UTC)
 
     expected_min = before + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS) - timedelta(minutes=1)
@@ -427,8 +456,6 @@ def test_refresh_token_expires_in_seven_days():
 
 
 def test_auth_rate_limit_returns_429(monkeypatch, auth_db):
-    from app.auth.rate_limit import clear_auth_rate_limit_state
-
     clear_auth_rate_limit_state()
     monkeypatch.setenv("AUTH_RATE_LIMIT_MAX", "2")
     monkeypatch.setenv("AUTH_RATE_LIMIT_WINDOW_SECONDS", "60")
@@ -445,13 +472,7 @@ def test_auth_rate_limit_returns_429(monkeypatch, auth_db):
 
 
 def test_auth_me_returns_current_user(auth_db):
-    user = User(
-        id=UUID("11111111-1111-1111-1111-111111111111"),
-        email="employee@example.com",
-        hashed_password=hash_password("secret-password"),
-        role=UserRole.employee.value,
-        tenant_id=TENANT_ID,
-    )
+    user = _employee()
     auth_db.users.append(user)
     token = generate_token(user.id, UserRole.employee, user.tenant_id)
 
@@ -474,6 +495,104 @@ def test_auth_me_returns_401_without_token():
     assert response.status_code == 401
 
 
+def test_logout_revokes_refresh_token(auth_db):
+    user = _employee()
+    auth_db.users.append(user)
+    refresh_token = issue_refresh_token(auth_db, user, UserRole.employee)
+
+    response = client.post("/api/v1/auth/logout", json={"refresh_token": refresh_token})
+    assert response.status_code == 200
+    assert response.json()["ok"] is True
+    assert auth_db.refresh_tokens[0].revoked_at is not None
+
+
+def test_forgot_password_always_returns_200(auth_db):
+    user = _employee()
+    auth_db.users.append(user)
+
+    known = client.post(
+        "/api/v1/auth/forgot-password",
+        json={"email": "employee@example.com"},
+    )
+    unknown = client.post(
+        "/api/v1/auth/forgot-password",
+        json={"email": "missing@example.com"},
+    )
+
+    assert known.status_code == 200
+    assert unknown.status_code == 200
+    assert known.json()["detail"] == unknown.json()["detail"]
+    assert len(get_mock_email_outbox()) == 1
+    assert "reset-password?token=" in get_mock_email_outbox()[0].text_body
+    assert len(auth_db.password_reset_tokens) == 1
+
+
+def test_reset_password_updates_password_and_revokes_refresh(auth_db):
+    user = _employee(password="old-password")
+    auth_db.users.append(user)
+    refresh_token = issue_refresh_token(auth_db, user, UserRole.employee)
+
+    client.post("/api/v1/auth/forgot-password", json={"email": user.email})
+    raw_token = None
+    for message in get_mock_email_outbox():
+        marker = "reset-password?token="
+        if marker in message.text_body:
+            raw_token = message.text_body.split(marker, 1)[1].split()[0]
+    assert raw_token
+
+    response = client.post(
+        "/api/v1/auth/reset-password",
+        json={"token": raw_token, "new_password": "new-password"},
+    )
+    assert response.status_code == 200
+    assert verify_password("new-password", user.hashed_password)
+    assert auth_db.password_reset_tokens[0].used_at is not None
+    assert auth_db.refresh_tokens[0].revoked_at is not None
+
+    replay = client.post("/api/v1/auth/refresh", json={"refresh_token": refresh_token})
+    assert replay.status_code == 401
+
+
+def test_reset_password_rejects_reused_token(auth_db):
+    user = _employee()
+    auth_db.users.append(user)
+    client.post("/api/v1/auth/forgot-password", json={"email": user.email})
+    raw_token = get_mock_email_outbox()[0].text_body.split("token=", 1)[1].split()[0]
+
+    first = client.post(
+        "/api/v1/auth/reset-password",
+        json={"token": raw_token, "new_password": "new-password"},
+    )
+    second = client.post(
+        "/api/v1/auth/reset-password",
+        json={"token": raw_token, "new_password": "another-password"},
+    )
+
+    assert first.status_code == 200
+    assert second.status_code == 400
+
+
+def test_reset_password_rejects_expired_token(auth_db):
+    user = _employee()
+    auth_db.users.append(user)
+    raw_token = "expired-reset-token"
+    auth_db.password_reset_tokens.append(
+        PasswordResetToken(
+            id=uuid4(),
+            user_id=user.id,
+            token_hash=hash_reset_token(raw_token),
+            expires_at=datetime.now(UTC) - timedelta(minutes=1),
+            used_at=None,
+        )
+    )
+
+    response = client.post(
+        "/api/v1/auth/reset-password",
+        json={"token": raw_token, "new_password": "new-password"},
+    )
+    assert response.status_code == 400
+
+
 def test_extension_handoff_mint_requires_auth():
     response = client.post("/api/v1/auth/extension-handoff")
 
@@ -484,13 +603,7 @@ def test_extension_handoff_mint_returns_code(auth_db):
     from app.auth.handoff_store import clear_handoff_store
 
     clear_handoff_store()
-    user = User(
-        id=UUID("11111111-1111-1111-1111-111111111111"),
-        email="employee@example.com",
-        hashed_password=hash_password("secret-password"),
-        role=UserRole.employee.value,
-        tenant_id=TENANT_ID,
-    )
+    user = _employee()
     auth_db.users.append(user)
     token = generate_token(user.id, UserRole.employee, user.tenant_id)
 
@@ -509,13 +622,7 @@ def test_extension_handoff_redeem_returns_tokens(auth_db):
     from app.auth.handoff_store import clear_handoff_store, create_handoff_code
 
     clear_handoff_store()
-    user = User(
-        id=UUID("11111111-1111-1111-1111-111111111111"),
-        email="employee@example.com",
-        hashed_password=hash_password("secret-password"),
-        role=UserRole.employee.value,
-        tenant_id=TENANT_ID,
-    )
+    user = _employee()
     auth_db.users.append(user)
     code = create_handoff_code(user.id)
 
@@ -526,19 +633,14 @@ def test_extension_handoff_redeem_returns_tokens(auth_db):
     assert body["access_token"]
     assert body["refresh_token"]
     assert body["expires_in"] == ACCESS_TOKEN_EXPIRE_SECONDS
+    assert len(auth_db.refresh_tokens) == 1
 
 
 def test_extension_handoff_redeem_rejects_reused_code(auth_db):
     from app.auth.handoff_store import clear_handoff_store, create_handoff_code
 
     clear_handoff_store()
-    user = User(
-        id=UUID("11111111-1111-1111-1111-111111111111"),
-        email="employee@example.com",
-        hashed_password=hash_password("secret-password"),
-        role=UserRole.employee.value,
-        tenant_id=TENANT_ID,
-    )
+    user = _employee()
     auth_db.users.append(user)
     code = create_handoff_code(user.id)
 
@@ -550,18 +652,10 @@ def test_extension_handoff_redeem_rejects_reused_code(auth_db):
 
 
 def test_extension_handoff_redeem_rejects_expired_code(auth_db):
-    from datetime import UTC, datetime, timedelta
-
     from app.auth.handoff_store import HandoffEntry, _store, clear_handoff_store
 
     clear_handoff_store()
-    user = User(
-        id=UUID("11111111-1111-1111-1111-111111111111"),
-        email="employee@example.com",
-        hashed_password=hash_password("secret-password"),
-        role=UserRole.employee.value,
-        tenant_id=TENANT_ID,
-    )
+    user = _employee()
     auth_db.users.append(user)
     code = "expired-code"
     _store[code] = HandoffEntry(

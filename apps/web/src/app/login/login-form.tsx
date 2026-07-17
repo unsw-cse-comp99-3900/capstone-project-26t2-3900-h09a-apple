@@ -76,6 +76,8 @@ export function LoginForm() {
             footer={
               <p className={styles.footer}>
                 No account yet? <Link href="/register">Create one</Link>
+                {' · '}
+                <Link href="/forgot-password">Forgot password</Link>
               </p>
             }
           >

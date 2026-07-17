@@ -34,6 +34,13 @@ def get_llm_provider() -> str:
     return os.getenv("LLM_PROVIDER", "mock").strip().lower()
 
 
+def get_web_base_url() -> str:
+    raw = os.getenv("WEB_BASE_URL", "").strip()
+    if not raw:
+        raise SettingsError("WEB_BASE_URL is not configured")
+    return raw.rstrip("/")
+
+
 def get_google_client_id() -> str:
     client_id = os.getenv("GOOGLE_CLIENT_ID")
     if not client_id:
