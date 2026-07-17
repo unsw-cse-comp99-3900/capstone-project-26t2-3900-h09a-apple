@@ -1,7 +1,7 @@
 """Add SOP embedding_status and embed job columns (H09AAPPLE-35).
 
-Revision ID: 0009_sop_embed_status
-Revises: 0008_sop_step_embedding
+Revision ID: 0011_sop_embed_status
+Revises: 0010_auth_token_tables
 Create Date: 2026-07-16
 """
 
@@ -12,8 +12,8 @@ from sqlalchemy.dialects import postgresql
 
 from alembic import op
 
-revision = "0009_sop_embed_status"
-down_revision = "0008_sop_step_embedding"
+revision = "0011_sop_embed_status"
+down_revision = "0010_auth_token_tables"
 branch_labels = None
 depends_on = None
 

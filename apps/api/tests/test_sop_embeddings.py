@@ -231,3 +231,72 @@ def test_process_embed_job_replaces_previous_embeddings(monkeypatch):
 
     assert {row.step_number for row in db.embeddings} == {1, 2}
     assert sop.embedding_status == models.EmbeddingStatus.complete.value
+
+
+def test_process_embed_job_records_tokens_and_cost(monkeypatch):
+    monkeypatch.setattr("app.sop_embeddings.time.sleep", lambda *_args, **_kwargs: None)
+    db = EmbedFakeDb()
+    sop = _sop_with_steps(1)
+    db.sops.append(sop)
+    job = enqueue_embed_job(db, sop)
+    db.commit()
+
+    _process_embed_job(db, job.id, MockEmbeddingClient())
+
+    assert len(db.audits) == 1
+    audit = db.audits[0]
+    assert audit.provider == "openai"
+    assert audit.model == EMBEDDING_MODEL
+    assert audit.prompt_tokens is not None and audit.prompt_tokens >= 1
+    assert audit.cost_usd is not None and audit.cost_usd >= Decimal("0")
+    assert audit.session_id == sop.session_id
+
+
+def test_process_embed_job_fails_when_sop_has_no_valid_steps(monkeypatch):
+    monkeypatch.setattr("app.sop_embeddings.time.sleep", lambda *_args, **_kwargs: None)
+    db = EmbedFakeDb()
+    sop = _sop_with_steps(1)
+    sop.steps = [{"order": 1, "title": "", "instruction": ""}]
+    db.sops.append(sop)
+    job = enqueue_embed_job(db, sop)
+    db.commit()
+
+    _process_embed_job(db, job.id, MockEmbeddingClient())
+
+    assert sop.embedding_status == models.EmbeddingStatus.failed.value
+    assert job.status == models.CodificationJobStatus.failed.value
+    assert db.embeddings == []
+
+
+def test_process_embed_job_fails_when_later_step_fails(monkeypatch):
+    monkeypatch.setattr("app.sop_embeddings.time.sleep", lambda *_args, **_kwargs: None)
+    calls = {"n": 0}
+
+    class FlakyClient:
+        model = EMBEDDING_MODEL
+
+        def embed(self, text: str):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                return MockEmbeddingClient().embed(text)
+            raise RuntimeError("step 2 failed")
+
+    db = EmbedFakeDb()
+    sop = _sop_with_steps(2)
+    db.sops.append(sop)
+    job = enqueue_embed_job(db, sop)
+    db.commit()
+
+    _process_embed_job(db, job.id, FlakyClient())
+
+    assert sop.embedding_status == models.EmbeddingStatus.failed.value
+    assert job.status == models.CodificationJobStatus.failed.value
+    assert len(db.embeddings) == 1
+
+
+def test_get_embedding_client_defaults_to_mock(monkeypatch):
+    from app.sop_embeddings import get_embedding_client
+
+    monkeypatch.setenv("LLM_PROVIDER", "mock")
+    client = get_embedding_client()
+    assert isinstance(client, MockEmbeddingClient)
