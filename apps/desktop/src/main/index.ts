@@ -2,6 +2,10 @@ import { app, BrowserWindow, ipcMain, screen, shell } from 'electron';
 import { join } from 'node:path';
 import { DesktopSessionStore } from './desktop-session-store';
 import { RecordingService, type RecorderState } from './recording-service';
+import { handleProtocolUrl } from './auth/handoff-handler';
+import { launchHandoff } from './auth/handoff-launcher';
+import { loadTokens } from './auth/token-store';
+import { startHandoffServer, stopHandoffServer } from './auth/handoff-server';
 
 let sessionStore: DesktopSessionStore | undefined;
 let recordingService: RecordingService | undefined;
@@ -29,6 +33,11 @@ interface RecordingStatus {
   error: string | null;
 }
 
+console.log('========================');
+console.log('PID:', process.pid);
+console.log('ARGV:', process.argv);
+console.log('========================');
+
 function getRecordingStatus(error: string | null = null): RecordingStatus {
   return {
     ok: error === null,
@@ -39,85 +48,222 @@ function getRecordingStatus(error: string | null = null): RecordingStatus {
   };
 }
 
-ipcMain.handle('recording:get-status', () => getRecordingStatus());
-
-ipcMain.handle('recording:start', () => {
-  try {
-    if (!recordingService) {
-      throw new Error('The recording service is not ready');
-    }
-
-    lastSessionPath = null;
-    recordingService.start();
-    return getRecordingStatus();
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return getRecordingStatus(message);
+/**
+ * Registers the `worktrace://` protocol handler.
+ *
+ * In dev mode, electron-vite launches Electron as `electron.exe .`
+ * (it loads the project directory, then internally requires
+ * out/main/index.js) — so process.argv[1] is just "." and is NOT
+ * a usable entry path for protocol registration.
+ *
+ * __dirname, on the other hand, always points to the directory this
+ * running module lives in (out/main), regardless of how Electron was
+ * launched, so it's used here instead to reliably locate the entry
+ * script for the registered protocol command.
+ */
+function registerProtocolClient(): void {
+  if (process.defaultApp) {
+    app.setAsDefaultProtocolClient('worktrace', process.execPath, [
+      join(__dirname, 'index.js'),
+    ]);
+  } else {
+    // Packaged production build: electron.exe itself IS the app,
+    // no extra entry path argument needed.
+    app.setAsDefaultProtocolClient('worktrace');
   }
-});
+}
 
-ipcMain.handle('recording:stop', () => {
-  try {
-    if (!recordingService) {
-      throw new Error('The recording service is not ready');
-    }
+// --- Single instance lock: must happen as early as possible, before any
+// windows are created, so a second launch (e.g. triggered by a protocol
+// handoff while the app is already running) hands its URL off to the
+// existing instance instead of spawning a second app window. ---
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
 
-    lastSessionPath = recordingService.stop();
-    return getRecordingStatus();
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return getRecordingStatus(message);
-  }
-});
-
-ipcMain.handle('recording:review', async () => {
-  if (!lastSessionPath) {
-    return getRecordingStatus('Complete a recording before reviewing a session');
-  }
-
-  const error = await shell.openPath(lastSessionPath);
-  return getRecordingStatus(error || null);
-});
-
-ipcMain.handle('window:set-mode', (_event, mode: WindowMode) => {
-  if (mode !== 'compact' && mode !== 'expanded') {
-    throw new Error(`Unsupported recorder window mode: ${String(mode)}`);
-  }
-
-  setRecorderWindowMode(mode);
-  return mode;
-});
-
-ipcMain.handle('window:close', () => {
+if (!gotSingleInstanceLock) {
   app.quit();
-});
+} else {
+  app.on('second-instance', (_event, commandLine) => {
+    console.log('second-instance fired');
+    console.log(commandLine);
 
-ipcMain.on('window:drag-start', (event) => {
-  if (!recorderWindow || event.sender !== recorderWindow.webContents) return;
+    const protocolUrl = commandLine.find((arg) =>
+      arg.startsWith('worktrace://'),
+    );
 
-  const cursor = screen.getCursorScreenPoint();
-  const bounds = recorderWindow.getBounds();
-  windowDragState = {
-    startCursor: cursor,
-    startWindow: { x: bounds.x, y: bounds.y },
-  };
-});
+    console.log('protocolUrl:', protocolUrl);
 
-ipcMain.on('window:drag-move', (event) => {
-  if (!recorderWindow || event.sender !== recorderWindow.webContents || !windowDragState) return;
+    if (protocolUrl) {
+      void handleProtocolUrl(protocolUrl).catch((error) => {
+        console.error('Failed to handle protocol URL (second-instance):', error);
+      });
+    }
 
-  const cursor = screen.getCursorScreenPoint();
-  recorderWindow.setPosition(
-    windowDragState.startWindow.x + cursor.x - windowDragState.startCursor.x,
-    windowDragState.startWindow.y + cursor.y - windowDragState.startCursor.y,
-    false,
-  );
-});
+    if (recorderWindow) {
+      if (recorderWindow.isMinimized()) {
+        recorderWindow.restore();
+      }
+      recorderWindow.show();
+      recorderWindow.focus();
+    }
+  });
 
-ipcMain.on('window:drag-end', (event) => {
-  if (!recorderWindow || event.sender !== recorderWindow.webContents) return;
-  windowDragState = undefined;
-});
+  ipcMain.handle('recording:get-status', () => getRecordingStatus());
+
+  ipcMain.handle('recording:start', () => {
+    try {
+      if (!recordingService) {
+        throw new Error('The recording service is not ready');
+      }
+
+      lastSessionPath = null;
+      recordingService.start();
+      return getRecordingStatus();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return getRecordingStatus(message);
+    }
+  });
+
+  ipcMain.handle('recording:stop', () => {
+    try {
+      if (!recordingService) {
+        throw new Error('The recording service is not ready');
+      }
+
+      lastSessionPath = recordingService.stop();
+      return getRecordingStatus();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return getRecordingStatus(message);
+    }
+  });
+
+  ipcMain.handle('recording:review', async () => {
+    if (!lastSessionPath) {
+      return getRecordingStatus('Complete a recording before reviewing a session');
+    }
+
+    const error = await shell.openPath(lastSessionPath);
+    return getRecordingStatus(error || null);
+  });
+
+  ipcMain.handle('auth:launch-handoff', async () => {
+    try {
+      await launchHandoff();
+
+      return {
+        ok: true,
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  });
+
+  // Exposes current auth state to the renderer so the UI can show
+  // "Sign in" vs. an authenticated state without guessing.
+  ipcMain.handle('auth:get-status', async () => {
+    try {
+      const tokens = await loadTokens();
+      return {
+        authenticated: tokens !== null,
+      };
+    } catch (error) {
+      console.error('Failed to load auth tokens:', error);
+      return {
+        authenticated: false,
+      };
+    }
+  });
+
+  ipcMain.handle('window:set-mode', (_event, mode: WindowMode) => {
+    if (mode !== 'compact' && mode !== 'expanded') {
+      throw new Error(`Unsupported recorder window mode: ${String(mode)}`);
+    }
+
+    setRecorderWindowMode(mode);
+    return mode;
+  });
+
+  ipcMain.handle('window:close', () => {
+    app.quit();
+  });
+
+  ipcMain.on('window:drag-start', (event) => {
+    if (!recorderWindow || event.sender !== recorderWindow.webContents) return;
+
+    const cursor = screen.getCursorScreenPoint();
+    const bounds = recorderWindow.getBounds();
+    windowDragState = {
+      startCursor: cursor,
+      startWindow: { x: bounds.x, y: bounds.y },
+    };
+  });
+
+  ipcMain.on('window:drag-move', (event) => {
+    if (!recorderWindow || event.sender !== recorderWindow.webContents || !windowDragState) return;
+
+    const cursor = screen.getCursorScreenPoint();
+    recorderWindow.setPosition(
+      windowDragState.startWindow.x + cursor.x - windowDragState.startCursor.x,
+      windowDragState.startWindow.y + cursor.y - windowDragState.startCursor.y,
+      false,
+    );
+  });
+
+  ipcMain.on('window:drag-end', (event) => {
+    if (!recorderWindow || event.sender !== recorderWindow.webContents) return;
+    windowDragState = undefined;
+  });
+
+  app.on('open-url', async (event, url) => {
+    event.preventDefault();
+
+    try {
+      await handleProtocolUrl(url);
+    } catch (error) {
+      console.error('Failed to handle protocol URL (open-url):', error);
+    }
+  });
+
+  app.on('before-quit', () => {
+    stopHandoffServer();
+  });
+
+  void app.whenReady().then(async () => {
+    registerProtocolClient();
+    startHandoffServer();
+
+    const protocolUrl = process.argv.find((arg) =>
+      arg.startsWith('worktrace://'),
+    );
+
+    if (protocolUrl) {
+      try {
+        await handleProtocolUrl(protocolUrl);
+      } catch (error) {
+        console.error('Failed to handle startup protocol URL:', error);
+      }
+    }
+
+    const userDataDirectory = app.getPath('userData');
+    sessionStore = new DesktopSessionStore(
+      join(userDataDirectory, 'worktrace.sqlite'),
+      join(userDataDirectory, 'sessions'),
+    );
+    recordingService = new RecordingService(sessionStore);
+
+    createWindow();
+
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) {
+        createWindow();
+      }
+    });
+  });
+}
 
 function setRecorderWindowMode(mode: WindowMode): void {
   if (!recorderWindow) return;
@@ -171,31 +317,3 @@ function createWindow(): void {
     void recorderWindow.loadFile(join(__dirname, '../renderer/index.html'));
   }
 }
-
-void app.whenReady().then(() => {
-  const userDataDirectory = app.getPath('userData');
-  sessionStore = new DesktopSessionStore(
-    join(userDataDirectory, 'worktrace.sqlite'),
-    join(userDataDirectory, 'sessions'),
-  );
-  recordingService = new RecordingService(sessionStore);
-
-  createWindow();
-
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
-    }
-  });
-});
-
-app.on('before-quit', () => {
-  recordingService?.stop();
-  sessionStore?.close();
-});
-
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit();
-  }
-});

@@ -1,8 +1,25 @@
-import { pingExtension, postExtensionHandoff } from '@/lib/extension-bridge';
+import {
+  pingExtension,
+  postExtensionHandoff,
+} from '@/lib/extension-bridge';
+import {
+  pingDesktop,
+  launchDesktopHandoff,
+} from '@/lib/desktop-bridge';
+
+type HandoffResponse = {
+  code?: string;
+};
 
 export async function broadcastExtensionHandoff(): Promise<void> {
-  const extensionPresent = await pingExtension();
-  if (!extensionPresent) {
+  // Check which clients are available before requesting a handoff code.
+  const [extensionPresent, desktopPresent] = await Promise.all([
+    pingExtension(),
+    pingDesktop(),
+  ]);
+
+  // Nothing is listening.
+  if (!extensionPresent && !desktopPresent) {
     return;
   }
 
@@ -15,10 +32,19 @@ export async function broadcastExtensionHandoff(): Promise<void> {
     return;
   }
 
-  const payload = (await response.json()) as { code?: string };
+  const payload = (await response.json()) as HandoffResponse;
+
   if (!payload.code) {
     return;
   }
 
-  await postExtensionHandoff(payload.code);
+  // Existing Chrome extension handoff.
+  if (extensionPresent) {
+    await postExtensionHandoff(payload.code);
+  }
+
+  // Desktop handoff.
+  if (desktopPresent) {
+    launchDesktopHandoff(payload.code);
+  }
 }
