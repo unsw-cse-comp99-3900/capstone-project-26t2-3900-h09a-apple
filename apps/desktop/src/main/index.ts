@@ -6,6 +6,8 @@ import { handleProtocolUrl } from './auth/handoff-handler';
 import { launchHandoff } from './auth/handoff-launcher';
 import { loadTokens } from './auth/token-store';
 import { startHandoffServer, stopHandoffServer } from './auth/handoff-server';
+import { hasCurrentConsent, saveConsent } from './consent/consent-store';
+import { postConsentAccept } from './consent/consent-service';
 
 let sessionStore: DesktopSessionStore | undefined;
 let recordingService: RecordingService | undefined;
@@ -176,6 +178,38 @@ if (!gotSingleInstanceLock) {
         authenticated: false,
       };
     }
+  });
+
+  ipcMain.handle('consent:get-status', async () => {
+    const tokens = await loadTokens();
+
+    if (!tokens) {
+      return {
+        authenticated: false,
+        accepted: false,
+      };
+    }
+
+    return {
+      authenticated: true,
+      accepted: hasCurrentConsent(tokens.userId),
+    };
+  });
+
+  ipcMain.handle('consent:accept', async () => {
+    const tokens = await loadTokens();
+
+    if (!tokens) {
+      throw new Error('Desktop is not authenticated');
+    }
+
+    const result = await postConsentAccept();
+
+    saveConsent(tokens.userId, result.accepted_at);
+
+    return {
+      accepted: true,
+    };
   });
 
   ipcMain.handle('window:set-mode', (_event, mode: WindowMode) => {

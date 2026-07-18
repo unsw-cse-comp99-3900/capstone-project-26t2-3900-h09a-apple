@@ -103,7 +103,8 @@ export async function authenticatedFetch(
   path: string,
   init: RequestInit = {},
 ): Promise<Response> {
-  const tokens = await loadTokens();
+  console.log(loadTokens());
+  const tokens = loadTokens();
 
   if (!tokens) {
     throw new Error('Desktop is not authenticated');

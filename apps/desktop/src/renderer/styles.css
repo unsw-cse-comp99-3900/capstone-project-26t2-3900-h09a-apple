@@ -624,3 +624,57 @@ footer {
     animation: none;
   }
 }
+
+.consent-overlay {
+  position: absolute;
+  inset: 0;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  background: rgba(0, 0, 0, 0.65);
+
+  z-index: 1000;
+}
+
+.consent-dialog {
+  width: min(320px, 90%);
+  max-height: 85%;
+  overflow-y: auto;
+
+  padding: 20px;
+
+  border-radius: 12px;
+
+  background: #1b1b1b;
+
+  display: flex;
+  flex-direction: column;
+
+  gap: 16px;
+}
+
+.consent-dialog h2 {
+  margin: 0;
+}
+
+.consent-dialog p {
+  margin: 0;
+
+  line-height: 1.4;
+
+  font-size: 11px;
+}
+
+.consent-actions {
+  display: flex;
+
+  justify-content: flex-end;
+
+  gap: 12px;
+}
+
+.consent-overlay[hidden] {
+  display: none !important;
+}

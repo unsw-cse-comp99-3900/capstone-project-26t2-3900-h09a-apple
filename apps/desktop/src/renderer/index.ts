@@ -20,12 +20,18 @@ const eventCount = requireElement<HTMLParagraphElement>('event-count');
 const sessionResult = requireElement<HTMLDivElement>('session-result');
 const sessionPath = requireElement<HTMLElement>('session-path');
 const platform = requireElement<HTMLSpanElement>('platform');
+const signInPanel = requireElement<HTMLDivElement>('signin-panel');
+const signInButton = requireElement<HTMLButtonElement>('signin-button');
+const consentOverlay = requireElement<HTMLDivElement>('consent-overlay');
+const consentAcceptButton = requireElement<HTMLButtonElement>('consent-accept');
+const consentDeclineButton = requireElement<HTMLButtonElement>('consent-decline');
 
 let busy = false;
 let dragPointerId: number | null = null;
 let dragStart = { x: 0, y: 0 };
 let dragMoved = false;
 let suppressOrbClick = false;
+let authenticated = false;
 
 const DRAG_THRESHOLD_PX = 4;
 
@@ -79,8 +85,41 @@ async function runAction(action: () => Promise<RecordingStatus>): Promise<void> 
   }
 }
 
+async function refreshAuth(): Promise<void> {
+  const auth = await window.desktopAPI.getAuthStatus();
+
+  authenticated = auth.authenticated;
+
+  signInPanel.hidden = authenticated;
+
+  startButton.hidden = !authenticated;
+  stopButton.hidden = !authenticated;
+  reviewButton.hidden = !authenticated;
+
+  if (!authenticated) {
+    hideConsent();
+  }
+}
+
+function showConsent(): void {
+  consentOverlay.hidden = false;
+}
+
+function hideConsent(): void {
+  consentOverlay.hidden = true;
+}
+
 startButton.addEventListener('click', () => {
-  void runAction(() => window.desktopAPI.startRecording());
+  void (async () => {
+    const consent = await window.desktopAPI.getConsentStatus();
+
+    if (!consent.accepted) {
+      showConsent();
+      return;
+    }
+
+    await runAction(() => window.desktopAPI.startRecording());
+  })();
 });
 
 stopButton.addEventListener('click', () => {
@@ -150,12 +189,44 @@ closeButton.addEventListener('click', () => {
   void window.desktopAPI.closeWindow();
 });
 
+signInButton.addEventListener('click', async () => {
+  await window.desktopAPI.launchHandoff();
+
+    const timer = window.setInterval(async () => {
+        await refreshAuth();
+
+        if (authenticated) {
+            clearInterval(timer);
+        }
+    }, 1000);
+});
+
+consentAcceptButton.addEventListener('click', () => {
+  void (async () => {
+    await window.desktopAPI.acceptConsent();
+
+    hideConsent();
+
+    await runAction(() => window.desktopAPI.startRecording());
+  })();
+});
+
+consentDeclineButton.addEventListener('click', () => {
+  hideConsent();
+});
+
 platform.textContent = window.desktopAPI.platform;
 
-void window.desktopAPI.getRecordingStatus().then(renderStatus);
+void (async () => {
+  await refreshAuth();
+  renderStatus(await window.desktopAPI.getRecordingStatus());
+})();
 
 window.setInterval(() => {
   if (!busy) {
-    void window.desktopAPI.getRecordingStatus().then(renderStatus);
+    void refreshAuth();
+    void window.desktopAPI
+      .getRecordingStatus()
+      .then(renderStatus);
   }
 }, 500);

@@ -8,6 +8,20 @@ interface RecordingStatus {
   error: string | null;
 }
 
+interface AuthStatus {
+  authenticated: boolean;
+}
+
+interface ConsentStatus {
+  authenticated: boolean;
+  accepted: boolean;
+}
+
+interface ConsentAcceptResult {
+  accepted: boolean;
+}
+
+
 interface DesktopAPI {
   platform: NodeJS.Platform;
   versions: {
@@ -15,10 +29,20 @@ interface DesktopAPI {
     chrome: string;
     node: string;
   };
+
+  // Authentication
+  launchHandoff(): Promise<{ ok: boolean; error?: string }>;
+  getAuthStatus(): Promise<AuthStatus>;
+  getConsentStatus(): Promise<ConsentStatus>;
+  acceptConsent(): Promise<ConsentAcceptResult>;
+
+  // Recording
   getRecordingStatus(): Promise<RecordingStatus>;
   startRecording(): Promise<RecordingStatus>;
   stopRecording(): Promise<RecordingStatus>;
   reviewSession(): Promise<RecordingStatus>;
+
+  // Window
   setWindowMode(mode: 'compact' | 'expanded'): Promise<'compact' | 'expanded'>;
   beginWindowDrag(): void;
   updateWindowDrag(): void;

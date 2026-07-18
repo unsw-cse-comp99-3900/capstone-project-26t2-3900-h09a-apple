@@ -10,6 +10,9 @@ contextBridge.exposeInMainWorld('desktopAPI', {
 
   // Authentication
   launchHandoff: () => ipcRenderer.invoke('auth:launch-handoff'),
+  getAuthStatus: () => ipcRenderer.invoke('auth:get-status'),
+  getConsentStatus: () => ipcRenderer.invoke('consent:get-status'),
+  acceptConsent: () => ipcRenderer.invoke('consent:accept'),
 
   // Recording
   getRecordingStatus: () => ipcRenderer.invoke('recording:get-status'),
