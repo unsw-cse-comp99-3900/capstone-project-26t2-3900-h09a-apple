@@ -78,13 +78,13 @@ async function refreshAccessToken(
 
   const payload = (await response.json()) as RefreshResponse;
 
-  const current = await loadTokens();
+  const current = loadTokens();
 
   if (!current) {
     throw new Error('Authentication state disappeared');
   }
 
-  await saveTokens({
+  saveTokens({
     ...current,
     accessToken: payload.access_token,
     expiresAtMs: Date.now() + payload.expires_in * 1000,
@@ -103,7 +103,6 @@ export async function authenticatedFetch(
   path: string,
   init: RequestInit = {},
 ): Promise<Response> {
-  console.log(loadTokens());
   const tokens = loadTokens();
 
   if (!tokens) {

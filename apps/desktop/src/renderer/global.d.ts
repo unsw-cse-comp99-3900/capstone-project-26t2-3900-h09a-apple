@@ -35,6 +35,7 @@ interface DesktopAPI {
   getAuthStatus(): Promise<AuthStatus>;
   getConsentStatus(): Promise<ConsentStatus>;
   acceptConsent(): Promise<ConsentAcceptResult>;
+  logout(): Promise<LogoutResult>;
 
   // Recording
   getRecordingStatus(): Promise<RecordingStatus>;

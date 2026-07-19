@@ -14,6 +14,7 @@ const reviewButton = requireElement<HTMLButtonElement>('review-session');
 const floatingOrbShell = requireElement<HTMLDivElement>('floating-orb-shell');
 const collapseButton = requireElement<HTMLButtonElement>('collapse-window');
 const closeButton = requireElement<HTMLButtonElement>('close-window');
+const statusPill = requireElement<HTMLDivElement>('status-pill');
 const statusLabel = requireElement<HTMLSpanElement>('status-label');
 const statusMessage = requireElement<HTMLParagraphElement>('status-message');
 const eventCount = requireElement<HTMLParagraphElement>('event-count');
@@ -22,6 +23,8 @@ const sessionPath = requireElement<HTMLElement>('session-path');
 const platform = requireElement<HTMLSpanElement>('platform');
 const signInPanel = requireElement<HTMLDivElement>('signin-panel');
 const signInButton = requireElement<HTMLButtonElement>('signin-button');
+const recorderPanel = requireElement<HTMLDivElement>('recorder-panel');
+const logoutButton = requireElement<HTMLButtonElement>('logout-button');
 const consentOverlay = requireElement<HTMLDivElement>('consent-overlay');
 const consentAcceptButton = requireElement<HTMLButtonElement>('consent-accept');
 const consentDeclineButton = requireElement<HTMLButtonElement>('consent-decline');
@@ -50,6 +53,7 @@ function renderStatus(status: RecordingStatus): void {
   startButton.disabled = busy || status.state === 'recording';
   stopButton.disabled = busy || status.state === 'idle';
   reviewButton.disabled = busy || status.state !== 'idle' || !status.sessionPath;
+  logoutButton.disabled = busy || status.state === 'recording';
 
   if (status.error) {
     statusMessage.textContent = status.error;
@@ -91,10 +95,9 @@ async function refreshAuth(): Promise<void> {
   authenticated = auth.authenticated;
 
   signInPanel.hidden = authenticated;
-
-  startButton.hidden = !authenticated;
-  stopButton.hidden = !authenticated;
-  reviewButton.hidden = !authenticated;
+  recorderPanel.hidden = !authenticated;
+  statusPill.hidden = !authenticated;
+  logoutButton.hidden = !authenticated;
 
   if (!authenticated) {
     hideConsent();
@@ -192,13 +195,20 @@ closeButton.addEventListener('click', () => {
 signInButton.addEventListener('click', async () => {
   await window.desktopAPI.launchHandoff();
 
-    const timer = window.setInterval(async () => {
-        await refreshAuth();
+  const timer = window.setInterval(async () => {
+    await refreshAuth();
 
-        if (authenticated) {
-            clearInterval(timer);
-        }
-    }, 1000);
+    if (authenticated) {
+      clearInterval(timer);
+    }
+  }, 1000);
+});
+
+logoutButton.addEventListener('click', () => {
+  void (async () => {
+    await window.desktopAPI.logout();
+    await refreshAuth();
+  })();
 });
 
 consentAcceptButton.addEventListener('click', () => {

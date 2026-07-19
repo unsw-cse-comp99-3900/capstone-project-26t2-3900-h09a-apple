@@ -68,38 +68,52 @@
         </button>
       </div>
 
-      <section class="recording-summary" aria-label="Recording summary">
-        <div>
-          <p class="summary-label">Captured events</p>
-          <p id="event-count" class="event-count">0</p>
+      <div id="recorder-panel" hidden>
+        <section class="recording-summary" aria-label="Recording summary">
+          <div>
+            <p class="summary-label">Captured events</p>
+            <p id="event-count" class="event-count">0</p>
+          </div>
+          <p id="status-message" class="status-message">Ready to capture your desktop workflow.</p>
+        </section>
+
+        <div class="actions">
+          <button id="start-recording" class="button button-primary" type="button">
+            <span class="record-icon" aria-hidden="true"></span>
+            Start Recording
+          </button>
+          <button id="stop-recording" class="button button-secondary" type="button" disabled>
+            <span class="stop-icon" aria-hidden="true"></span>
+            Stop Recording
+          </button>
+          <button id="review-session" class="button button-review" type="button" disabled>
+            <span class="review-icon" aria-hidden="true"></span>
+            Review Session
+          </button>
         </div>
-        <p id="status-message" class="status-message">Ready to capture your desktop workflow.</p>
-      </section>
 
-      <div class="actions">
-        <button id="start-recording" class="button button-primary" type="button">
-          <span class="record-icon" aria-hidden="true"></span>
-          Start Recording
-        </button>
-        <button id="stop-recording" class="button button-secondary" type="button" disabled>
-          <span class="stop-icon" aria-hidden="true"></span>
-          Stop Recording
-        </button>
-        <button id="review-session" class="button button-review" type="button" disabled>
-          <span class="review-icon" aria-hidden="true"></span>
-          Review Session
-        </button>
+        <div id="session-result" class="session-result" hidden>
+          <span>Saved</span>
+          <code id="session-path"></code>
+        </div>
+
+        <footer>
+          <span>Local capture</span>
+
+          <div class="footer-actions">
+            <button
+              id="logout-button"
+              class="footer-link"
+              type="button"
+              hidden
+            >
+              Log out
+            </button>
+
+            <span id="platform" class="platform"></span>
+          </div>
+        </footer>
       </div>
-
-      <div id="session-result" class="session-result" hidden>
-        <span>Saved</span>
-        <code id="session-path"></code>
-      </div>
-
-      <footer>
-        <span>Local capture</span>
-        <span id="platform" class="platform"></span>
-      </footer>
 
       <div id="consent-overlay" class="consent-overlay" hidden>
         <div class="consent-dialog">

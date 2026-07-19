@@ -1,5 +1,5 @@
 import { app, BrowserWindow, ipcMain, screen, shell } from 'electron';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { DesktopSessionStore } from './desktop-session-store';
 import { RecordingService, type RecorderState } from './recording-service';
 import { handleProtocolUrl } from './auth/handoff-handler';
@@ -8,6 +8,7 @@ import { loadTokens } from './auth/token-store';
 import { startHandoffServer, stopHandoffServer } from './auth/handoff-server';
 import { hasCurrentConsent, saveConsent } from './consent/consent-store';
 import { postConsentAccept } from './consent/consent-service';
+import { logout } from './auth/auth-service';
 
 let sessionStore: DesktopSessionStore | undefined;
 let recordingService: RecordingService | undefined;
@@ -35,11 +36,6 @@ interface RecordingStatus {
   error: string | null;
 }
 
-console.log('========================');
-console.log('PID:', process.pid);
-console.log('ARGV:', process.argv);
-console.log('========================');
-
 function getRecordingStatus(error: string | null = null): RecordingStatus {
   return {
     ok: error === null,
@@ -65,9 +61,7 @@ function getRecordingStatus(error: string | null = null): RecordingStatus {
  */
 function registerProtocolClient(): void {
   if (process.defaultApp) {
-    app.setAsDefaultProtocolClient('worktrace', process.execPath, [
-      join(__dirname, 'index.js'),
-    ]);
+    app.setAsDefaultProtocolClient('worktrace', process.execPath, [resolve(process.cwd())]);
   } else {
     // Packaged production build: electron.exe itself IS the app,
     // no extra entry path argument needed.
@@ -178,6 +172,16 @@ if (!gotSingleInstanceLock) {
         authenticated: false,
       };
     }
+  });
+
+  ipcMain.handle("auth:logout", async () => {
+
+    logout();
+
+    return {
+      ok: true,
+    };
+
   });
 
   ipcMain.handle('consent:get-status', async () => {
