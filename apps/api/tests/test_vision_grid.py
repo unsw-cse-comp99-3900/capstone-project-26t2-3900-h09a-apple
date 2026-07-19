@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 
+import pytest
 from PIL import Image
 
 from app.vision_grid import (
@@ -10,7 +11,9 @@ from app.vision_grid import (
     FINE_COLS,
     FINE_ROWS,
     GridCell,
+    PixelRect,
     cell_rect,
+    col_letter_to_index,
     compose_rects,
     draw_numbered_grid,
     parse_cell_label,
@@ -66,3 +69,32 @@ def test_draw_numbered_grid_returns_png():
     image = Image.open(io.BytesIO(out))
     assert image.format == "PNG"
     assert image.size == (240, 160)
+
+
+def test_col_letter_and_parse_edge_cases():
+    assert col_letter_to_index("", COARSE_COLS) is None
+    assert col_letter_to_index("AB", COARSE_COLS) is None
+    assert col_letter_to_index("Z", COARSE_COLS) is None
+    assert parse_cell_label("", cols=COARSE_COLS, rows=COARSE_ROWS) is None
+    assert parse_cell_label("no cell here", cols=COARSE_COLS, rows=COARSE_ROWS) is None
+    assert parse_cell_label("A0", cols=COARSE_COLS, rows=COARSE_ROWS) is None
+
+
+def test_scale_rect_rejects_non_positive_dimensions():
+    rect = PixelRect(x=0, y=0, width=10, height=10)
+    with pytest.raises(ValueError, match="image dimensions"):
+        scale_rect_to_viewport(
+            rect,
+            image_width=0,
+            image_height=10,
+            viewport_width=100,
+            viewport_height=100,
+        )
+    with pytest.raises(ValueError, match="viewport dimensions"):
+        scale_rect_to_viewport(
+            rect,
+            image_width=10,
+            image_height=10,
+            viewport_width=0,
+            viewport_height=100,
+        )
