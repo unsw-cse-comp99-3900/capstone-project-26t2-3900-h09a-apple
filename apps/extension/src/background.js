@@ -12,6 +12,12 @@ import {
   WALKTHROUGH_STORAGE_KEY,
   startWalkthrough,
 } from './walkthrough-state.js';
+import {
+  ensureWalkthroughPage,
+  inferLaunchUrl,
+  syncWalkthroughToTab,
+  waitForTabComplete,
+} from './walkthrough-launch.js';
 
 const externalAuthHandlers = {
   redeemHandoffCode,
@@ -28,8 +34,6 @@ const SCREENSHOT_THROTTLE_MS = 500;
 const SCREENSHOT_FORMAT = 'jpeg';
 const SCREENSHOT_QUALITY = 50;
 const RECORDED_EVENT_TYPES = new Set(['CLICK', 'NAVIGATION', 'INPUT']);
-const URL_PATTERN =
-  /\bhttps?:\/\/[^\s)]+|\b(?:www\.)?[a-z0-9][a-z0-9-]*(?:\.[a-z0-9][a-z0-9-]*)+(?:\/[^\s)]*)?/i;
 
 function resetSessionBuffers() {
   lastScreenshotAt = 0;
@@ -47,62 +51,6 @@ function parseScreenshotDataUrl(dataUrl) {
     content_type: match[1],
     data_base64: match[2],
   };
-}
-
-function normalizeLaunchUrl(value) {
-  if (!value) {
-    return null;
-  }
-
-  const trimmed = String(value)
-    .trim()
-    .replace(/[.,;:!?]+$/, '');
-  if (!trimmed) {
-    return null;
-  }
-
-  const parseable = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
-  try {
-    return new URL(parseable).toString();
-  } catch {
-    return null;
-  }
-}
-
-function inferLaunchUrl(payload) {
-  const steps = Array.isArray(payload?.steps) ? payload.steps : [];
-  for (const step of steps) {
-    const instruction = typeof step?.instruction === 'string' ? step.instruction : '';
-    const match = instruction.match(URL_PATTERN);
-    const url = normalizeLaunchUrl(match?.[0]);
-    if (url) {
-      return url;
-    }
-  }
-  return null;
-}
-
-function getActiveTab() {
-  return new Promise((resolve) => {
-    chrome.tabs?.query?.({ active: true, currentWindow: true }, (tabs) => {
-      resolve(tabs?.[0] ?? null);
-    });
-  });
-}
-
-async function resolveWalkthroughTab(payload) {
-  const launchUrl = inferLaunchUrl(payload);
-  if (launchUrl) {
-    return chrome.tabs.create({ url: launchUrl, active: true });
-  }
-
-  const activeTab = await getActiveTab();
-  if (activeTab?.id != null) {
-    await chrome.tabs.update(activeTab.id, { active: true });
-    return activeTab;
-  }
-
-  return chrome.tabs.create({ url: 'about:blank', active: true });
 }
 
 async function startWalkthroughFromSop(sopId) {
@@ -132,7 +80,14 @@ async function startWalkthroughFromSop(sopId) {
     throw new Error('This SOP has no walkthrough steps.');
   }
 
-  const tab = await resolveWalkthroughTab(payload);
+  const launchUrl = inferLaunchUrl(payload);
+  if (!launchUrl) {
+    throw new Error(
+      'This walkthrough has no start page URL. Re-publish the SOP from a session that recorded page URLs.',
+    );
+  }
+
+  const tab = await chrome.tabs.create({ url: launchUrl, active: true });
   const nextState = startWalkthrough(
     { status: 'idle', sopId: null, stepIndex: 0, tabId: null },
     trimmedSopId,
@@ -143,6 +98,11 @@ async function startWalkthroughFromSop(sopId) {
     [WALKTHROUGH_STORAGE_KEY]: nextState,
     [WALKTHROUGH_PAYLOAD_KEY]: payload,
   });
+
+  if (tab?.id != null) {
+    await waitForTabComplete(chrome.tabs, tab.id);
+    await syncWalkthroughToTab(chrome.tabs, tab.id);
+  }
 
   return {
     sopId: trimmedSopId,
@@ -274,6 +234,26 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       tabId: sender.tab?.id ?? null,
     });
     return false;
+  }
+
+  if (message.type === 'WALKTHROUGH_ENSURE_PAGE') {
+    ensureWalkthroughPage(
+      chrome.tabs,
+      chrome.storage,
+      { stateKey: WALKTHROUGH_STORAGE_KEY },
+      message.url,
+      message.tabId ?? sender.tab?.id ?? null,
+    )
+      .then((tab) => {
+        sendResponse({ ok: true, tabId: tab?.id ?? null });
+      })
+      .catch((error) => {
+        sendResponse({
+          ok: false,
+          error: error instanceof Error ? error.message : 'Failed to open walkthrough page',
+        });
+      });
+    return true;
   }
 
   if (

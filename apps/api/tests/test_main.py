@@ -1107,6 +1107,7 @@ def test_get_sop_walkthrough_returns_payload_for_single_step():
         session_id=WALKTHROUGH_SESSION_ID,
         target_selector="#login-button",
         attrs={"xpath": "/html/body/button[1]"},
+        url="https://example.com/login",
         screenshot_id=UUID("22222222-2222-2222-2222-222222222222"),
         timestamp_ms=1_000,
     )
@@ -1145,6 +1146,7 @@ def test_get_sop_walkthrough_returns_payload_for_single_step():
             "css_selector": "#login-button",
             "xpath": "/html/body/button[1]",
             "target_label": None,
+            "page_url": "https://example.com/login",
             "screenshot_url": "https://signed.example/screenshots/login.png",
             "time_estimate": 5,
             "screenshot_highlight": None,

@@ -265,6 +265,44 @@ test('next and previous update step index and re-enter without duplicate open vi
   assert.equal(enteredAfterForward[3].step_number, 2);
 });
 
+test('next requests page navigation when the next step has a different page_url', async () => {
+  const payload = {
+    steps: [
+      {
+        step_number: 1,
+        instruction: 'One',
+        css_selector: '#save-btn',
+        page_url: 'https://example.com/app',
+      },
+      {
+        step_number: 2,
+        instruction: 'Two',
+        css_selector: '#name-field',
+        page_url: 'https://other.example.com/next',
+      },
+    ],
+  };
+
+  const { document, flush, sentMessages, sessionValues } = loadRuntime({
+    walkthroughState: { status: 'playing', sopId: 'sop-1', stepIndex: 0, tabId: 1 },
+    walkthroughPayload: payload,
+    tabId: 1,
+  });
+  await flush();
+
+  document
+    .getElementById('worktrace-walkthrough-host')
+    .shadowRoot.querySelector('[data-action="next"]')
+    .click();
+  await flush();
+
+  assert.equal(sessionValues().walkthroughState.stepIndex, 1);
+  const ensurePage = sentMessages.filter((m) => m.type === 'WALKTHROUGH_ENSURE_PAGE');
+  assert.equal(ensurePage.length, 1);
+  assert.equal(ensurePage[0].url, 'https://other.example.com/next');
+  assert.equal(ensurePage[0].tabId, 1);
+});
+
 test('finish clears session walkthrough state and tears down overlay', async () => {
   const payload = {
     steps: [{ step_number: 1, instruction: 'Only step', css_selector: '#save-btn' }],

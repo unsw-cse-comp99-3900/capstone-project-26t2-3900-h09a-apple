@@ -31,4 +31,8 @@ test('background starts walkthroughs from external web handoff using only sop id
   assert.match(backgroundSource, /WALKTHROUGH_STORAGE_KEY/);
   assert.match(backgroundSource, /WALKTHROUGH_PAYLOAD_KEY/);
   assert.match(backgroundSource, /startWalkthroughFromSop,/);
+  assert.match(backgroundSource, /inferLaunchUrl/);
+  assert.match(backgroundSource, /waitForTabComplete/);
+  assert.match(backgroundSource, /syncWalkthroughToTab/);
+  assert.match(backgroundSource, /WALKTHROUGH_ENSURE_PAGE/);
 });

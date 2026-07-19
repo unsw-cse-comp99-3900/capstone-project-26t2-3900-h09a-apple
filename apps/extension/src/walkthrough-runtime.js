@@ -802,8 +802,50 @@
     chrome.storage?.session?.set({ [STORAGE_STATE_KEY]: nextState });
   }
 
-  function handlePrevious() {
-    if (!activeState || activeState.stepIndex <= 0) {
+  function stepPageUrl(step) {
+    if (typeof step?.page_url === 'string' && step.page_url.trim()) {
+      return step.page_url.trim();
+    }
+    return null;
+  }
+
+  function needsNavigation(targetUrl) {
+    if (!targetUrl) {
+      return false;
+    }
+
+    try {
+      const current = new URL(window.location.href);
+      const target = new URL(targetUrl, window.location.href);
+      return (
+        current.origin !== target.origin ||
+        current.pathname !== target.pathname ||
+        current.search !== target.search
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  function requestStepPage(targetUrl) {
+    try {
+      chrome.runtime?.sendMessage?.({
+        type: 'WALKTHROUGH_ENSURE_PAGE',
+        url: targetUrl,
+        tabId: activeState?.tabId ?? myTabId ?? null,
+      });
+    } catch {
+      // Background may be unavailable; overlay stays on the current page.
+    }
+  }
+
+  function goToStep(nextIndex) {
+    if (!activeState) {
+      return;
+    }
+
+    const steps = getSteps();
+    if (nextIndex < 0 || nextIndex >= steps.length) {
       return;
     }
 
@@ -811,10 +853,25 @@
     detachStepListener();
     removeHighlight();
 
-    persistState({
+    const nextState = {
       ...activeState,
-      stepIndex: activeState.stepIndex - 1,
-    });
+      stepIndex: nextIndex,
+    };
+    const targetUrl = stepPageUrl(steps[nextIndex]);
+
+    persistState(nextState);
+
+    if (needsNavigation(targetUrl)) {
+      requestStepPage(targetUrl);
+    }
+  }
+
+  function handlePrevious() {
+    if (!activeState || activeState.stepIndex <= 0) {
+      return;
+    }
+
+    goToStep(activeState.stepIndex - 1);
   }
 
   function handleNext() {
@@ -823,14 +880,7 @@
       return;
     }
 
-    leaveCurrentStep();
-    detachStepListener();
-    removeHighlight();
-
-    persistState({
-      ...activeState,
-      stepIndex: activeState.stepIndex + 1,
-    });
+    goToStep(activeState.stepIndex + 1);
   }
 
   function handleFinish() {
@@ -946,6 +996,18 @@
         [STORAGE_STATE_KEY]: nextState,
         [STORAGE_PAYLOAD_KEY]: nextPayload,
       });
+    });
+  }
+
+  if (chrome.runtime?.onMessage) {
+    chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+      if (message?.type !== 'WALKTHROUGH_SYNC') {
+        return false;
+      }
+
+      readAndSync();
+      sendResponse({ ok: true });
+      return false;
     });
   }
 

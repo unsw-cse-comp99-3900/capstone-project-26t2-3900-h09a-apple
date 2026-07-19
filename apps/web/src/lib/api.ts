@@ -7,8 +7,11 @@ import type {
   SessionCreateResponse,
   SessionStatusResponse,
   SessionUploadPayload,
+  SopApproveResponse,
   SopDetailPayload,
   SopListResponse,
+  SopPublishResponse,
+  SopStatus,
 } from '@h09a/types';
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000';
@@ -150,6 +153,40 @@ export async function getMyDrafts(): Promise<SopListResponse> {
 
   if (!res.ok) {
     throw new ApiError(await errorMessage(res, 'Failed to load draft SOPs'), res.status);
+  }
+
+  return res.json();
+}
+
+export async function getSopsByStatus(status: SopStatus): Promise<SopListResponse> {
+  const res = await authedFetch(`/api/v1/sops?status=${encodeURIComponent(status)}`);
+
+  if (!res.ok) {
+    throw new ApiError(await errorMessage(res, 'Failed to load SOPs'), res.status);
+  }
+
+  return res.json();
+}
+
+export async function approveSop(sopId: string): Promise<SopApproveResponse> {
+  const res = await authedFetch(`/api/v1/sops/${encodeURIComponent(sopId)}/approve`, {
+    method: 'POST',
+  });
+
+  if (!res.ok) {
+    throw new ApiError(await errorMessage(res, 'Failed to approve SOP'), res.status);
+  }
+
+  return res.json();
+}
+
+export async function publishSop(sopId: string): Promise<SopPublishResponse> {
+  const res = await authedFetch(`/api/v1/sops/${encodeURIComponent(sopId)}/publish`, {
+    method: 'POST',
+  });
+
+  if (!res.ok) {
+    throw new ApiError(await errorMessage(res, 'Failed to publish SOP'), res.status);
   }
 
   return res.json();

@@ -103,6 +103,7 @@ def _resolve_step_metadata(
     str | None,
     dict | None,
     Literal["click", "input", "submit"] | None,
+    str | None,
 ]:
     css_selector = None
     xpath = None
@@ -110,6 +111,7 @@ def _resolve_step_metadata(
     screenshot_url = None
     screenshot_highlight = None
     expected_action = None
+    page_url = None
 
     priority = {
         models.EventType.click.value: 1,
@@ -132,6 +134,11 @@ def _resolve_step_metadata(
             label = getattr(event, "target_label", None)
             if label:
                 target_label = label.strip()
+
+        if page_url is None:
+            raw_url = getattr(event, "url", None)
+            if isinstance(raw_url, str) and raw_url.strip():
+                page_url = raw_url.strip()
 
         if screenshot_url is None:
             screenshot_id = getattr(event, "screenshot_id", None)
@@ -160,6 +167,7 @@ def _resolve_step_metadata(
             css_selector
             and xpath
             and target_label
+            and page_url
             and screenshot_url
             and screenshot_highlight
             and best_priority == submit_priority
@@ -173,6 +181,7 @@ def _resolve_step_metadata(
         screenshot_url,
         screenshot_highlight,
         expected_action,
+        page_url,
     )
 
 
@@ -232,6 +241,7 @@ def build_walkthrough_payload(sop: models.Sop, db: DBSession) -> WalkthroughPayl
             screenshot_url,
             screenshot_highlight,
             expected_action,
+            page_url,
         ) = _resolve_step_metadata(
             source_event_ids,
             sop.session_id,
@@ -265,6 +275,7 @@ def build_walkthrough_payload(sop: models.Sop, db: DBSession) -> WalkthroughPayl
                 css_selector=css_selector,
                 xpath=xpath,
                 target_label=target_label,
+                page_url=page_url,
                 screenshot_url=screenshot_url,
                 time_estimate=time_estimate,
                 screenshot_highlight=screenshot_highlight,
