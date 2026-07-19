@@ -20,3 +20,10 @@ test('background reports local session storage failures to the popup', () => {
   assert.match(backgroundSource, /SESSION_PAYLOAD_ERROR/);
   assert.match(backgroundSource, /Could not save captured session locally/);
 });
+
+test('background proxies vision locate through authenticated API and caches per step', () => {
+  assert.match(backgroundSource, /WALKTHROUGH_VISION_LOCATE/);
+  assert.match(backgroundSource, /\/api\/v1\/walkthroughs\/locate-element/);
+  assert.match(backgroundSource, /visionLocateCache/);
+  assert.match(backgroundSource, /authenticatedFetch/);
+});

@@ -114,6 +114,41 @@ test('resolveTarget prefers css_selector then xpath then fallback', async () => 
   assert.equal(api.resolveAnchorMode({ anchor_mode: 'none', css_selector: '#x' }), 'none');
 });
 
+test('selector miss on element step requests vision locate once', async () => {
+  const payload = {
+    steps: [
+      {
+        step_number: 1,
+        instruction: 'Click Close issue',
+        target_label: 'Close issue',
+        css_selector: '#missing-close-btn',
+        anchor_mode: 'element',
+      },
+    ],
+  };
+
+  const { document, flush, sentMessages } = loadRuntime({
+    walkthroughState: { status: 'playing', sopId: 'sop-1', stepIndex: 0, tabId: 1 },
+    walkthroughPayload: payload,
+    tabId: 1,
+  });
+  await flush();
+
+  const locateCalls = sentMessages.filter((m) => m.type === 'WALKTHROUGH_VISION_LOCATE');
+  assert.equal(locateCalls.length, 1);
+  assert.equal(locateCalls[0].description, 'Close issue');
+  assert.equal(locateCalls[0].sopId, 'sop-1');
+  assert.equal(locateCalls[0].stepNumber, 1);
+
+  // Mutation-driven reposition must not spam another locate while in flight / failed.
+  document.body.appendChild(document.createElement('div'));
+  await flush();
+  const locateAfter = sentMessages.filter((m) => m.type === 'WALKTHROUGH_VISION_LOCATE');
+  assert.equal(locateAfter.length, 1);
+
+  assert.ok(document.getElementById('worktrace-walkthrough-host'));
+});
+
 test('screenshot anchor mode shows preview without element highlight', async () => {
   const payload = {
     steps: [
