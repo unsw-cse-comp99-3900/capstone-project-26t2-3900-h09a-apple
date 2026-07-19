@@ -1,3 +1,5 @@
+import { DEFAULT_SENSITIVE_APP_PATTERNS, saveSensitiveAppConfig } from '@h09a/desktop-storage';
+import { existsSync } from 'node:fs';
 import { app, BrowserWindow, ipcMain, screen, shell } from 'electron';
 import { join } from 'node:path';
 import { DesktopSessionStore } from './desktop-session-store';
@@ -174,11 +176,17 @@ function createWindow(): void {
 
 void app.whenReady().then(() => {
   const userDataDirectory = app.getPath('userData');
+  const sensitiveAppsConfigPath = join(userDataDirectory, 'sensitive-apps.json');
+
+  if (!existsSync(sensitiveAppsConfigPath)) {
+    saveSensitiveAppConfig(sensitiveAppsConfigPath, DEFAULT_SENSITIVE_APP_PATTERNS);
+  }
+
   sessionStore = new DesktopSessionStore(
     join(userDataDirectory, 'worktrace.sqlite'),
     join(userDataDirectory, 'sessions'),
   );
-  recordingService = new RecordingService(sessionStore);
+  recordingService = new RecordingService(sessionStore, sensitiveAppsConfigPath);
 
   createWindow();
 

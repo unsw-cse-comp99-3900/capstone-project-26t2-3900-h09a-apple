@@ -1,3 +1,8 @@
+import {
+  loadSensitiveAppConfig,
+  matchSensitiveForeground,
+  recordWindowSkip,
+} from '@h09a/desktop-storage';
 import activeWindow from 'active-win';
 import { uIOhook } from 'uiohook-napi';
 import { DesktopSessionStore } from './desktop-session-store';
@@ -10,12 +15,32 @@ interface ForegroundContext {
   active_win_error?: string;
 }
 
+const SKIP_LOG_THROTTLE_MS = 2_000;
+
 export class RecordingService {
   private state: RecorderState = 'idle';
   private eventCount = 0;
   private hooksRegistered = false;
+  private sensitivePatterns: string[];
+  private lastSkipLogKey: string | null = null;
+  private lastSkipLogAtMs = 0;
 
-  constructor(private readonly sessionStore: DesktopSessionStore) {}
+  constructor(
+    private readonly sessionStore: DesktopSessionStore,
+    sensitiveAppsConfigPath?: string,
+  ) {
+    const loaded = loadSensitiveAppConfig(sensitiveAppsConfigPath);
+    this.sensitivePatterns = loaded.patterns;
+  }
+
+  reloadSensitiveAppConfig(configPath?: string): void {
+    const loaded = loadSensitiveAppConfig(configPath);
+    this.sensitivePatterns = loaded.patterns;
+  }
+
+  getSensitiveAppPatterns(): string[] {
+    return [...this.sensitivePatterns];
+  }
 
   start(): void {
     if (this.state === 'recording') return;
@@ -103,7 +128,7 @@ export class RecordingService {
 
       const foregroundContext = this.getForegroundContext();
 
-      if (this.isRecorderWindow(foregroundContext)) return;
+      if (this.shouldSuppressCapture(foregroundContext)) return;
 
       this.recordEvent({
         event_type: 'CLICK',
@@ -121,7 +146,7 @@ export class RecordingService {
 
       const foregroundContext = this.getForegroundContext();
 
-      if (this.isRecorderWindow(foregroundContext)) return;
+      if (this.shouldSuppressCapture(foregroundContext)) return;
 
       this.recordEvent({
         event_type: 'KEYDOWN',
@@ -133,6 +158,45 @@ export class RecordingService {
     });
 
     this.hooksRegistered = true;
+  }
+
+  private shouldSuppressCapture(context: ForegroundContext): boolean {
+    if (this.isRecorderWindow(context)) {
+      return true;
+    }
+
+    const matched = matchSensitiveForeground(
+      context.foreground_app,
+      context.window_title,
+      this.sensitivePatterns,
+    );
+
+    if (!matched) {
+      return false;
+    }
+
+    const sessionId = this.sessionStore.getActiveSessionId();
+    if (sessionId) {
+      recordWindowSkip(sessionId, matched);
+    }
+
+    this.logSkipThrottled(matched, context.foreground_app);
+    return true;
+  }
+
+  private logSkipThrottled(pattern: string, foregroundApp: string): void {
+    const now = Date.now();
+    const key = `${pattern}|${foregroundApp}`;
+
+    if (key === this.lastSkipLogKey && now - this.lastSkipLogAtMs < SKIP_LOG_THROTTLE_MS) {
+      return;
+    }
+
+    this.lastSkipLogKey = key;
+    this.lastSkipLogAtMs = now;
+    console.warn(
+      `[desktop] capture suppressed by sensitive-app skip list (pattern=${pattern}, app=${foregroundApp})`,
+    );
   }
 
   private recordEvent(event: Record<string, unknown>): void {
@@ -156,7 +220,7 @@ export class RecordingService {
 
       this.sessionStore.saveCapturedEvent({
         category: isClick ? 'mouse' : 'keyboard',
-        type: isClick ? 'click' : 'input',
+        type: isClick ? 'click' : 'keydown',
         timestamp_ms: event.timestamp as number,
         raw_x: isClick ? (event.x as number) : null,
         raw_y: isClick ? (event.y as number) : null,
@@ -164,7 +228,9 @@ export class RecordingService {
       });
 
       this.eventCount += 1;
-      console.log(JSON.stringify(event));
+      console.log(
+        `[desktop] captured ${isClick ? 'click' : 'keydown'} app=${String(event.foreground_app)}`,
+      );
     } catch (error) {
       this.state = 'error';
       console.error('[desktop] Failed to persist captured event:', error);
