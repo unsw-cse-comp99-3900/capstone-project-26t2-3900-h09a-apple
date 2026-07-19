@@ -79,6 +79,7 @@ def ingest_session(
     job = models.CodificationJob(
         id=job_id,
         session_id=session_id,
+        job_type=models.CodificationJobType.generate.value,
         status=models.CodificationJobStatus.pending.value,
     )
 
