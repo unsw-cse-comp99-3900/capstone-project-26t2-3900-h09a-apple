@@ -123,3 +123,51 @@ jobs:
 
       - name: Build
         run: pnpm --filter @h09a/extension build
+
+  desktop:
+    name: desktop
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      # node-gyp / native rebuilds for better-sqlite3 and related addons
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # uiohook-napi and active-win need X11 headers on Linux runners
+      - name: Install Linux native build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            libx11-dev \
+            libxtst-dev \
+            libxinerama-dev \
+            libxt-dev \
+            libxi-dev
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Format check
+        run: pnpm format:check
+
+      - name: Lint
+        run: pnpm --filter @h09a/desktop lint
+
+      - name: Typecheck
+        run: pnpm --filter @h09a/desktop typecheck
+
+      - name: Test desktop-storage
+        run: pnpm --filter @h09a/desktop-storage test
+
+      - name: Build
+        run: pnpm --filter @h09a/desktop build
