@@ -135,7 +135,7 @@ stopButton.addEventListener('click', () => {
   void runAction(() => window.desktopAPI.stopRecording());
 });
 
-reviewButton.addEventListener("click", async () => {
+reviewButton.addEventListener('click', async () => {
   const review = await window.desktopAPI.getReviewSession();
 
   workflowText.textContent = review.workflowName;
@@ -147,21 +147,17 @@ reviewButton.addEventListener("click", async () => {
   reviewModal.hidden = false;
 });
 
-cancelButton.addEventListener("click", () => {
+cancelButton.addEventListener('click', () => {
   reviewModal.hidden = true;
 });
 
-submitButton.addEventListener("click", async () => {
+submitButton.addEventListener('click', async () => {
   try {
     await window.desktopAPI.submitSession();
     reviewModal.hidden = true;
-    alert("Session submitted successfully.");
+    alert('Session submitted successfully.');
   } catch (error) {
-    alert(
-      error instanceof Error
-        ? error.message
-        : String(error),
-    );
+    alert(error instanceof Error ? error.message : String(error));
   }
 });
 

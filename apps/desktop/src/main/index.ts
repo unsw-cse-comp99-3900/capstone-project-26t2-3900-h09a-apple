@@ -206,9 +206,7 @@ if (!gotSingleInstanceLock) {
       throw new Error('No completed recording session available');
     }
 
-    const result = await submitSession(
-      lastCompletedSession.artifactPath,
-    );
+    const result = await submitSession(lastCompletedSession.artifactPath);
 
     if (result.success && sessionStore) {
       await sessionStore.deleteCompletedSession(

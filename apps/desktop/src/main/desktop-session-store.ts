@@ -136,10 +136,7 @@ export class DesktopSessionStore {
     };
   }
 
-  async deleteCompletedSession(
-    sessionId: string,
-    sessionDirectory: string,
-  ): Promise<void> {
+  async deleteCompletedSession(sessionId: string, sessionDirectory: string): Promise<void> {
     deleteSession(this.db, sessionId);
 
     await rm(sessionDirectory, {
