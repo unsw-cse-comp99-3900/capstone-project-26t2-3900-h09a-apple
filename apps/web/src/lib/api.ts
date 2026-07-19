@@ -14,6 +14,8 @@ import type {
   SopStatus,
 } from '@h09a/types';
 
+import { silentRefreshAccessToken } from '@/lib/auth/session-refresh';
+
 const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000';
 
 export class ApiError extends Error {
@@ -71,10 +73,19 @@ async function errorMessage(res: Response, fallback: string): Promise<string> {
 }
 
 async function authedFetch(path: string, init?: RequestInit): Promise<Response> {
-  const response = await fetch(proxyUrl(path), {
+  const requestInit: RequestInit = {
     ...init,
     cache: 'no-store',
-  });
+  };
+
+  let response = await fetch(proxyUrl(path), requestInit);
+
+  if (response.status === 401) {
+    const refreshed = await silentRefreshAccessToken();
+    if (refreshed.ok) {
+      response = await fetch(proxyUrl(path), requestInit);
+    }
+  }
 
   if (response.status === 401) {
     redirectToLogin();

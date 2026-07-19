@@ -30,9 +30,14 @@ export function inferStepPageUrl(step) {
     return null;
   }
 
-  const fromField = normalizeLaunchUrl(step.page_url);
-  if (fromField) {
-    return fromField;
+  const fromExpectedUrl = normalizeLaunchUrl(step.expected_url);
+  if (fromExpectedUrl) {
+    return fromExpectedUrl;
+  }
+
+  const fromPageUrl = normalizeLaunchUrl(step.page_url);
+  if (fromPageUrl) {
+    return fromPageUrl;
   }
 
   const instruction = typeof step.instruction === 'string' ? step.instruction : '';

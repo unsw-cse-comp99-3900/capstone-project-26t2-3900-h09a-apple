@@ -256,15 +256,56 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
-  if (
-    message.type === 'WALKTHROUGH_STEP_ENTERED' ||
-    message.type === 'WALKTHROUGH_STEP_LEFT' ||
-    message.type === 'WALKTHROUGH_FINISHED'
-  ) {
-    // H09AAPPLE-30 will persist timing / completion events from these hooks.
+  if (message.type === 'WALKTHROUGH_STEP_ENTERED' || message.type === 'WALKTHROUGH_STEP_LEFT') {
     console.log('Walkthrough analytics hook:', message.type, message);
     sendResponse({ ok: true });
     return false;
+  }
+
+  if (message.type === 'WALKTHROUGH_FINISHED') {
+    (async () => {
+      try {
+        const durationMs = (message.step_timings ?? []).reduce(
+          (total, step) => total + (step.duration_ms ?? 0),
+          0,
+        );
+
+        const response = await authenticatedFetch('/api/v1/walkthroughs/complete', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            sop_id: message.sopId,
+            completed_at: new Date().toISOString(),
+            duration_seconds: Math.round(durationMs / 1000),
+            friction_events: message.friction_events ?? [],
+            step_timings: message.step_timings ?? [],
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`Completion upload failed: ${response.status}`);
+        }
+
+        const body = await response.json();
+
+        console.log('Walkthrough completion uploaded:', body.completion_id);
+
+        sendResponse({
+          ok: true,
+          completionId: body.completion_id,
+        });
+      } catch (error) {
+        console.error('Failed to upload walkthrough completion:', error);
+        sendResponse({
+          ok: false,
+          error: error instanceof Error ? error.message : 'Failed to upload walkthrough completion',
+        });
+      }
+    })();
+
+    return true;
   }
 
   if (RECORDED_EVENT_TYPES.has(message.type)) {

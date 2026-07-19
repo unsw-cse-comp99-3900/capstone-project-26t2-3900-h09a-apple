@@ -226,6 +226,17 @@ export interface SopPublishResponse {
   /** ISO-8601. */
   published_at: string;
   library_url: string;
+  /** pending | complete | failed; set when publish enqueues embed work. */
+  embedding_status?: string | null;
+}
+
+/**
+ * Response returned by POST /api/v1/sops/{id}/embed (H09AAPPLE-35).
+ */
+export interface SopEmbedResponse {
+  id: string;
+  job_id: string;
+  embedding_status: string;
 }
 
 /**

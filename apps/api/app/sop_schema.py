@@ -58,6 +58,13 @@ class SopPublishResponse(BaseModel):
     status: str
     published_at: datetime
     library_url: str
+    embedding_status: str | None = None
+
+
+class SopEmbedResponse(BaseModel):
+    id: str
+    job_id: str
+    embedding_status: str
 
 
 class SopLibraryItem(BaseModel):
@@ -84,13 +91,13 @@ class WalkthroughStep(BaseModel):
     css_selector: str | None = None
     xpath: str | None = None
     target_label: str | None = None
-    page_url: str | None = None
     screenshot_url: str | None = None
     time_estimate: int | None = Field(default=None, ge=0)
     screenshot_highlight: ScreenshotHighlight | None = None
     # element: has css/xpath; screenshot: no selector but has image; none: instruction-only.
     anchor_mode: Literal["element", "screenshot", "none"] = "element"
     expected_action: Literal["click", "input", "submit"] | None = None
+    expected_url: str | None = None
 
 
 class WalkthroughPayload(BaseModel):

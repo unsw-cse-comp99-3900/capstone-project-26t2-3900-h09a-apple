@@ -78,6 +78,17 @@ class CodificationJobStatus(str, enum.Enum):
     failed = "failed"
 
 
+class CodificationJobType(str, enum.Enum):
+    generate = "generate"
+    embed = "embed"
+
+
+class EmbeddingStatus(str, enum.Enum):
+    pending = "pending"
+    complete = "complete"
+    failed = "failed"
+
+
 class UserRole(str, enum.Enum):
     employee = "EMPLOYEE"
     reviewer = "REVIEWER"
@@ -113,6 +124,65 @@ class User(Base):
     )
 
     __table_args__ = (CheckConstraint(f"role IN ({_csv(UserRole)})", name="ck_users_role"),)
+
+
+class RefreshToken(Base):
+    """Issued refresh-token jtis for server-side revocation (H09AAPPLE-63)."""
+
+    __tablename__ = "refresh_tokens"
+
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    jti = Column(UUID(as_uuid=True), nullable=False, unique=True)
+    user_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    revoked_at = Column(DateTime(timezone=True))
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=text("now()"),
+    )
+
+
+class PasswordResetToken(Base):
+    """One-time password reset tokens; only the hash is stored (H09AAPPLE-63)."""
+
+    __tablename__ = "password_reset_tokens"
+
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    user_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    token_hash = Column(String(64), nullable=False, unique=True)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    used_at = Column(DateTime(timezone=True))
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=text("now()"),
+    )
+
+
+class WalkthroughFrictionType(str, enum.Enum):
+    wrong_target = "wrong_target"
+    wrong_page = "wrong_page"
+    empty_input = "empty_input"
+    selector_miss = "selector_miss"
 
 
 # ---------------------------------------------------------------------------
@@ -312,6 +382,18 @@ class CodificationJob(Base):
         nullable=False,
         index=True,
     )
+    job_type = Column(
+        String(32),
+        nullable=False,
+        server_default=CodificationJobType.generate.value,
+        index=True,
+    )
+    sop_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("sops.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
     status = Column(
         String(32),
         nullable=False,
@@ -334,6 +416,10 @@ class CodificationJob(Base):
         CheckConstraint(
             f"status IN ({_csv(CodificationJobStatus)})",
             name="ck_codification_jobs_status",
+        ),
+        CheckConstraint(
+            f"job_type IN ({_csv(CodificationJobType)})",
+            name="ck_codification_jobs_job_type",
         ),
         Index("ix_codification_jobs_status_created", "status", "created_at"),
     )
@@ -387,6 +473,7 @@ class Sop(Base):
         nullable=True,
     )
     gen_duration_ms = Column(Integer)
+    embedding_status = Column(String(32), nullable=True)
 
     session = relationship("Session", back_populates="sops")
     step_embeddings = relationship(
@@ -412,6 +499,10 @@ class Sop(Base):
         CheckConstraint(
             "generation_mode IN ('llm','fallback')",
             name="ck_sops_generation_mode",
+        ),
+        CheckConstraint(
+            f"embedding_status IS NULL OR embedding_status IN ({_csv(EmbeddingStatus)})",
+            name="ck_sops_embedding_status",
         ),
     )
 
@@ -542,6 +633,176 @@ class ConsentAcceptance(Base):
     )
 
 
+# ---------------------------------------------------------------------------
+# walkthrough_completions (H09AAPPLE-30)
+# ---------------------------------------------------------------------------
+class WalkthroughCompletion(Base):
+    __tablename__ = "walkthrough_completions"
+
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    tenant_id = Column(
+        UUID(as_uuid=True),
+        nullable=False,
+        index=True,
+    )
+    sop_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("sops.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    employee_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    completed_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
+    duration_seconds = Column(
+        Integer,
+        nullable=False,
+    )
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=text("now()"),
+    )
+
+    friction_events = relationship(
+        "WalkthroughFrictionEvent",
+        back_populates="completion",
+        cascade="all, delete-orphan",
+    )
+    step_timings = relationship(
+        "WalkthroughStepTiming",
+        back_populates="completion",
+        cascade="all, delete-orphan",
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "duration_seconds >= 0",
+            name="ck_walkthrough_completion_duration_nonneg",
+        ),
+        Index(
+            "ix_walkthrough_completion_sop_employee",
+            "sop_id",
+            "employee_id",
+        ),
+    )
+
+
+# ---------------------------------------------------------------------------
+# walkthrough_friction_events (H09AAPPLE-30)
+# ---------------------------------------------------------------------------
+class WalkthroughFrictionEvent(Base):
+    __tablename__ = "walkthrough_friction_events"
+
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    completion_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("walkthrough_completions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    step_number = Column(
+        Integer,
+        nullable=False,
+    )
+    event_type = Column(
+        String(32),
+        nullable=False,
+    )
+    occurred_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
+
+    completion = relationship(
+        "WalkthroughCompletion",
+        back_populates="friction_events",
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "step_number >= 1",
+            name="ck_walkthrough_friction_step_number_pos",
+        ),
+        CheckConstraint(
+            f"event_type IN ({_csv(WalkthroughFrictionType)})",
+            name="ck_walkthrough_friction_event_type",
+        ),
+        Index(
+            "ix_walkthrough_friction_completion_step",
+            "completion_id",
+            "step_number",
+        ),
+    )
+
+
+# ---------------------------------------------------------------------------
+# walkthrough_step_timings (H09AAPPLE-30)
+# ---------------------------------------------------------------------------
+class WalkthroughStepTiming(Base):
+    __tablename__ = "walkthrough_step_timings"
+
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    completion_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("walkthrough_completions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    step_number = Column(
+        Integer,
+        nullable=False,
+    )
+    duration_ms = Column(
+        Integer,
+        nullable=False,
+    )
+
+    completion = relationship(
+        "WalkthroughCompletion",
+        back_populates="step_timings",
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "step_number >= 1",
+            name="ck_walkthrough_step_timing_step_number_pos",
+        ),
+        CheckConstraint(
+            "duration_ms >= 0",
+            name="ck_walkthrough_step_timing_duration_nonneg",
+        ),
+        UniqueConstraint(
+            "completion_id",
+            "step_number",
+            name="uq_walkthrough_step_timing_completion_step",
+        ),
+        Index(
+            "ix_walkthrough_step_timing_completion",
+            "completion_id",
+        ),
+    )
+
+
 __all__ = [
     "Base",
     "ConsentAcceptance",
@@ -558,5 +819,11 @@ __all__ = [
     "CodificationJobStatus",
     "User",
     "UserRole",
+    "RefreshToken",
+    "PasswordResetToken",
     "LlmAuditLog",
+    "WalkthroughCompletion",
+    "WalkthroughFrictionEvent",
+    "WalkthroughStepTiming",
+    "WalkthroughFrictionType",
 ]

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from jose import JWTError, jwt
 
@@ -21,6 +22,13 @@ class InvalidTokenError(Exception):
     pass
 
 
+@dataclass(frozen=True)
+class IssuedRefreshToken:
+    token: str
+    jti: UUID
+    expires_at: datetime
+
+
 def _encode_token(payload: dict) -> str:
     return jwt.encode(payload, get_secret_key(), algorithm=ALGORITHM)
 
@@ -37,16 +45,22 @@ def generate_token(user_id: UUID, role: UserRole, tenant_id: UUID) -> str:
     return _encode_token(payload)
 
 
-def generate_refresh_token(user_id: UUID, role: UserRole, tenant_id: UUID) -> str:
+def generate_refresh_token(user_id: UUID, role: UserRole, tenant_id: UUID) -> IssuedRefreshToken:
+    jti = uuid4()
     expire = datetime.now(UTC) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
     payload = {
         "user_id": str(user_id),
         "role": role.value,
         "tenant_id": str(tenant_id),
         "type": TOKEN_TYPE_REFRESH,
+        "jti": str(jti),
         "exp": expire,
     }
-    return _encode_token(payload)
+    return IssuedRefreshToken(
+        token=_encode_token(payload),
+        jti=jti,
+        expires_at=expire,
+    )
 
 
 def _decode_token(token: str) -> dict:
@@ -80,4 +94,11 @@ def verify_refresh_token(token: str) -> dict[str, str]:
     payload = _decode_token(token)
     if payload.get("type") != TOKEN_TYPE_REFRESH:
         raise InvalidTokenError("Invalid or expired token")
-    return _token_identity(payload)
+
+    jti = payload.get("jti")
+    if not jti:
+        raise InvalidTokenError("Invalid or expired token")
+
+    identity = _token_identity(payload)
+    identity["jti"] = str(jti)
+    return identity

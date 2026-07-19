@@ -10,10 +10,10 @@ import {
   waitForTabComplete,
 } from './walkthrough-launch.js';
 
-test('inferStepPageUrl prefers page_url over instruction text', () => {
+test('inferStepPageUrl prefers expected_url over instruction text', () => {
   assert.equal(
     inferStepPageUrl({
-      page_url: 'https://app.example.com/settings',
+      expected_url: 'https://app.example.com/settings',
       instruction: 'Open https://other.example.com first',
     }),
     'https://app.example.com/settings',
@@ -34,7 +34,7 @@ test('inferLaunchUrl returns the first step page URL', () => {
     inferLaunchUrl({
       steps: [
         { instruction: 'Click continue.' },
-        { page_url: 'https://example.com/step-2', instruction: 'Fill the form.' },
+        { expected_url: 'https://example.com/step-2', instruction: 'Fill the form.' },
       ],
     }),
     'https://example.com/step-2',

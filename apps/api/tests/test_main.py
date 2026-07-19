@@ -812,12 +812,16 @@ def test_get_session_cross_tenant_returns_404():
         app.dependency_overrides[get_db] = override_get_db
 
 
-def test_publish_sop_success():
+def test_publish_sop_success(monkeypatch):
+    monkeypatch.setattr(main_module, "process_embed_job", lambda *_args, **_kwargs: None)
     fake_sop = SimpleNamespace(
-        id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        id=UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+        session_id=UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
         status=main_module.models.SopStatus.approved.value,
         published_at=None,
         tenant_id=DEFAULT_TENANT_ID,
+        embedding_status=None,
+        steps=[{"order": 1, "title": "A", "instruction": "Do A", "source_event_ids": []}],
     )
     db = FakeDbWithSession(existing_sop=fake_sop)
     db.refresh = lambda obj: None
@@ -833,20 +837,30 @@ def test_publish_sop_success():
         assert body["status"] == "published"
         assert body["published_at"] is not None
         assert body["library_url"] == "/library/sops/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+        assert body["embedding_status"] == "pending"
         assert db.committed is True
         assert fake_sop.status == main_module.models.SopStatus.published.value
         assert fake_sop.published_at is not None
+        assert fake_sop.embedding_status == "pending"
+        assert any(
+            isinstance(item, main_module.models.CodificationJob) and item.job_type == "embed"
+            for item in db.added
+        )
     finally:
         app.dependency_overrides[get_db] = override_get_db
         app.dependency_overrides.pop(get_current_user, None)
 
 
-def test_manager_publish_sop_returns_200():
+def test_manager_publish_sop_returns_200(monkeypatch):
+    monkeypatch.setattr(main_module, "process_embed_job", lambda *_args, **_kwargs: None)
     fake_sop = SimpleNamespace(
-        id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        id=UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+        session_id=UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
         status=main_module.models.SopStatus.approved.value,
         published_at=None,
         tenant_id=DEFAULT_TENANT_ID,
+        embedding_status=None,
+        steps=[],
     )
     db = FakeDbWithSession(existing_sop=fake_sop)
     db.refresh = lambda obj: None
@@ -866,10 +880,13 @@ def test_manager_publish_sop_returns_200():
 
 def test_employee_publish_sop_returns_403():
     fake_sop = SimpleNamespace(
-        id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        id=UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+        session_id=UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
         status=main_module.models.SopStatus.approved.value,
         published_at=None,
         tenant_id=DEFAULT_TENANT_ID,
+        embedding_status=None,
+        steps=[],
     )
     db = FakeDbWithSession(existing_sop=fake_sop)
     app.dependency_overrides[get_db] = lambda: db
@@ -891,10 +908,13 @@ def test_employee_publish_sop_returns_403():
         (None, 404, "SOP not found"),
         (
             SimpleNamespace(
-                id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+                id=UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+                session_id=UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
                 status=main_module.models.SopStatus.draft.value,
                 published_at=None,
                 tenant_id=DEFAULT_TENANT_ID,
+                embedding_status=None,
+                steps=[],
             ),
             422,
             "SOP must be approved before publishing",
@@ -911,6 +931,34 @@ def test_publish_sop_errors(existing_sop, expected_status, expected_detail):
         assert response.status_code == expected_status
         assert response.json()["detail"] == expected_detail
         assert db.committed is False
+    finally:
+        app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+def test_embed_sop_manual_trigger(monkeypatch):
+    monkeypatch.setattr(main_module, "process_embed_job", lambda *_args, **_kwargs: None)
+    fake_sop = SimpleNamespace(
+        id=UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+        session_id=UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
+        status=main_module.models.SopStatus.published.value,
+        published_at=None,
+        tenant_id=DEFAULT_TENANT_ID,
+        embedding_status=None,
+        steps=[{"order": 1, "title": "A", "instruction": "Do A", "source_event_ids": []}],
+    )
+    db = FakeDbWithSession(existing_sop=fake_sop)
+    app.dependency_overrides[get_db] = lambda: db
+    app.dependency_overrides[get_current_user] = lambda: _make_user(role=UserRole.reviewer)
+
+    try:
+        response = client.post("/api/v1/sops/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/embed")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["id"] == "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+        assert body["embedding_status"] == "pending"
+        assert body["job_id"]
+        assert fake_sop.embedding_status == "pending"
     finally:
         app.dependency_overrides[get_db] = override_get_db
         app.dependency_overrides.pop(get_current_user, None)
@@ -1146,12 +1194,12 @@ def test_get_sop_walkthrough_returns_payload_for_single_step():
             "css_selector": "#login-button",
             "xpath": "/html/body/button[1]",
             "target_label": None,
-            "page_url": "https://example.com/login",
             "screenshot_url": "https://signed.example/screenshots/login.png",
             "time_estimate": 5,
             "screenshot_highlight": None,
             "anchor_mode": "element",
             "expected_action": None,
+            "expected_url": "https://example.com/login",
         }
     finally:
         app.dependency_overrides[get_db] = override_get_db

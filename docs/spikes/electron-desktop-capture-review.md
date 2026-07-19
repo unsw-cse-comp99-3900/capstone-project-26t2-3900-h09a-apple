@@ -83,16 +83,42 @@ after processing).
   meaningfully answer that question from a single isolated click, and the cost (N clicks = N LLM
   calls) doesn't buy anything useful.
 
-### 2.5 Unresolved: local vs external model for OCR/vision analysis (privacy)
+### 2.5 Decision (H09AAPPLE-73): local OCR + local-first vision; no external screenshots by default
 
-**Not yet decided - blocks a real compliance requirement.** The brief requires "company workflow
-data stays in tenant environment at all times." If Step 2's vision model call (or any OCR step) is
-an external API (GPT-4o, Claude, etc.), raw screenshots - which may contain passwords, private
-messages, or other sensitive on-screen content - leave the local machine. This is the same
-reasoning that led the product to use **local Whisper** rather than an external transcription API
-for voice (H09AAPPLE-31). The same local-vs-external tradeoff needs an explicit decision here
-before real pilot company data is captured this way. Until decided, treat any external-API vision
-call as a compliance risk, not a settled design.
+**Decision (2026-07-16):** keep element-identification inference **on-device by default**, matching
+the local-Whisper precedent (H09AAPPLE-31) and the brief's tenant-residency requirement.
+
+Empirical harness: `spikes/ocr-vision-decision/` (5 synthetic crops, ground truth in
+`fixtures/ground-truth.json`). Same images for every engine. Host for the measured run: Windows
+dev laptop (stronger than typical pilot hardware); treat latencies as optimistic. Full table:
+`spikes/ocr-vision-decision/results/SUMMARY.md`.
+
+Moondream2 was the first local VLM candidate because it is small, fast, and practical to run via
+Ollama on a pilot laptop without a dedicated GPU. SmolVLM, Qwen2-VL-7B-Instruct, and Llama vision
+variants were not benchmarked in this pass; stronger local VLMs are a follow-up. This card closes
+the local-first vs external compliance decision, not production model selection.
+
+| Tier                            | Choice                                                               | Evidence                                                                                                                                      |
+| ------------------------------- | -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Step 1 OCR (crop text)          | **Local `tesseract.js`**                                             | 3/5 cases passed against ground truth; warm ~8-50 ms; cold worker load ~0.3-0.7 s; $0; no pixels leave the device                             |
+| Step 2 vision (icon / OCR-miss) | **Local-first architecture; current `moondream` (Ollama) not ready** | Moondream 1/5 pass; outputs often garbled. GPT-4o vision 5/5, warm ~0.8-1.1 s, ~$0.0008/call via OpenRouter - but raw crops leave the machine |
+| When local Step 2 fails         | Store `identification_source=unidentified` + raw coordinates (§2.6)  | Prefer an incomplete local event over an external screenshot upload                                                                           |
+
+**Integration approach (Electron, follow-up implementation card):**
+
+1. Run **Tesseract.js** in the Electron main/utility process on the click crop (Step 1, concurrent
+   with Accessibility API).
+2. Keep a **local VLM slot** for Step 2 (Ollama sidecar or a bundled model). Re-benchmark before
+   locking a production model; moondream2 failed this harness and must not be treated as done.
+3. Bound Step 2 with a timeout; on miss/timeout, fall through to `unidentified` (never drop the
+   event).
+4. **Do not** call GPT-4o / Claude / other external vision APIs on raw desktop screenshots in the
+   default product path.
+
+**Team flag:** finding a local VLM that beats ~1/5 on icon/toolbar cases is open engineering work
+(timeline/cost). That does **not** reopen external APIs as the default. If a customer later demands
+external vision accuracy, that is an explicit opt-in exception under the redaction rules in §3.5 -
+not the baseline design.
 
 ### 2.6 Never silently drop an event (failure handling)
 
@@ -214,10 +240,32 @@ today (`payload: { ...message.payload, ...(screenshotId ? { screenshot_id: scree
 
 - not a new pattern, a continuation of an existing one.
 
-### 3.5 Unresolved: local vs external model decision (§2.5) affects this module too
+### 3.5 Redaction / residency implications of §2.5
 
-If Step 2 ends up calling an external API, this module needs an additional redaction/masking layer
-before any payload leaves the device. Not designed yet - blocked on the §2.5 decision.
+**Default path (chosen):** Step 1 OCR and Step 2 vision stay local. Module 2 does **not** need an
+egress redaction pipeline for identification screenshots, because those pixels never leave the
+device for model inference. Session submit to `POST /api/v1/sessions` remains the existing
+structured JSON path (already used by the extension); that is product backend traffic, not a
+third-party vision vendor.
+
+**If an external vision API is ever enabled (opt-in exception only - not the default):**
+
+1. **Never upload full-screen captures** to the vendor. Send only a tight crop around the click
+   (same crop size class as Step 1, e.g. ~200x200), after local checks fail.
+2. **Pre-flight local redaction on the crop:** mask password fields / known secret patterns when
+   Accessibility exposes them; strip or blur regions that look like text fields with high ink
+   density if role is unknown; drop the call entirely if the foreground app is on a deny list
+   (password managers, banking, etc.).
+3. **No raw image retention at the vendor:** use APIs with zero retention / no training where
+   contractually available; log only that an external call occurred (timestamp, model, crop hash),
+   not the pixels.
+4. **Customer / tenant control:** off by default; enable only with written acceptance that cropped
+   UI pixels leave the tenant boundary.
+5. **Cost:** GPT-4o vision measured ~$0.0008 per identification call on this harness; at scale this
+   is a recurring opex line, separate from accuracy.
+
+Because §2.5 chose local-first, items (1)-(5) are **contingency design**, not the build plan for
+the first desktop capture slice.
 
 ## 4. Event taxonomy
 
@@ -414,7 +462,9 @@ unselected to selected). Needs its own design pass once Module 3 is picked back 
 
 ## 6. Summary of open decisions (blocking further design work, not blocking H09AAPPLE-70/71/72)
 
-1. Local vs external model for OCR/vision analysis - privacy/compliance decision (§2.5, §3.5).
+1. ~~Local vs external model for OCR/vision analysis~~ - **Decided in H09AAPPLE-73** (§2.5 / §3.5):
+   local Tesseract.js for OCR; local-first vision; no external screenshot APIs by default;
+   moondream not production-ready yet (follow-up model selection).
 2. What "the user has built their own agent" concretely means as Module 3's final deliverable
    (§5.3) - needs Tang's input.
 3. Whether to eventually retire the Chrome extension's browser capture pipeline in favor of the

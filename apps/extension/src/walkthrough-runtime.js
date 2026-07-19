@@ -562,10 +562,25 @@
     tooltip.style.left = `${left}px`;
   }
 
+  function isWrongPage(step) {
+    if (typeof step?.expected_url !== 'string' || !step.expected_url) {
+      return false;
+    }
+
+    try {
+      const current = new URL(window.location.href);
+      const expected = new URL(step.expected_url);
+
+      return current.origin !== expected.origin || current.pathname !== expected.pathname;
+    } catch {
+      return false;
+    }
+  }
+
   // Records selector_miss/wrong_page at most once per step visit, so scroll/
   // resize/mutation-driven re-checks (refreshHighlight, reposition) don't
   // flood frictionEvents with duplicates for the same unresolved target.
-  function recordSelectorMissOnce(anchorMode) {
+  function recordSelectorMissOnce(step, anchorMode) {
     if (anchorMode !== 'element') {
       return;
     }
@@ -577,7 +592,10 @@
     }
     missFrictionStepIndex = activeState.stepIndex;
     recordFriction('selector_miss');
-    recordFriction('wrong_page');
+
+    if (isWrongPage(step)) {
+      recordFriction('wrong_page');
+    }
   }
 
   function refreshHighlight() {
@@ -595,7 +613,7 @@
       applyHighlight(resolved.element);
       attachStepListener(step, resolved.element);
     } else {
-      recordSelectorMissOnce(anchorMode);
+      recordSelectorMissOnce(step, anchorMode);
 
       detachStepListener();
       removeHighlight();
@@ -636,7 +654,7 @@
 
       placeTooltip(tooltip, rect);
     } else {
-      recordSelectorMissOnce(anchorMode);
+      recordSelectorMissOnce(step, anchorMode);
 
       removeHighlight();
       detachStepListener();
@@ -674,9 +692,9 @@
       return;
     }
 
-    // Only emit when the step index changes. Leaving and returning (Previous → Next)
-    // clears lastEnteredStepIndex via the index change, so a new entered_at is issued
-    // for H09AAPPLE-30 without duplicating the open visit.
+    // Only emit when the step index changes. Previous abandons the forward step
+    // and retracts its timing; re-entering the destination issues a fresh
+    // entered_at without keeping a duplicate open visit.
     if (lastEnteredStepIndex === activeState.stepIndex) {
       return;
     }
@@ -700,18 +718,29 @@
     }
   }
 
+  function clearCurrentVisit() {
+    currentVisitEnteredAt = null;
+    currentVisitStepNumber = null;
+  }
+
+  /**
+   * Finalize the open visit into stepTimings (Next / Finish).
+   * Previous uses abandonCurrentStep() instead so a retreat does not keep
+   * the step being left.
+   */
   function leaveCurrentStep() {
     if (currentVisitEnteredAt == null || currentVisitStepNumber == null) {
       return;
     }
 
     const leftAt = Date.now();
+    const durationMs = leftAt - currentVisitEnteredAt;
 
     stepTimings.push({
       step_number: currentVisitStepNumber,
       entered_at: currentVisitEnteredAt,
       left_at: leftAt,
-      duration_ms: leftAt - currentVisitEnteredAt,
+      duration_ms: durationMs,
     });
 
     try {
@@ -720,11 +749,26 @@
         step_number: currentVisitStepNumber,
         entered_at: currentVisitEnteredAt,
         left_at: leftAt,
+        duration_ms: durationMs,
       });
     } catch {}
 
-    currentVisitEnteredAt = null;
-    currentVisitStepNumber = null;
+    clearCurrentVisit();
+  }
+
+  /** Drop the open visit without recording it (Previous retreat). */
+  function abandonCurrentStep() {
+    clearCurrentVisit();
+  }
+
+  /**
+   * After Previous to destinationStepNumber, drop timings for that step and
+   * any later ones so the destination can be re-timed, and drop friction that
+   * only happened on abandoned forward steps.
+   */
+  function retractPathToStep(destinationStepNumber) {
+    stepTimings = stepTimings.filter((t) => t.step_number < destinationStepNumber);
+    frictionEvents = frictionEvents.filter((e) => e.step_number <= destinationStepNumber);
   }
 
   // Single source of truth for tearing down an in-progress run's bookkeeping,
@@ -803,6 +847,9 @@
   }
 
   function stepPageUrl(step) {
+    if (typeof step?.expected_url === 'string' && step.expected_url.trim()) {
+      return step.expected_url.trim();
+    }
     if (typeof step?.page_url === 'string' && step.page_url.trim()) {
       return step.page_url.trim();
     }
@@ -839,39 +886,31 @@
     }
   }
 
-  function goToStep(nextIndex) {
-    if (!activeState) {
-      return;
-    }
-
-    const steps = getSteps();
-    if (nextIndex < 0 || nextIndex >= steps.length) {
-      return;
-    }
-
-    leaveCurrentStep();
-    detachStepListener();
-    removeHighlight();
-
-    const nextState = {
-      ...activeState,
-      stepIndex: nextIndex,
-    };
-    const targetUrl = stepPageUrl(steps[nextIndex]);
-
-    persistState(nextState);
-
-    if (needsNavigation(targetUrl)) {
-      requestStepPage(targetUrl);
-    }
-  }
-
   function handlePrevious() {
     if (!activeState || activeState.stepIndex <= 0) {
       return;
     }
 
-    goToStep(activeState.stepIndex - 1);
+    const destinationIndex = activeState.stepIndex - 1;
+    const destinationStep = getSteps()[destinationIndex];
+    const destinationStepNumber = destinationStep?.step_number ?? destinationIndex + 1;
+
+    // Retreat: discard the step being left (e.g. 8) and reopen the destination
+    // (e.g. 7) so completion keeps one timing row per step on the final path.
+    abandonCurrentStep();
+    retractPathToStep(destinationStepNumber);
+    detachStepListener();
+    removeHighlight();
+
+    persistState({
+      ...activeState,
+      stepIndex: destinationIndex,
+    });
+
+    const targetUrl = stepPageUrl(destinationStep);
+    if (needsNavigation(targetUrl)) {
+      requestStepPage(targetUrl);
+    }
   }
 
   function handleNext() {
@@ -880,7 +919,21 @@
       return;
     }
 
-    goToStep(activeState.stepIndex + 1);
+    const nextIndex = activeState.stepIndex + 1;
+
+    leaveCurrentStep();
+    detachStepListener();
+    removeHighlight();
+
+    persistState({
+      ...activeState,
+      stepIndex: nextIndex,
+    });
+
+    const targetUrl = stepPageUrl(steps[nextIndex]);
+    if (needsNavigation(targetUrl)) {
+      requestStepPage(targetUrl);
+    }
   }
 
   function handleFinish() {

@@ -111,7 +111,7 @@ def _resolve_step_metadata(
     screenshot_url = None
     screenshot_highlight = None
     expected_action = None
-    page_url = None
+    expected_url = None
 
     priority = {
         models.EventType.click.value: 1,
@@ -135,11 +135,6 @@ def _resolve_step_metadata(
             if label:
                 target_label = label.strip()
 
-        if page_url is None:
-            raw_url = getattr(event, "url", None)
-            if isinstance(raw_url, str) and raw_url.strip():
-                page_url = raw_url.strip()
-
         if screenshot_url is None:
             screenshot_id = getattr(event, "screenshot_id", None)
             if screenshot_id is not None:
@@ -152,6 +147,15 @@ def _resolve_step_metadata(
 
         if screenshot_highlight is None:
             screenshot_highlight = _extract_screenshot_highlight(getattr(event, "attrs", None))
+
+        # Record the first page URL associated with this step so the
+        # walkthrough runtime can distinguish selector misses from
+        # genuine navigation to the wrong page, and so web launch can
+        # open the correct start/target page.
+        if expected_url is None:
+            raw_url = getattr(event, "url", None)
+            if isinstance(raw_url, str) and raw_url.strip():
+                expected_url = raw_url.strip()
 
         event_type = getattr(event, "type", None)
         current_priority = priority.get(event_type, 0)
@@ -167,9 +171,9 @@ def _resolve_step_metadata(
             css_selector
             and xpath
             and target_label
-            and page_url
             and screenshot_url
             and screenshot_highlight
+            and expected_url
             and best_priority == submit_priority
         ):
             break
@@ -181,7 +185,7 @@ def _resolve_step_metadata(
         screenshot_url,
         screenshot_highlight,
         expected_action,
-        page_url,
+        expected_url,
     )
 
 
@@ -241,7 +245,7 @@ def build_walkthrough_payload(sop: models.Sop, db: DBSession) -> WalkthroughPayl
             screenshot_url,
             screenshot_highlight,
             expected_action,
-            page_url,
+            expected_url,
         ) = _resolve_step_metadata(
             source_event_ids,
             sop.session_id,
@@ -275,12 +279,12 @@ def build_walkthrough_payload(sop: models.Sop, db: DBSession) -> WalkthroughPayl
                 css_selector=css_selector,
                 xpath=xpath,
                 target_label=target_label,
-                page_url=page_url,
                 screenshot_url=screenshot_url,
                 time_estimate=time_estimate,
                 screenshot_highlight=screenshot_highlight,
                 anchor_mode=anchor_mode,
                 expected_action=expected_action,
+                expected_url=expected_url,
             )
         )
 
