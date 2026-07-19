@@ -54,7 +54,7 @@ function getRecordingStatus(error: string | null = null): RecordingStatus {
  *
  * In dev mode, electron-vite launches Electron as `electron.exe .`
  * (it loads the project directory, then internally requires
- * out/main/index.js) — so process.argv[1] is just "." and is NOT
+ * out/main/index.js) - so process.argv[1] is just "." and is NOT
  * a usable entry path for protocol registration.
  *
  * __dirname, on the other hand, always points to the directory this
