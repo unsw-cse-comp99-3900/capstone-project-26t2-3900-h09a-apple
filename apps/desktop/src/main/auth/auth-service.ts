@@ -1,9 +1,4 @@
-import {
-  clearTokens,
-  loadTokens,
-  saveTokens,
-  type StoredAuthTokens,
-} from './token-store';
+import { clearTokens, loadTokens, saveTokens, type StoredAuthTokens } from './token-store';
 
 const API_BASE_URL = __API_BASE_URL__;
 if (!API_BASE_URL) {
@@ -59,9 +54,7 @@ export async function redeemHandoffCode(code: string): Promise<void> {
 /**
  * Refresh the current access token using the stored refresh token.
  */
-async function refreshAccessToken(
-  refreshToken: string,
-): Promise<string> {
+async function refreshAccessToken(refreshToken: string): Promise<string> {
   const response = await fetch(apiUrl('/api/v1/auth/refresh'), {
     method: 'POST',
     headers: {
@@ -99,10 +92,7 @@ async function refreshAccessToken(
  * If the request receives a 401 response, one silent refresh is attempted
  * before retrying the request once.
  */
-export async function authenticatedFetch(
-  path: string,
-  init: RequestInit = {},
-): Promise<Response> {
+export async function authenticatedFetch(path: string, init: RequestInit = {}): Promise<Response> {
   const tokens = loadTokens();
 
   if (!tokens) {
@@ -111,29 +101,21 @@ export async function authenticatedFetch(
 
   const headers = new Headers(init.headers);
 
-  headers.set(
-    'Authorization',
-    `Bearer ${tokens.accessToken}`,
-  );
+  headers.set('Authorization', `Bearer ${tokens.accessToken}`);
 
   let response = await fetch(apiUrl(path), {
     ...init,
     headers,
   });
 
-  if ((response.status !== 401 || !tokens.refreshToken)) {
+  if (response.status !== 401 || !tokens.refreshToken) {
     return response;
   }
 
   try {
-    const nextAccessToken = await refreshAccessToken(
-      tokens.refreshToken,
-    );
+    const nextAccessToken = await refreshAccessToken(tokens.refreshToken);
 
-    headers.set(
-      'Authorization',
-      `Bearer ${nextAccessToken}`,
-    );
+    headers.set('Authorization', `Bearer ${nextAccessToken}`);
 
     response = await fetch(apiUrl(path), {
       ...init,

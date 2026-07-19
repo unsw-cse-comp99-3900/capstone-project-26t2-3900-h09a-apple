@@ -32,6 +32,7 @@ export class RecordingService {
       const sessionId = this.sessionStore.startSession();
       this.state = 'recording';
       uIOhook.start();
+      console.log(`[desktop] Global recording started (session ${sessionId})`);
     } catch (error) {
       this.state = 'error';
 
@@ -72,9 +73,11 @@ export class RecordingService {
         if (this.sessionStore.hasActiveSession()) {
           const completedSession = this.sessionStore.completeSession();
           artifactPath = completedSession.artifactPath;
+          console.log(`[desktop] Session saved: ${artifactPath}`);
         }
 
         this.state = 'idle';
+        console.log(`[desktop] Global recording stopped (${this.eventCount} events)`);
       } catch (error) {
         this.state = 'error';
         console.error('[desktop] Failed to finalize the recording session:', error);
@@ -161,6 +164,7 @@ export class RecordingService {
       });
 
       this.eventCount += 1;
+      console.log(JSON.stringify(event));
     } catch (error) {
       this.state = 'error';
       console.error('[desktop] Failed to persist captured event:', error);

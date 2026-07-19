@@ -1,9 +1,5 @@
 import { authenticatedFetch, getCurrentAuth } from '../auth/auth-service';
-import {
-  clearConsent,
-  CONSENT_TERMS_VERSION,
-  saveConsent,
-} from './consent-store';
+import { clearConsent, CONSENT_TERMS_VERSION, saveConsent } from './consent-store';
 
 export const CONSENT_TYPE = 'recording';
 
@@ -22,9 +18,7 @@ export interface ConsentAcceptResponse {
  */
 export async function fetchConsentStatus(): Promise<ConsentStatusResponse> {
   const response = await authenticatedFetch(
-    `/api/v1/consent/status?consent_type=${encodeURIComponent(
-      CONSENT_TYPE,
-    )}`,
+    `/api/v1/consent/status?consent_type=${encodeURIComponent(CONSENT_TYPE)}`,
   );
 
   if (!response.ok) {

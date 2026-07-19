@@ -17,6 +17,5 @@ export async function pingDesktop(): Promise<boolean> {
 }
 
 export function launchDesktopHandoff(code: string): void {
-    window.location.href =
-        `worktrace://auth-callback?code=${encodeURIComponent(code)}`;
+  window.location.href = `worktrace://auth-callback?code=${encodeURIComponent(code)}`;
 }

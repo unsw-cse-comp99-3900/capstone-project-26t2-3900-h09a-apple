@@ -82,9 +82,7 @@ if (!gotSingleInstanceLock) {
     console.log('second-instance fired');
     console.log(commandLine);
 
-    const protocolUrl = commandLine.find((arg) =>
-      arg.startsWith('worktrace://'),
-    );
+    const protocolUrl = commandLine.find((arg) => arg.startsWith('worktrace://'));
 
     console.log('protocolUrl:', protocolUrl);
 
@@ -174,14 +172,12 @@ if (!gotSingleInstanceLock) {
     }
   });
 
-  ipcMain.handle("auth:logout", async () => {
-
+  ipcMain.handle('auth:logout', async () => {
     logout();
 
     return {
       ok: true,
     };
-
   });
 
   ipcMain.handle('consent:get-status', async () => {
@@ -274,9 +270,7 @@ if (!gotSingleInstanceLock) {
     registerProtocolClient();
     startHandoffServer();
 
-    const protocolUrl = process.argv.find((arg) =>
-      arg.startsWith('worktrace://'),
-    );
+    const protocolUrl = process.argv.find((arg) => arg.startsWith('worktrace://'));
 
     if (protocolUrl) {
       try {

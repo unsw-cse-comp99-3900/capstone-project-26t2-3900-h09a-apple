@@ -1,11 +1,5 @@
-import {
-  pingExtension,
-  postExtensionHandoff,
-} from '@/lib/extension-bridge';
-import {
-  pingDesktop,
-  launchDesktopHandoff,
-} from '@/lib/desktop-bridge';
+import { pingExtension, postExtensionHandoff } from '@/lib/extension-bridge';
+import { pingDesktop, launchDesktopHandoff } from '@/lib/desktop-bridge';
 
 type HandoffResponse = {
   code?: string;
@@ -13,10 +7,7 @@ type HandoffResponse = {
 
 export async function broadcastExtensionHandoff(): Promise<void> {
   // Check which clients are available before requesting a handoff code.
-  const [extensionPresent, desktopPresent] = await Promise.all([
-    pingExtension(),
-    pingDesktop(),
-  ]);
+  const [extensionPresent, desktopPresent] = await Promise.all([pingExtension(), pingDesktop()]);
 
   // Nothing is listening.
   if (!extensionPresent && !desktopPresent) {

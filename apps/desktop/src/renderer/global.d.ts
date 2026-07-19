@@ -21,7 +21,6 @@ interface ConsentAcceptResult {
   accepted: boolean;
 }
 
-
 interface DesktopAPI {
   platform: NodeJS.Platform;
   versions: {

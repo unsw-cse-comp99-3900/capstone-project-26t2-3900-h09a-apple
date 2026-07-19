@@ -1,10 +1,5 @@
 import { app } from 'electron';
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  writeFileSync,
-} from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 export const CONSENT_TERMS_VERSION = '2026-07-01';
@@ -36,11 +31,7 @@ function readStore(): ConsentStore {
 function writeStore(store: ConsentStore): void {
   mkdirSync(CONSENT_DIRECTORY, { recursive: true });
 
-  writeFileSync(
-    CONSENT_FILE,
-    JSON.stringify(store, null, 2),
-    'utf8',
-  );
+  writeFileSync(CONSENT_FILE, JSON.stringify(store, null, 2), 'utf8');
 }
 
 /**
@@ -55,10 +46,7 @@ export function loadConsent(userId: string): ConsentRecord | null {
 /**
  * Persists consent for the specified user.
  */
-export function saveConsent(
-  userId: string,
-  acceptedAt = new Date().toISOString(),
-): ConsentRecord {
+export function saveConsent(userId: string, acceptedAt = new Date().toISOString()): ConsentRecord {
   const store = readStore();
 
   const record: ConsentRecord = {
@@ -91,8 +79,5 @@ export function clearConsent(userId: string): void {
 export function hasCurrentConsent(userId: string): boolean {
   const consent = loadConsent(userId);
 
-  return (
-    consent?.accepted === true &&
-    consent.version === CONSENT_TERMS_VERSION
-  );
+  return consent?.accepted === true && consent.version === CONSENT_TERMS_VERSION;
 }

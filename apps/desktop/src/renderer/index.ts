@@ -235,8 +235,6 @@ void (async () => {
 window.setInterval(() => {
   if (!busy) {
     void refreshAuth();
-    void window.desktopAPI
-      .getRecordingStatus()
-      .then(renderStatus);
+    void window.desktopAPI.getRecordingStatus().then(renderStatus);
   }
 }, 500);
