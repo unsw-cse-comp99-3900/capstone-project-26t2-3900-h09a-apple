@@ -1,11 +1,23 @@
 type RecorderState = 'idle' | 'recording' | 'paused' | 'error';
 
+interface ReviewSessionData {
+  workflowName: string;
+  durationSeconds: number;
+  eventCount: number;
+}
+
 interface RecordingStatus {
   ok: boolean;
   state: RecorderState;
   eventCount: number;
   sessionPath: string | null;
   error: string | null;
+}
+
+interface SubmissionResult {
+  success: boolean;
+  sessionId?: string;
+  jobId?: string;
 }
 
 interface AuthStatus {
@@ -40,7 +52,9 @@ interface DesktopAPI {
   getRecordingStatus(): Promise<RecordingStatus>;
   startRecording(): Promise<RecordingStatus>;
   stopRecording(): Promise<RecordingStatus>;
+  getReviewSession(): Promise<ReviewSessionData>;
   reviewSession(): Promise<RecordingStatus>;
+  submitSession(): Promise<SubmissionResult>;
 
   // Window
   setWindowMode(mode: 'compact' | 'expanded'): Promise<'compact' | 'expanded'>;

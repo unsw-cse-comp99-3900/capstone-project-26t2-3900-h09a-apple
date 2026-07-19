@@ -28,6 +28,12 @@ const logoutButton = requireElement<HTMLButtonElement>('logout-button');
 const consentOverlay = requireElement<HTMLDivElement>('consent-overlay');
 const consentAcceptButton = requireElement<HTMLButtonElement>('consent-accept');
 const consentDeclineButton = requireElement<HTMLButtonElement>('consent-decline');
+const reviewModal = requireElement<HTMLDivElement>('review-modal');
+const workflowText = requireElement<HTMLSpanElement>('review-workflow');
+const durationText = requireElement<HTMLSpanElement>('review-duration');
+const eventsText = requireElement<HTMLSpanElement>('review-events');
+const submitButton = requireElement<HTMLButtonElement>('submit-session-button');
+const cancelButton = requireElement<HTMLButtonElement>('cancel-review-button');
 
 let busy = false;
 let dragPointerId: number | null = null;
@@ -129,8 +135,34 @@ stopButton.addEventListener('click', () => {
   void runAction(() => window.desktopAPI.stopRecording());
 });
 
-reviewButton.addEventListener('click', () => {
-  void runAction(() => window.desktopAPI.reviewSession());
+reviewButton.addEventListener("click", async () => {
+  const review = await window.desktopAPI.getReviewSession();
+
+  workflowText.textContent = review.workflowName;
+
+  durationText.textContent = `${review.durationSeconds}s`;
+
+  eventsText.textContent = String(review.eventCount);
+
+  reviewModal.hidden = false;
+});
+
+cancelButton.addEventListener("click", () => {
+  reviewModal.hidden = true;
+});
+
+submitButton.addEventListener("click", async () => {
+  try {
+    await window.desktopAPI.submitSession();
+    reviewModal.hidden = true;
+    alert("Session submitted successfully.");
+  } catch (error) {
+    alert(
+      error instanceof Error
+        ? error.message
+        : String(error),
+    );
+  }
 });
 
 floatingOrbShell.addEventListener('pointerdown', (event) => {

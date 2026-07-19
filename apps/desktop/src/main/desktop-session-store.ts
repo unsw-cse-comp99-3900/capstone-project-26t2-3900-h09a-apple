@@ -1,5 +1,6 @@
 import {
   assembleSessionFromRows,
+  deleteSession,
   getSessionWithEvents,
   openLocalBuffer,
   saveEvent,
@@ -9,6 +10,7 @@ import {
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
+import { rm } from 'node:fs/promises';
 
 export interface DesktopEventInput {
   category: 'mouse' | 'keyboard';
@@ -132,6 +134,18 @@ export class DesktopSessionStore {
       sessionDirectory: session.directory,
       artifactPath,
     };
+  }
+
+  async deleteCompletedSession(
+    sessionId: string,
+    sessionDirectory: string,
+  ): Promise<void> {
+    deleteSession(this.db, sessionId);
+
+    await rm(sessionDirectory, {
+      recursive: true,
+      force: true,
+    });
   }
 
   hasActiveSession(): boolean {

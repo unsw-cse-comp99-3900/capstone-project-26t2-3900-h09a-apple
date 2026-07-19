@@ -502,6 +502,32 @@ body[data-state='error'] .status-dot {
   transform: translate(-50%, -50%);
 }
 
+#review-modal:not([hidden]) {
+  position: absolute;
+  inset: 0;
+
+  display: flex;
+  justify-content: center;
+  align-items: center;
+
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.review-card {
+  width: 320px;
+  padding: 20px;
+  border-radius: 12px;
+  background: white;
+  color: #222;
+}
+
+.review-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 20px;
+}
+
 .session-result {
   display: flex;
   align-items: center;

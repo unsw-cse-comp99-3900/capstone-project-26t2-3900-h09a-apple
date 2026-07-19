@@ -9,11 +9,14 @@ import { startHandoffServer, stopHandoffServer } from './auth/handoff-server';
 import { hasCurrentConsent, saveConsent } from './consent/consent-store';
 import { postConsentAccept } from './consent/consent-service';
 import { logout } from './auth/auth-service';
+import { submitSession } from './session/submission-service';
+import { readFile } from 'node:fs/promises';
+import type { CompletedLocalSession } from './desktop-session-store';
 
 let sessionStore: DesktopSessionStore | undefined;
 let recordingService: RecordingService | undefined;
 let recorderWindow: BrowserWindow | undefined;
-let lastSessionPath: string | null = null;
+let lastCompletedSession: CompletedLocalSession | null = null;
 let windowDragState:
   | {
       startCursor: { x: number; y: number };
@@ -41,7 +44,7 @@ function getRecordingStatus(error: string | null = null): RecordingStatus {
     ok: error === null,
     state: recordingService?.getState() ?? 'idle',
     eventCount: recordingService?.getEventCount() ?? 0,
-    sessionPath: lastSessionPath,
+    sessionPath: lastCompletedSession?.artifactPath ?? null,
     error,
   };
 }
@@ -101,46 +104,6 @@ if (!gotSingleInstanceLock) {
     }
   });
 
-  ipcMain.handle('recording:get-status', () => getRecordingStatus());
-
-  ipcMain.handle('recording:start', () => {
-    try {
-      if (!recordingService) {
-        throw new Error('The recording service is not ready');
-      }
-
-      lastSessionPath = null;
-      recordingService.start();
-      return getRecordingStatus();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      return getRecordingStatus(message);
-    }
-  });
-
-  ipcMain.handle('recording:stop', () => {
-    try {
-      if (!recordingService) {
-        throw new Error('The recording service is not ready');
-      }
-
-      lastSessionPath = recordingService.stop();
-      return getRecordingStatus();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      return getRecordingStatus(message);
-    }
-  });
-
-  ipcMain.handle('recording:review', async () => {
-    if (!lastSessionPath) {
-      return getRecordingStatus('Complete a recording before reviewing a session');
-    }
-
-    const error = await shell.openPath(lastSessionPath);
-    return getRecordingStatus(error || null);
-  });
-
   ipcMain.handle('auth:launch-handoff', async () => {
     try {
       await launchHandoff();
@@ -178,6 +141,85 @@ if (!gotSingleInstanceLock) {
     return {
       ok: true,
     };
+  });
+
+  ipcMain.handle('recording:get-status', () => getRecordingStatus());
+
+  ipcMain.handle('recording:start', () => {
+    try {
+      if (!recordingService) {
+        throw new Error('The recording service is not ready');
+      }
+
+      lastCompletedSession = null;
+      recordingService.start();
+      return getRecordingStatus();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return getRecordingStatus(message);
+    }
+  });
+
+  ipcMain.handle('recording:stop', () => {
+    try {
+      if (!recordingService) {
+        throw new Error('The recording service is not ready');
+      }
+
+      lastCompletedSession = recordingService.stop();
+      return getRecordingStatus();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return getRecordingStatus(message);
+    }
+  });
+
+  ipcMain.handle('recording:get-review', async () => {
+    if (!lastCompletedSession) {
+      throw new Error('No completed recording session available');
+    }
+
+    const content = await readFile(lastCompletedSession.artifactPath, 'utf8');
+    const session = JSON.parse(content);
+
+    const started = new Date(session.started_at).getTime();
+    const stopped = new Date(session.stopped_at).getTime();
+
+    return {
+      workflowName: session.workflow_name,
+      durationSeconds: Math.max(0, Math.round((stopped - started) / 1000)),
+      eventCount: session.events.length,
+    };
+  });
+
+  ipcMain.handle('recording:review', async () => {
+    if (!lastCompletedSession) {
+      return getRecordingStatus('Complete a recording before reviewing a session');
+    }
+
+    const error = await shell.openPath(lastCompletedSession.artifactPath);
+    return getRecordingStatus(error || null);
+  });
+
+  ipcMain.handle('recording:submit', async () => {
+    if (!lastCompletedSession) {
+      throw new Error('No completed recording session available');
+    }
+
+    const result = await submitSession(
+      lastCompletedSession.artifactPath,
+    );
+
+    if (result.success && sessionStore) {
+      await sessionStore.deleteCompletedSession(
+        lastCompletedSession.sessionId,
+        lastCompletedSession.sessionDirectory,
+      );
+
+      lastCompletedSession = null;
+    }
+
+    return result;
   });
 
   ipcMain.handle('consent:get-status', async () => {

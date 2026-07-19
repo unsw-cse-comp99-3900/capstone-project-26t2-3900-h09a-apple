@@ -19,7 +19,9 @@ contextBridge.exposeInMainWorld('desktopAPI', {
   getRecordingStatus: () => ipcRenderer.invoke('recording:get-status'),
   startRecording: () => ipcRenderer.invoke('recording:start'),
   stopRecording: () => ipcRenderer.invoke('recording:stop'),
+  getReviewSession: () => ipcRenderer.invoke('recording:get-review'),
   reviewSession: () => ipcRenderer.invoke('recording:review'),
+  submitSession: () => ipcRenderer.invoke('recording:submit'),
 
   // Window
   setWindowMode: (mode: 'compact' | 'expanded') => ipcRenderer.invoke('window:set-mode', mode),

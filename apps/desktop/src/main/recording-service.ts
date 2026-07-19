@@ -1,6 +1,9 @@
 import activeWindow from 'active-win';
 import { uIOhook } from 'uiohook-napi';
-import { DesktopSessionStore } from './desktop-session-store';
+import {
+  DesktopSessionStore,
+  type CompletedLocalSession,
+} from './desktop-session-store';
 
 export type RecorderState = 'idle' | 'recording' | 'paused' | 'error';
 
@@ -61,30 +64,36 @@ export class RecordingService {
     this.state = 'recording';
   }
 
-  stop(): string | null {
+  stop(): CompletedLocalSession | null {
     if (this.state === 'idle') return null;
-
-    let artifactPath: string | null = null;
+    let completedSession: CompletedLocalSession | null = null;
 
     try {
       uIOhook.stop();
     } finally {
       try {
         if (this.sessionStore.hasActiveSession()) {
-          const completedSession = this.sessionStore.completeSession();
-          artifactPath = completedSession.artifactPath;
-          console.log(`[desktop] Session saved: ${artifactPath}`);
+          completedSession = this.sessionStore.completeSession();
+
+          console.log(
+            `[desktop] Session saved: ${completedSession.artifactPath}`,
+          );
         }
 
         this.state = 'idle';
-        console.log(`[desktop] Global recording stopped (${this.eventCount} events)`);
+        console.log(
+          `[desktop] Global recording stopped (${this.eventCount} events)`,
+        );
       } catch (error) {
         this.state = 'error';
-        console.error('[desktop] Failed to finalize the recording session:', error);
+        console.error(
+          '[desktop] Failed to finalize the recording session:',
+          error,
+        );
       }
     }
 
-    return artifactPath;
+    return completedSession;
   }
 
   getState(): RecorderState {
