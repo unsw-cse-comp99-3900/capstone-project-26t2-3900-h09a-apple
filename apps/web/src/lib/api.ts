@@ -1,10 +1,17 @@
 import type {
+  ConsentAcceptRequest,
+  ConsentAcceptResponse,
+  ConsentStatusResponse,
+  ConsentType,
   HealthResponse,
   SessionCreateResponse,
   SessionStatusResponse,
   SessionUploadPayload,
   SopDetailPayload,
+  SopListResponse,
 } from '@h09a/types';
+
+import { silentRefreshAccessToken } from '@/lib/auth/session-refresh';
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000';
 
@@ -63,10 +70,19 @@ async function errorMessage(res: Response, fallback: string): Promise<string> {
 }
 
 async function authedFetch(path: string, init?: RequestInit): Promise<Response> {
-  const response = await fetch(proxyUrl(path), {
+  const requestInit: RequestInit = {
     ...init,
     cache: 'no-store',
-  });
+  };
+
+  let response = await fetch(proxyUrl(path), requestInit);
+
+  if (response.status === 401) {
+    const refreshed = await silentRefreshAccessToken();
+    if (refreshed.ok) {
+      response = await fetch(proxyUrl(path), requestInit);
+    }
+  }
 
   if (response.status === 401) {
     redirectToLogin();
@@ -125,6 +141,54 @@ export async function getSop(sopId: string): Promise<SopDetailPayload> {
 
   if (!res.ok) {
     throw new ApiError(await errorMessage(res, 'Failed to load SOP'), res.status);
+  }
+
+  return res.json();
+}
+
+export async function getPublishedSops(): Promise<SopListResponse> {
+  const res = await authedFetch('/api/v1/sops?status=published');
+
+  if (!res.ok) {
+    throw new ApiError(await errorMessage(res, 'Failed to load SOP library'), res.status);
+  }
+
+  return res.json();
+}
+
+export async function getMyDrafts(): Promise<SopListResponse> {
+  const res = await authedFetch('/api/v1/sops?mine=true');
+
+  if (!res.ok) {
+    throw new ApiError(await errorMessage(res, 'Failed to load draft SOPs'), res.status);
+  }
+
+  return res.json();
+}
+
+export async function getConsentStatus(consentType: ConsentType): Promise<ConsentStatusResponse> {
+  const res = await authedFetch(
+    `/api/v1/consent/status?consent_type=${encodeURIComponent(consentType)}`,
+  );
+
+  if (!res.ok) {
+    throw new ApiError(await errorMessage(res, 'Failed to load consent status'), res.status);
+  }
+
+  return res.json();
+}
+
+export async function acceptConsent(payload: ConsentAcceptRequest): Promise<ConsentAcceptResponse> {
+  const res = await authedFetch('/api/v1/consent/accept', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    throw new ApiError(await errorMessage(res, 'Failed to record consent'), res.status);
   }
 
   return res.json();

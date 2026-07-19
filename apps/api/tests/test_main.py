@@ -12,7 +12,7 @@ from app.auth.deps import get_current_user
 from app.database import get_db
 from app.llm_provider import LlmProviderResult
 from app.main import app
-from app.models import UserRole
+from app.models import SopStatus, UserRole
 from app.sop_schema import SopPayload, SopStep
 from app.storage import get_storage
 
@@ -287,27 +287,48 @@ class FakeDbWithSession(FakeDb):
         self._event_ids_filter = None
 
         self.current_model = None
+        self._recorded_by_filter = None
+        self._status_filter = None
+        self._status_not_filter = None
 
     def query(self, model):
         self.current_model = model
         self._tenant_id_filter = None
         self._session_id_filter = None
         self._event_ids_filter = None
+        self._recorded_by_filter = None
+        self._status_filter = None
+        self._status_not_filter = None
         return self
 
     def filter(self, *args):
         for criterion in args:
             left = getattr(criterion, "left", None)
             right = getattr(criterion, "right", None)
+            operator = getattr(criterion, "operator", None)
+
             if left is not None and getattr(left, "key", None) == "tenant_id":
                 self._tenant_id_filter = getattr(right, "value", right)
+
             if left is not None and getattr(left, "key", None) == "session_id":
                 self._session_id_filter = getattr(right, "value", right)
-            operator = getattr(criterion, "operator", None)
+
             if operator is not None and operator.__name__ == "in_op":
                 values = getattr(right, "value", right)
                 if values is not None:
                     self._event_ids_filter = set(values)
+
+            if left is not None and getattr(left, "key", None) == "recorded_by":
+                self._recorded_by_filter = getattr(right, "value", right)
+
+            if left is not None and getattr(left, "key", None) == "status":
+                value = getattr(right, "value", right)
+
+                if operator is not None and operator.__name__ == "eq":
+                    self._status_filter = value
+                elif operator is not None and operator.__name__ == "ne":
+                    self._status_not_filter = value
+
         return self
 
     def order_by(self, *args):
@@ -370,7 +391,23 @@ class FakeDbWithSession(FakeDb):
             return events
 
         if self.current_model == main_module.models.Sop:
-            return self.sops
+            sops = self.sops
+
+            # Fake join(Session): store recorded_by on the fake SOP object for filtering.
+            if self._recorded_by_filter is not None:
+                sops = [
+                    sop
+                    for sop in sops
+                    if getattr(sop, "recorded_by", None) == self._recorded_by_filter
+                ]
+
+            if self._status_filter is not None:
+                sops = [sop for sop in sops if sop.status == self._status_filter]
+
+            if self._status_not_filter is not None:
+                sops = [sop for sop in sops if sop.status != self._status_not_filter]
+
+            return sops
 
         return []
 
@@ -554,6 +591,7 @@ def test_get_sop_returns_200():
         title="Login Flow",
         version=1,
         generated_at=datetime.now(UTC),
+        status=SopStatus.draft,
         steps=[
             {
                 "order": 1,
@@ -601,6 +639,17 @@ def test_get_sop_returns_signed_screenshot_url():
         seq=1,
         session_id=WALKTHROUGH_SESSION_ID,
         screenshot_id=UUID("22222222-2222-2222-2222-222222222222"),
+        timestamp_ms=1_000,
+        attrs={
+            "target_rect": {
+                "x": 10,
+                "y": 20,
+                "width": 120,
+                "height": 40,
+                "viewport_width": 1440,
+                "viewport_height": 900,
+            },
+        },
     )
 
     fake_screenshot = SimpleNamespace(
@@ -615,12 +664,14 @@ def test_get_sop_returns_signed_screenshot_url():
         title="Login Flow",
         version=1,
         generated_at=datetime.now(UTC),
+        status=SopStatus.draft,
         steps=[
             {
                 "order": 1,
                 "title": "Login",
                 "instruction": "Click Login",
                 "source_event_ids": ["1"],
+                "time_estimate": 1_624,
             }
         ],
         warnings=[],
@@ -642,7 +693,15 @@ def test_get_sop_returns_signed_screenshot_url():
         body = response.json()
 
         assert body["steps"][0]["screenshot_url"] == "https://signed.example/screenshots/login.png"
-
+        assert body["steps"][0]["screenshot_highlight"] == {
+            "x": 10,
+            "y": 20,
+            "width": 120,
+            "height": 40,
+            "viewport_width": 1440,
+            "viewport_height": 900,
+        }
+        assert body["steps"][0]["time_estimate"] == 5
     finally:
         app.dependency_overrides[get_db] = override_get_db
 
@@ -753,12 +812,16 @@ def test_get_session_cross_tenant_returns_404():
         app.dependency_overrides[get_db] = override_get_db
 
 
-def test_publish_sop_success():
+def test_publish_sop_success(monkeypatch):
+    monkeypatch.setattr(main_module, "process_embed_job", lambda *_args, **_kwargs: None)
     fake_sop = SimpleNamespace(
-        id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        id=UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+        session_id=UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
         status=main_module.models.SopStatus.approved.value,
         published_at=None,
         tenant_id=DEFAULT_TENANT_ID,
+        embedding_status=None,
+        steps=[{"order": 1, "title": "A", "instruction": "Do A", "source_event_ids": []}],
     )
     db = FakeDbWithSession(existing_sop=fake_sop)
     db.refresh = lambda obj: None
@@ -774,20 +837,30 @@ def test_publish_sop_success():
         assert body["status"] == "published"
         assert body["published_at"] is not None
         assert body["library_url"] == "/library/sops/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+        assert body["embedding_status"] == "pending"
         assert db.committed is True
         assert fake_sop.status == main_module.models.SopStatus.published.value
         assert fake_sop.published_at is not None
+        assert fake_sop.embedding_status == "pending"
+        assert any(
+            isinstance(item, main_module.models.CodificationJob) and item.job_type == "embed"
+            for item in db.added
+        )
     finally:
         app.dependency_overrides[get_db] = override_get_db
         app.dependency_overrides.pop(get_current_user, None)
 
 
-def test_manager_publish_sop_returns_200():
+def test_manager_publish_sop_returns_200(monkeypatch):
+    monkeypatch.setattr(main_module, "process_embed_job", lambda *_args, **_kwargs: None)
     fake_sop = SimpleNamespace(
-        id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        id=UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+        session_id=UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
         status=main_module.models.SopStatus.approved.value,
         published_at=None,
         tenant_id=DEFAULT_TENANT_ID,
+        embedding_status=None,
+        steps=[],
     )
     db = FakeDbWithSession(existing_sop=fake_sop)
     db.refresh = lambda obj: None
@@ -807,10 +880,13 @@ def test_manager_publish_sop_returns_200():
 
 def test_employee_publish_sop_returns_403():
     fake_sop = SimpleNamespace(
-        id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        id=UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+        session_id=UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
         status=main_module.models.SopStatus.approved.value,
         published_at=None,
         tenant_id=DEFAULT_TENANT_ID,
+        embedding_status=None,
+        steps=[],
     )
     db = FakeDbWithSession(existing_sop=fake_sop)
     app.dependency_overrides[get_db] = lambda: db
@@ -832,10 +908,13 @@ def test_employee_publish_sop_returns_403():
         (None, 404, "SOP not found"),
         (
             SimpleNamespace(
-                id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+                id=UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+                session_id=UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
                 status=main_module.models.SopStatus.draft.value,
                 published_at=None,
                 tenant_id=DEFAULT_TENANT_ID,
+                embedding_status=None,
+                steps=[],
             ),
             422,
             "SOP must be approved before publishing",
@@ -852,6 +931,34 @@ def test_publish_sop_errors(existing_sop, expected_status, expected_detail):
         assert response.status_code == expected_status
         assert response.json()["detail"] == expected_detail
         assert db.committed is False
+    finally:
+        app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+def test_embed_sop_manual_trigger(monkeypatch):
+    monkeypatch.setattr(main_module, "process_embed_job", lambda *_args, **_kwargs: None)
+    fake_sop = SimpleNamespace(
+        id=UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+        session_id=UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
+        status=main_module.models.SopStatus.published.value,
+        published_at=None,
+        tenant_id=DEFAULT_TENANT_ID,
+        embedding_status=None,
+        steps=[{"order": 1, "title": "A", "instruction": "Do A", "source_event_ids": []}],
+    )
+    db = FakeDbWithSession(existing_sop=fake_sop)
+    app.dependency_overrides[get_db] = lambda: db
+    app.dependency_overrides[get_current_user] = lambda: _make_user(role=UserRole.reviewer)
+
+    try:
+        response = client.post("/api/v1/sops/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/embed")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["id"] == "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+        assert body["embedding_status"] == "pending"
+        assert body["job_id"]
+        assert fake_sop.embedding_status == "pending"
     finally:
         app.dependency_overrides[get_db] = override_get_db
         app.dependency_overrides.pop(get_current_user, None)
@@ -877,6 +984,7 @@ def test_list_published_sops():
         assert body["sops"][0]["id"] == fake_sop.id
         assert body["sops"][0]["title"] == "Login Flow"
         assert body["sops"][0]["step_count"] == 2
+        assert body["sops"][0]["status"] == main_module.models.SopStatus.published.value
     finally:
         app.dependency_overrides[get_db] = override_get_db
 
@@ -902,6 +1010,67 @@ def test_list_sops_requires_authentication():
         assert response.status_code == 401
     finally:
         app.dependency_overrides[get_db] = override_get_db
+
+
+def test_list_my_draft_sops():
+    current_user = _make_user()
+
+    my_draft = SimpleNamespace(
+        id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        title="My Draft SOP",
+        status=main_module.models.SopStatus.draft.value,
+        published_at=None,
+        tenant_id=DEFAULT_TENANT_ID,
+        steps=[{}],
+        recorded_by=current_user.id,
+    )
+
+    other_users_draft = SimpleNamespace(
+        id="bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+        title="Other User Draft",
+        status=main_module.models.SopStatus.draft.value,
+        published_at=None,
+        tenant_id=DEFAULT_TENANT_ID,
+        steps=[{}],
+        recorded_by=UUID("99999999-9999-9999-9999-999999999999"),
+    )
+
+    my_published = SimpleNamespace(
+        id="cccccccc-cccc-cccc-cccc-cccccccccccc",
+        title="Published SOP",
+        status=main_module.models.SopStatus.published.value,
+        published_at=datetime.now(UTC),
+        tenant_id=DEFAULT_TENANT_ID,
+        steps=[{}],
+        recorded_by=current_user.id,
+    )
+
+    db = FakeDbWithSession(
+        sops=[
+            my_draft,
+            other_users_draft,
+            my_published,
+        ]
+    )
+
+    app.dependency_overrides[get_db] = lambda: db
+    app.dependency_overrides[get_current_user] = lambda: current_user
+
+    try:
+        response = client.get("/api/v1/sops?mine=true")
+
+        assert response.status_code == 200
+
+        body = response.json()
+
+        assert len(body["sops"]) == 1
+        assert body["sops"][0]["id"] == my_draft.id
+        assert body["sops"][0]["title"] == "My Draft SOP"
+        assert body["sops"][0]["status"] == main_module.models.SopStatus.draft.value
+        assert body["sops"][0]["step_count"] == 1
+    finally:
+        app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_current_user] = lambda: _make_user()
 
 
 def _walkthrough_sop(
@@ -987,6 +1156,7 @@ def test_get_sop_walkthrough_returns_payload_for_single_step():
         target_selector="#login-button",
         attrs={"xpath": "/html/body/button[1]"},
         screenshot_id=UUID("22222222-2222-2222-2222-222222222222"),
+        timestamp_ms=1_000,
     )
     fake_screenshot = SimpleNamespace(
         id=UUID("22222222-2222-2222-2222-222222222222"),
@@ -1022,7 +1192,13 @@ def test_get_sop_walkthrough_returns_payload_for_single_step():
             "instruction": "Click the login button.",
             "css_selector": "#login-button",
             "xpath": "/html/body/button[1]",
+            "target_label": None,
             "screenshot_url": "https://signed.example/screenshots/login.png",
+            "time_estimate": 5,
+            "screenshot_highlight": None,
+            "anchor_mode": "element",
+            "expected_action": None,
+            "expected_url": None,
         }
     finally:
         app.dependency_overrides[get_db] = override_get_db
@@ -1063,9 +1239,11 @@ def test_get_sop_walkthrough_returns_payload_for_25_steps():
         assert len(body["steps"]) == 25
         assert body["steps"][0]["step_number"] == 1
         assert body["steps"][0]["css_selector"] == "#step-1"
+        assert body["steps"][0]["anchor_mode"] == "element"
         assert body["steps"][24]["step_number"] == 25
         assert body["steps"][24]["instruction"] == "Perform action 25."
         assert body["steps"][24]["css_selector"] == "#step-25"
+        assert body["steps"][24]["anchor_mode"] == "element"
     finally:
         app.dependency_overrides[get_db] = override_get_db
 
@@ -1176,7 +1354,7 @@ def test_get_sop_walkthrough_returns_404_for_empty_steps():
         app.dependency_overrides[get_db] = override_get_db
 
 
-def test_get_sop_walkthrough_returns_422_when_step_has_no_selector():
+def test_get_sop_walkthrough_returns_none_anchor_when_step_has_no_selector_or_screenshot():
     fake_sop = _walkthrough_sop(
         steps=[
             {
@@ -1192,8 +1370,56 @@ def test_get_sop_walkthrough_returns_422_when_step_has_no_selector():
 
     try:
         response = client.get(f"/api/v1/sops/{WALKTHROUGH_SOP_ID}/walkthrough")
-        assert response.status_code == 422
-        assert "missing css_selector and xpath" in response.json()["detail"]
+        assert response.status_code == 200
+        step = response.json()["steps"][0]
+        assert step["css_selector"] is None
+        assert step["xpath"] is None
+        assert step["screenshot_url"] is None
+        assert step["anchor_mode"] == "none"
+    finally:
+        app.dependency_overrides[get_db] = override_get_db
+
+
+def test_get_sop_walkthrough_returns_screenshot_anchor_for_navigation_with_image():
+    fake_event = SimpleNamespace(
+        id=1,
+        seq=1,
+        session_id=WALKTHROUGH_SESSION_ID,
+        target_selector=None,
+        attrs={},
+        screenshot_id=UUID("22222222-2222-2222-2222-222222222222"),
+        timestamp_ms=1_000,
+    )
+    fake_screenshot = SimpleNamespace(
+        id=UUID("22222222-2222-2222-2222-222222222222"),
+        session_id=WALKTHROUGH_SESSION_ID,
+        object_key="screenshots/nav.png",
+    )
+    fake_sop = _walkthrough_sop(
+        steps=[
+            {
+                "order": 1,
+                "title": "Open page",
+                "instruction": "Open the home page.",
+                "source_event_ids": ["1"],
+            }
+        ],
+    )
+    db = FakeDbWithSession(
+        existing_sop=fake_sop,
+        events=[fake_event],
+        screenshot=fake_screenshot,
+    )
+    app.dependency_overrides[get_db] = lambda: db
+
+    try:
+        response = client.get(f"/api/v1/sops/{WALKTHROUGH_SOP_ID}/walkthrough")
+        assert response.status_code == 200
+        step = response.json()["steps"][0]
+        assert step["css_selector"] is None
+        assert step["xpath"] is None
+        assert step["screenshot_url"] == "https://signed.example/screenshots/nav.png"
+        assert step["anchor_mode"] == "screenshot"
     finally:
         app.dependency_overrides[get_db] = override_get_db
 
@@ -1290,6 +1516,7 @@ def test_get_sop_walkthrough_returns_xpath_only_step():
         body = response.json()
         assert body["steps"][0]["css_selector"] is None
         assert body["steps"][0]["xpath"] == "/html/body/main[1]"
+        assert body["steps"][0]["anchor_mode"] == "element"
     finally:
         app.dependency_overrides[get_db] = override_get_db
 

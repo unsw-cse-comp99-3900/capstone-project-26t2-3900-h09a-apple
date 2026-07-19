@@ -21,6 +21,17 @@ Use only the create_sop tool schema.
 Every step must reference the source event ids that support it.
 Do not invent source_event_ids.
 
+For each step, include time_estimate as an integer number of seconds.
+
+Estimate time_estimate only from the step's source events:
+- source event timestamps are in milliseconds since epoch.
+- Compute active time from consecutive source events.
+- Ignore idle gaps longer than 30 seconds.
+- If a step has only one source event, use 5 seconds.
+- If no reliable timestamp estimate can be inferred, use null.
+- Clamp each step's time_estimate to a maximum of 60 seconds.
+- Do not use total workflow duration as a step estimate.
+
 Session payload:
 {json.dumps(session_payload, default=str)}
 """

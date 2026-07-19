@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from math import ceil
+from typing import Literal
 from uuid import UUID
 
 from sqlalchemy.orm import Session as DBSession
@@ -9,6 +11,8 @@ from app.sop_schema import WalkthroughPayload, WalkthroughStep
 from app.storage import get_storage
 
 SIGNED_URL_EXPIRY_SECONDS = 60 * 60 * 24
+DEFAULT_STEP_ESTIMATE_SECONDS = 5
+MAX_EVENT_GAP_SECONDS = 30
 
 
 class WalkthroughDataError(Exception):
@@ -92,18 +96,44 @@ def _resolve_step_metadata(
     session_id: UUID,
     tenant_id: UUID,
     db: DBSession,
-) -> tuple[str | None, str | None, str | None]:
-    css_selector: str | None = None
-    xpath: str | None = None
-    screenshot_url: str | None = None
+) -> tuple[
+    str | None,
+    str | None,
+    str | None,
+    str | None,
+    dict | None,
+    Literal["click", "input", "submit"] | None,
+    str | None,
+]:
+    css_selector = None
+    xpath = None
+    target_label = None
+    screenshot_url = None
+    screenshot_highlight = None
+    expected_action = None
+    expected_url = None
+
+    priority = {
+        models.EventType.click.value: 1,
+        models.EventType.input.value: 2,
+        models.EventType.submit.value: 3,
+    }
+    submit_priority = priority[models.EventType.submit.value]
+    best_priority = 0
 
     for event in _load_ordered_events(source_event_ids, session_id, tenant_id, db):
         if css_selector is None:
             selector = getattr(event, "target_selector", None)
             if selector:
                 css_selector = selector
+
         if xpath is None:
             xpath = _xpath_from_attrs(getattr(event, "attrs", None))
+
+        if target_label is None:
+            label = getattr(event, "target_label", None)
+            if label:
+                target_label = label.strip()
 
         if screenshot_url is None:
             screenshot_id = getattr(event, "screenshot_id", None)
@@ -115,10 +145,47 @@ def _resolve_step_metadata(
                     db,
                 )
 
-        if css_selector and xpath and screenshot_url:
+        if screenshot_highlight is None:
+            screenshot_highlight = _extract_screenshot_highlight(getattr(event, "attrs", None))
+
+        # Record the first page URL associated with this step so the
+        # walkthrough runtime can distinguish selector misses from
+        # genuine navigation to the wrong page.
+        if expected_url is None:
+            url = getattr(event, "url", None)
+            if url:
+                expected_url = url
+
+        event_type = getattr(event, "type", None)
+        current_priority = priority.get(event_type, 0)
+
+        if current_priority > best_priority:
+            best_priority = current_priority
+            expected_action = event_type
+
+        # Once all metadata is available and we've already found the
+        # highest-priority action (submit), no later event can improve
+        # the result.
+        if (
+            css_selector
+            and xpath
+            and target_label
+            and screenshot_url
+            and screenshot_highlight
+            and expected_url
+            and best_priority == submit_priority
+        ):
             break
 
-    return css_selector, xpath, screenshot_url
+    return (
+        css_selector,
+        xpath,
+        target_label,
+        screenshot_url,
+        screenshot_highlight,
+        expected_action,
+        expected_url,
+    )
 
 
 def resolve_step_screenshot_url(
@@ -127,13 +194,30 @@ def resolve_step_screenshot_url(
     session_id: UUID,
     tenant_id: UUID,
 ) -> str | None:
-    _, _, screenshot_url = _resolve_step_metadata(
+    _, _, _, screenshot_url, *_ = _resolve_step_metadata(
         source_event_ids,
         session_id,
         tenant_id,
         db,
     )
     return screenshot_url
+
+
+def resolve_anchor_mode(
+    css_selector: str | None,
+    xpath: str | None,
+    screenshot_url: str | None,
+) -> str:
+    """Choose how the live player should anchor a step.
+
+    Navigation-only steps often have no selector; screenshot capture can also
+    fail under throttle / inactive-tab conditions, so ``none`` is a real mode.
+    """
+    if css_selector or xpath:
+        return "element"
+    if screenshot_url:
+        return "screenshot"
+    return "none"
 
 
 def build_walkthrough_payload(sop: models.Sop, db: DBSession) -> WalkthroughPayload:
@@ -153,17 +237,39 @@ def build_walkthrough_payload(sop: models.Sop, db: DBSession) -> WalkthroughPayl
             raise WalkthroughDataError(f"Step {step['order']} has empty instruction")
 
         source_event_ids = step.get("source_event_ids", [])
-        css_selector, xpath, screenshot_url = _resolve_step_metadata(
+        (
+            css_selector,
+            xpath,
+            target_label,
+            screenshot_url,
+            screenshot_highlight,
+            expected_action,
+            expected_url,
+        ) = _resolve_step_metadata(
             source_event_ids,
             sop.session_id,
             sop.tenant_id,
             db,
         )
 
-        if not css_selector and not xpath:
-            raise WalkthroughDataError(
-                f"Step {step['order']} is missing css_selector and xpath",
-            )
+        computed_time_estimate = resolve_step_time_estimate(
+            source_event_ids,
+            db,
+            sop.session_id,
+            sop.tenant_id,
+        )
+
+        raw_time_estimate = step.get("time_estimate")
+        try:
+            llm_time_estimate = int(raw_time_estimate) if raw_time_estimate is not None else None
+        except (TypeError, ValueError):
+            llm_time_estimate = None
+
+        time_estimate = (
+            computed_time_estimate if computed_time_estimate is not None else llm_time_estimate
+        )
+
+        anchor_mode = resolve_anchor_mode(css_selector, xpath, screenshot_url)
 
         steps.append(
             WalkthroughStep(
@@ -171,8 +277,109 @@ def build_walkthrough_payload(sop: models.Sop, db: DBSession) -> WalkthroughPayl
                 instruction=instruction,
                 css_selector=css_selector,
                 xpath=xpath,
+                target_label=target_label,
                 screenshot_url=screenshot_url,
+                time_estimate=time_estimate,
+                screenshot_highlight=screenshot_highlight,
+                anchor_mode=anchor_mode,
+                expected_action=expected_action,
+                expected_url=expected_url,
             )
         )
 
     return WalkthroughPayload(steps=steps)
+
+
+def _extract_screenshot_highlight(attrs: dict | None) -> dict | None:
+    if not isinstance(attrs, dict):
+        return None
+
+    target_rect = attrs.get("target_rect")
+    if not isinstance(target_rect, dict):
+        return None
+
+    try:
+        x = float(target_rect["x"])
+        y = float(target_rect["y"])
+        width = float(target_rect["width"])
+        height = float(target_rect["height"])
+        viewport_width = float(target_rect["viewport_width"])
+        viewport_height = float(target_rect["viewport_height"])
+    except (KeyError, TypeError, ValueError):
+        return None
+
+    if width <= 0 or height <= 0 or viewport_width <= 0 or viewport_height <= 0:
+        return None
+
+    return {
+        "x": max(0, x),
+        "y": max(0, y),
+        "width": width,
+        "height": height,
+        "viewport_width": viewport_width,
+        "viewport_height": viewport_height,
+    }
+
+
+def resolve_step_screenshot_highlight(
+    source_event_ids: list[str],
+    db: DBSession,
+    session_id: UUID,
+) -> dict | None:
+    event_ids = _parse_event_ids(source_event_ids)
+    if not event_ids:
+        return None
+
+    try:
+        events = (
+            db.query(models.Event)
+            .filter(
+                models.Event.session_id == session_id,
+                models.Event.id.in_(event_ids),
+            )
+            .order_by(models.Event.seq.asc())
+            .all()
+        )
+    except Exception:
+        return None
+
+    for event in events:
+        highlight = _extract_screenshot_highlight(getattr(event, "attrs", None))
+        if highlight is not None:
+            return highlight
+
+    return None
+
+
+def resolve_step_time_estimate(
+    source_event_ids: list[str],
+    db: DBSession,
+    session_id: UUID,
+    tenant_id: UUID,
+) -> int | None:
+    events = _load_ordered_events(source_event_ids, session_id, tenant_id, db)
+
+    timestamps = sorted(
+        int(event.timestamp_ms)
+        for event in events
+        if getattr(event, "timestamp_ms", None) is not None
+    )
+
+    if not timestamps:
+        return None
+
+    if len(timestamps) == 1:
+        return DEFAULT_STEP_ESTIMATE_SECONDS
+
+    active_ms = 0
+    max_gap_ms = MAX_EVENT_GAP_SECONDS * 1000
+
+    for previous, current in zip(timestamps, timestamps[1:], strict=False):
+        gap_ms = current - previous
+        if 0 <= gap_ms <= max_gap_ms:
+            active_ms += gap_ms
+
+    if active_ms <= 0:
+        return DEFAULT_STEP_ESTIMATE_SECONDS
+
+    return max(1, ceil(active_ms / 1000))

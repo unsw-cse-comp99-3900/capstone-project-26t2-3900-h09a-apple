@@ -13,3 +13,9 @@ __pycache__
 apps/api/alembic/README
 apps/api/alembic/script.py.mako
 apps/api/alembic.ini
+
+# spike lockfiles / generated timestamped JSON
+spikes/**/package-lock.json
+spikes/ocr-vision-decision/results/benchmark-20*.json
+spikes/**/output/
+spikes/**/output/

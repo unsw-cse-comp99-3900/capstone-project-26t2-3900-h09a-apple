@@ -33,14 +33,14 @@ sessions ──1:N── events ──0:1── screenshots
 ## Conventions
 
 - **Identifier strategy**
-  - `sessions.id`, `screenshots.id`, `sops.id` — `UUID` (`gen_random_uuid()`).
+  - `sessions.id`, `screenshots.id`, `sops.id` - `UUID` (`gen_random_uuid()`).
     These IDs travel between the extension, backend, and FE.
-  - `events.id` — `BIGINT IDENTITY`. Events are the hot/large table; UUID PKs
+  - `events.id` - `BIGINT IDENTITY`. Events are the hot/large table; UUID PKs
     cause index bloat and insert fragmentation.
-- **Timestamps and time zones** — three formats coexist on purpose:
-  - `events.timestamp_ms` — `bigint`, Unix epoch milliseconds, captured by the
+- **Timestamps and time zones** - three formats coexist on purpose:
+  - `events.timestamp_ms` - `bigint`, Unix epoch milliseconds, captured by the
     content script. Time-zone-agnostic by definition.
-  - `events.occurred_at` — `timestamptz`, **generated** from `timestamp_ms`
+  - `events.occurred_at` - `timestamptz`, **generated** from `timestamp_ms`
     (`to_timestamp(timestamp_ms / 1000.0)`). Stored UTC, presented in the
     session's locale by the FE.
   - All other `timestamptz` columns (`sessions.started_at`, `stopped_at`,
@@ -51,18 +51,18 @@ sessions ──1:N── events ──0:1── screenshots
     `2026-06-16T22:30:00+10:00`. Naive strings (no offset) are rejected by
     Pydantic on ingestion. The FE / extension MUST NOT send wall-clock strings
     without an offset.
-- **Enums** — modelled as `varchar(32)` + `CHECK` constraints, **not** Postgres
+- **Enums** - modelled as `varchar(32)` + `CHECK` constraints, **not** Postgres
   native ENUMs. Rationale: event/SOP/session types will keep growing
   (`tab_switch`, `keypress`, `scroll`, …) and native ENUMs are painful to
   evolve (`ALTER TYPE ... ADD VALUE` cannot run in a transaction).
 - **Deletion semantics**
-  - `sessions` — soft delete via `deleted_at TIMESTAMPTZ`. Hard-delete is an
+  - `sessions` - soft delete via `deleted_at TIMESTAMPTZ`. Hard-delete is an
     ops procedure, not an app concern.
-  - `events`, `screenshots` — `ON DELETE CASCADE` from session (only triggered
+  - `events`, `screenshots` - `ON DELETE CASCADE` from session (only triggered
     when a session is hard-deleted).
-  - `sops` — `ON DELETE RESTRICT`. SOPs are LLM-generated assets (~60s of
+  - `sops` - `ON DELETE RESTRICT`. SOPs are LLM-generated assets (~60s of
     compute each); they must be detached or deleted explicitly.
-- **Idempotency** — every write that originates from the extension carries a
+- **Idempotency** - every write that originates from the extension carries a
   `client_session_id` (UUID). The extension's flush is retried after
   service-worker crashes; without this key we get duplicate sessions.
 - **PII annotations** live in two places: this document **and** `COMMENT ON
@@ -143,22 +143,22 @@ the team can ratify (and so the Jira card gets updated to match).
 
 | Column              | Type         | Null | Default             | PII     | Notes                                                                       |
 | ------------------- | ------------ | ---- | ------------------- | ------- | --------------------------------------------------------------------------- |
-| `id`                | uuid         | no   | `gen_random_uuid()` | —       | PK                                                                          |
-| `client_session_id` | uuid         | no   | —                   | —       | **UNIQUE**, idempotency key from extension                                  |
-| `tenant_id`         | uuid         | no   | —                   | —       | indexed; org scope                                                          |
-| `recorded_by`       | uuid         | yes  | —                   | **PII** | links to a user; indexed. Nullable until auth lands — see Scope deviations. |
-| `workflow_name`     | varchar(200) | no   | —                   | —       | user-entered, non-empty                                                     |
-| `status`            | varchar(32)  | no   | `recording`         | —       | enum below                                                                  |
-| `started_at`        | timestamptz  | no   | —                   | —       |                                                                             |
-| `stopped_at`        | timestamptz  | yes  | —                   | —       | null while recording; `>= started_at`                                       |
-| `event_count`       | int          | no   | `0`                 | —       | denormalised count, `>= 0`                                                  |
-| `created_at`        | timestamptz  | no   | `now()`             | —       |                                                                             |
-| `deleted_at`        | timestamptz  | yes  | —                   | —       | soft-delete marker                                                          |
+| `id`                | uuid         | no   | `gen_random_uuid()` | -       | PK                                                                          |
+| `client_session_id` | uuid         | no   | -                   | -       | **UNIQUE**, idempotency key from extension                                  |
+| `tenant_id`         | uuid         | no   | -                   | -       | indexed; org scope                                                          |
+| `recorded_by`       | uuid         | yes  | -                   | **PII** | links to a user; indexed. Nullable until auth lands - see Scope deviations. |
+| `workflow_name`     | varchar(200) | no   | -                   | -       | user-entered, non-empty                                                     |
+| `status`            | varchar(32)  | no   | `recording`         | -       | enum below                                                                  |
+| `started_at`        | timestamptz  | no   | -                   | -       |                                                                             |
+| `stopped_at`        | timestamptz  | yes  | -                   | -       | null while recording; `>= started_at`                                       |
+| `event_count`       | int          | no   | `0`                 | -       | denormalised count, `>= 0`                                                  |
+| `created_at`        | timestamptz  | no   | `now()`             | -       |                                                                             |
+| `deleted_at`        | timestamptz  | yes  | -                   | -       | soft-delete marker                                                          |
 
 **Indexes:**
 
 - `pk_sessions(id)`
-- `uq_sessions_client_session_id(client_session_id)` — UNIQUE
+- `uq_sessions_client_session_id(client_session_id)` - UNIQUE
 - `ix_sessions_tenant_started(tenant_id, started_at DESC)` partial WHERE `deleted_at IS NULL`
 - `ix_sessions_user_started(recorded_by, started_at DESC)` partial WHERE `deleted_at IS NULL`
 
@@ -170,19 +170,19 @@ the team can ratify (and so the Jira card gets updated to match).
 
 | Column            | Type        | Null | Default     | PII          | Notes                                                            |
 | ----------------- | ----------- | ---- | ----------- | ------------ | ---------------------------------------------------------------- |
-| `id`              | bigint      | no   | `IDENTITY`  | —            | PK                                                               |
-| `session_id`      | uuid        | no   | —           | —            | FK → sessions, **CASCADE**                                       |
-| `seq`             | int         | no   | —           | —            | order within session, `>= 0`                                     |
-| `type`            | varchar(32) | no   | —           | —            | enum below                                                       |
-| `target_selector` | text        | yes  | —           | —            | stable CSS selector                                              |
-| `target_label`    | text        | yes  | —           | **PII-risk** | on-screen text; may expose data                                  |
-| `value`           | text        | yes  | —           | **PII**      | **masked before write** (see -11); `length <= 10000`             |
-| `url`             | text        | yes  | —           | **PII-risk** | may carry ids in query string                                    |
-| `attrs`           | jsonb       | no   | `'{}'`      | —            | open bag for `aria-role`, `href`, `name`, …                      |
-| `screenshot_id`   | uuid        | yes  | —           | —            | FK → screenshots, **SET NULL**                                   |
-| `timestamp_ms`    | bigint      | no   | —           | —            | capture epoch ms, `> 0`                                          |
-| `occurred_at`     | timestamptz | no   | _generated_ | —            | `GENERATED ALWAYS AS (to_timestamp(timestamp_ms/1000.0)) STORED` |
-| `ingested_at`     | timestamptz | no   | `now()`     | —            | server-side, used to detect clock skew                           |
+| `id`              | bigint      | no   | `IDENTITY`  | -            | PK                                                               |
+| `session_id`      | uuid        | no   | -           | -            | FK → sessions, **CASCADE**                                       |
+| `seq`             | int         | no   | -           | -            | order within session, `>= 0`                                     |
+| `type`            | varchar(32) | no   | -           | -            | enum below                                                       |
+| `target_selector` | text        | yes  | -           | -            | stable CSS selector                                              |
+| `target_label`    | text        | yes  | -           | **PII-risk** | on-screen text; may expose data                                  |
+| `value`           | text        | yes  | -           | **PII**      | **masked before write** (see -11); `length <= 10000`             |
+| `url`             | text        | yes  | -           | **PII-risk** | may carry ids in query string                                    |
+| `attrs`           | jsonb       | no   | `'{}'`      | -            | open bag for `aria-role`, `href`, `name`, …                      |
+| `screenshot_id`   | uuid        | yes  | -           | -            | FK → screenshots, **SET NULL**                                   |
+| `timestamp_ms`    | bigint      | no   | -           | -            | capture epoch ms, `> 0`                                          |
+| `occurred_at`     | timestamptz | no   | _generated_ | -            | `GENERATED ALWAYS AS (to_timestamp(timestamp_ms/1000.0)) STORED` |
+| `ingested_at`     | timestamptz | no   | `now()`     | -            | server-side, used to detect clock skew                           |
 
 **Constraints:** `uq_events_session_seq UNIQUE(session_id, seq)`.
 
@@ -191,7 +191,7 @@ the team can ratify (and so the Jira card gets updated to match).
 - `pk_events(id)`
 - `uq_events_session_seq(session_id, seq)`
 - `ix_events_session_type(session_id, type)`
-- `ix_events_occurred_brin USING BRIN(occurred_at)` — cheap time-range scans on append-only data
+- `ix_events_occurred_brin USING BRIN(occurred_at)` - cheap time-range scans on append-only data
 
 **Allowed `type` values:** `click` · `navigation` · `input` · `submit` · `tab_switch`.
 
@@ -201,13 +201,13 @@ the team can ratify (and so the Jira card gets updated to match).
 
 | Column       | Type         | Null | Default             | PII          | Notes                                                                               |
 | ------------ | ------------ | ---- | ------------------- | ------------ | ----------------------------------------------------------------------------------- |
-| `id`         | uuid         | no   | `gen_random_uuid()` | —            | PK                                                                                  |
-| `session_id` | uuid         | no   | —                   | —            | FK → sessions, **CASCADE**, indexed                                                 |
-| `object_key` | varchar(500) | no   | —                   | **PII-risk** | **UNIQUE**, key in object storage                                                   |
-| `width`      | int          | yes  | —                   | —            | px, optional                                                                        |
-| `height`     | int          | yes  | —                   | —            | px, optional                                                                        |
-| `bytes`      | bigint       | yes  | —                   | —            | size in bytes, optional (BIGINT — long full-page screenshots can exceed INT4 ~2 GB) |
-| `created_at` | timestamptz  | no   | `now()`             | —            |                                                                                     |
+| `id`         | uuid         | no   | `gen_random_uuid()` | -            | PK                                                                                  |
+| `session_id` | uuid         | no   | -                   | -            | FK → sessions, **CASCADE**, indexed                                                 |
+| `object_key` | varchar(500) | no   | -                   | **PII-risk** | **UNIQUE**, key in object storage                                                   |
+| `width`      | int          | yes  | -                   | -            | px, optional                                                                        |
+| `height`     | int          | yes  | -                   | -            | px, optional                                                                        |
+| `bytes`      | bigint       | yes  | -                   | -            | size in bytes, optional (BIGINT - long full-page screenshots can exceed INT4 ~2 GB) |
+| `created_at` | timestamptz  | no   | `now()`             | -            |                                                                                     |
 
 The image blob lives in object storage (uploaded by H09AAPPLE-14). The DB
 stores only the key.
@@ -216,28 +216,64 @@ stores only the key.
 
 ## Table: `sops`
 
-| Column            | Type         | Null | Default                                | PII          | Notes                                                       |
-| ----------------- | ------------ | ---- | -------------------------------------- | ------------ | ----------------------------------------------------------- |
-| `id`              | uuid         | no   | `gen_random_uuid()`                    | —            | PK                                                          |
-| `session_id`      | uuid         | no   | —                                      | —            | FK → sessions, **RESTRICT**, indexed                        |
-| `tenant_id`       | uuid         | no   | `22222222-2222-2222-2222-222222222222` | —            | logical org scope; **no FK**; indexed (`DEFAULT_TENANT_ID`) |
-| `title`           | varchar(300) | no   | —                                      | —            |                                                             |
-| `version`         | int          | no   | `1`                                    | —            | bumps on regenerate / edit, `>= 1`                          |
-| `status`          | varchar(32)  | no   | `draft`                                | —            | enum below                                                  |
-| `steps`           | jsonb        | no   | `'[]'`                                 | **PII-risk** | step text may echo captured data; `jsonb_typeof = 'array'`  |
-| `warnings`        | jsonb        | no   | `'[]'`                                 | —            | matches `SopWarning` in `apps/api/app/sop_schema.py`        |
-| `generated_at`    | timestamptz  | no   | `now()`                                | —            |                                                             |
-| `published_at`    | timestamptz  | yes  | —                                      | —            | null until approved SOP is published                        |
-| `gen_duration_ms` | int          | yes  | —                                      | —            | proves the <60s budget, `>= 0`                              |
+| Column             | Type         | Null | Default                                | PII          | Notes                                                                |
+| ------------------ | ------------ | ---- | -------------------------------------- | ------------ | -------------------------------------------------------------------- |
+| `id`               | uuid         | no   | `gen_random_uuid()`                    | -            | PK                                                                   |
+| `session_id`       | uuid         | no   | -                                      | -            | FK → sessions, **RESTRICT**, indexed                                 |
+| `tenant_id`        | uuid         | no   | `22222222-2222-2222-2222-222222222222` | -            | logical org scope; **no FK**; indexed (`DEFAULT_TENANT_ID`)          |
+| `title`            | varchar(300) | no   | -                                      | -            |                                                                      |
+| `version`          | int          | no   | `1`                                    | -            | bumps on regenerate / edit, `>= 1`                                   |
+| `status`           | varchar(32)  | no   | `draft`                                | -            | enum below                                                           |
+| `steps`            | jsonb        | no   | `'[]'`                                 | **PII-risk** | step text may echo captured data; `jsonb_typeof = 'array'`           |
+| `warnings`         | jsonb        | no   | `'[]'`                                 | -            | matches `SopWarning` in `apps/api/app/sop_schema.py`                 |
+| `generated_at`     | timestamptz  | no   | `now()`                                | -            |                                                                      |
+| `published_at`     | timestamptz  | yes  | -                                      | -            | null until approved SOP is published                                 |
+| `gen_duration_ms`  | int          | yes  | -                                      | -            | proves the <60s budget, `>= 0`                                       |
+| `embedding_status` | varchar(32)  | yes  | -                                      | -            | `pending` / `complete` / `failed` (H09AAPPLE-35); null until publish |
 
 **Constraints:** `uq_sops_session_version UNIQUE(session_id, version)`.
 **Indexes:** `ix_sops_session_status(session_id, status)`, `ix_sops_tenant_id(tenant_id)`.
 **Allowed `status` values:** `draft` · `needs_review` · `approved` · `published`.
+**Allowed `embedding_status` values:** `pending` · `complete` · `failed` (or null).
+
+## Table: `sop_step_embedding` (H09AAPPLE-34)
+
+Per-step vector embeddings for Sprint 3 clustering and friction analysis. This is
+one row per SOP step, not a single whole-SOP embedding column on `sops`.
+
+| Column        | Type         | Null | Default             | Notes                                                                     |
+| ------------- | ------------ | ---- | ------------------- | ------------------------------------------------------------------------- |
+| `id`          | uuid         | no   | `gen_random_uuid()` | PK                                                                        |
+| `sop_id`      | uuid         | no   | -                   | FK -> `sops.id`, `ON DELETE CASCADE`                                      |
+| `step_number` | int          | no   | -                   | Must equal `steps[].order` on the parent SOP (`>= 1`); not enforced by DB |
+| `embedding`   | vector(1536) | no   | -                   | pgvector embedding for this step                                          |
+| `created_at`  | timestamptz  | no   | `now()`             | row insert time                                                           |
+
+**Constraints:** `uq_sop_step_embedding_sop_step UNIQUE(sop_id, step_number)`.
+**Indexes:** `ix_sop_step_embedding_sop_id(sop_id)`,
+`ix_sop_step_embedding_embedding_ivfflat USING ivfflat (embedding vector_cosine_ops) WITH (lists = 10)`.
+**Extension:** migration `0008_sop_step_embedding` runs `CREATE EXTENSION IF NOT EXISTS vector`.
+**Revision (status + embed job columns):** `0011_sop_embed_status` (after `0010_auth_token_tables`).
+
+**Write contract (H09AAPPLE-35):** on publish (and `POST /api/v1/sops/{id}/embed`),
+enqueue a `codification_jobs` row with `job_type=embed`, set
+`sops.embedding_status=pending`, then BackgroundTasks embeds each step with
+`text-embedding-3-small` (input title, newline, instruction). Replace prior
+rows for that SOP; store `step.order` in `step_number`. Retries use the same
+`1s / 2s / 4s` backoff as H09AAPPLE-24. `embedding_status` becomes `complete`
+when every step succeeds, else `failed`.
+
+**IVFFlat query note (H09AAPPLE-36/-37):** with `lists = 10`, cosine `ORDER BY
+embedding <=> query` via a freshly built IVFFlat index can return **zero rows** when
+the table has very little data at index-build time (seqscan still finds them; pgvector
+emits a low-recall warning). Use a seqscan fallback or defer index-backed similarity
+search until enough rows exist. Rebuilding the index after bulk deletes changes this
+behaviour; prefer `row_count < lists` checks in application code.
 
 ### `steps` JSONB shape
 
 The shape must match `SopStep` in `apps/api/app/sop_schema.py` (Pydantic) and
-`SopStep` in `packages/types/src/session.ts` — those three definitions are the
+`SopStep` in `packages/types/src/session.ts` - those three definitions are the
 same contract from three angles. **Do not diverge field names.**
 
 | Field              | Type           | Required | Notes                                          |
@@ -248,7 +284,7 @@ same contract from three angles. **Do not diverge field names.**
 | `source_event_ids` | string[]       | yes      | event ids from the session (stored as strings) |
 | `branch`           | string \| null | no       | optional conditional branch callout            |
 
-Do **not** use `step_number`, `action`, or `expected_result` — those are not part
+Do **not** use `step_number`, `action`, or `expected_result` - those are not part
 of the locked contract consumed by the API or frontend.
 
 ```json
@@ -304,9 +340,9 @@ them directly.
 
 ---
 
-## Out of scope (H09AAPPLE-15 — historical)
+## Out of scope (H09AAPPLE-15 - historical)
 
-- `tenants` table and full auth UX — `users` landed in H09AAPPLE-42; login in H09AAPPLE-43
+- `tenants` table and full auth UX - `users` landed in H09AAPPLE-42; login in H09AAPPLE-43
 - Analytics / feedback tables
 - Partitioning of `events` (needed past ~10M rows; not Sprint 1)
 - Archival to cold storage
@@ -316,15 +352,15 @@ them directly.
 
 ## Deliverables checklist
 
-- [x] `apps/api/app/models.py` — SQLAlchemy models (4 tables, status enums as Python `enum.Enum` mapped to `VARCHAR + CHECK`)
-- [x] `apps/api/alembic/` — initialised; `alembic/env.py` wired to `app.models.Base.metadata` and reads `DATABASE_URL` from the env
-- [x] `apps/api/alembic/versions/0001_init.py` — initial migration. Includes:
+- [x] `apps/api/app/models.py` - SQLAlchemy models (4 tables, status enums as Python `enum.Enum` mapped to `VARCHAR + CHECK`)
+- [x] `apps/api/alembic/` - initialised; `alembic/env.py` wired to `app.models.Base.metadata` and reads `DATABASE_URL` from the env
+- [x] `apps/api/alembic/versions/0001_init.py` - initial migration. Includes:
   - `CREATE EXTENSION IF NOT EXISTS pgcrypto`
   - the `events.occurred_at` generated column (autogenerate cannot reliably emit `GENERATED ALWAYS AS`)
   - the BRIN index on `events.occurred_at`
   - all `COMMENT ON COLUMN` PII annotations
-- [x] `packages/types/src/session.ts` — shared TS interfaces, with **separate In/Out DTOs** (`WTEventInput` vs `WTEvent`, `SessionUploadPayload` vs `SessionDetail`)
-- [x] `docs/db-schema.md` — this document, reviewed by the team
+- [x] `packages/types/src/session.ts` - shared TS interfaces, with **separate In/Out DTOs** (`WTEventInput` vs `WTEvent`, `SessionUploadPayload` vs `SessionDetail`)
+- [x] `docs/db-schema.md` - this document, reviewed by the team
 - [x] PII fields annotated (above) **and** mirrored in DB via `COMMENT ON COLUMN`
 
 ### Running the migration
@@ -352,21 +388,21 @@ supports transactional DDL), so a failure halfway leaves the schema unchanged.
 Schema changes must stay in sync across the repo, CI, and every developer's
 database. Follow this whenever a ticket touches `models.py` or Postgres.
 
-1. **One PR, one revision** — ship an Alembic file in `apps/api/alembic/versions/`
+1. **One PR, one revision** - ship an Alembic file in `apps/api/alembic/versions/`
    together with `models.py` changes. Do not hand-edit local Postgres without a
    migration.
-2. **Chain from `main` head** — new revisions must set `down_revision` to the
+2. **Chain from `main` head** - new revisions must set `down_revision` to the
    current head on `main` (check with `alembic heads`; there must be only one).
    Rebase before opening a PR if `main` moved.
-3. **No `tenants` table** — `tenant_id` is a plain `UUID` column for row isolation,
+3. **No `tenants` table** - `tenant_id` is a plain `UUID` column for row isolation,
    not a foreign key. Dev default: `DEFAULT_TENANT_ID` / `22222222-2222-2222-2222-222222222222`.
-4. **Verify on a fresh DB** — before merge: `alembic upgrade head` on an empty
+4. **Verify on a fresh DB** - before merge: `alembic upgrade head` on an empty
    database (local Docker Postgres or CI).
-5. **CI** — `alembic upgrade head` runs on every `api` job PR (ephemeral Postgres
+5. **CI** - `alembic upgrade head` runs on every `api` job PR (ephemeral Postgres
    spun up in `.github/workflows/ci.yml`).
-6. **Document contract changes** — update this file when table/column semantics
+6. **Document contract changes** - update this file when table/column semantics
    change; keep `packages/types` in sync when API wire format changes.
-7. **Multiple heads** — if two branches both add migrations from the same parent,
+7. **Multiple heads** - if two branches both add migrations from the same parent,
    merge with `alembic merge` or rebase so the chain is linear before merging to
    `main`.
 
@@ -380,10 +416,10 @@ when the PR touches schema.
 | Column            | Type         | Null | Default             | Notes                                     |
 | ----------------- | ------------ | ---- | ------------------- | ----------------------------------------- |
 | `id`              | uuid         | no   | `gen_random_uuid()` | PK                                        |
-| `email`           | varchar(255) | no   | —                   | **UNIQUE**                                |
-| `hashed_password` | varchar(255) | no   | —                   | bcrypt via passlib                        |
-| `role`            | varchar(32)  | no   | —                   | `EMPLOYEE` · `REVIEWER` · `MANAGER`       |
-| `tenant_id`       | uuid         | no   | —                   | logical org scope; **no FK** to `tenants` |
+| `email`           | varchar(255) | no   | -                   | **UNIQUE**                                |
+| `hashed_password` | varchar(255) | no   | -                   | bcrypt via passlib                        |
+| `role`            | varchar(32)  | no   | -                   | `EMPLOYEE` · `REVIEWER` · `MANAGER`       |
+| `tenant_id`       | uuid         | no   | -                   | logical org scope; **no FK** to `tenants` |
 | `created_at`      | timestamptz  | no   | `now()`             |                                           |
 
 **Revision:** `0003_users_and_sop_tenant` also adds `sops.tenant_id` (backfilled
@@ -393,3 +429,85 @@ from `sessions.tenant_id`). `sessions.tenant_id` already existed from Sprint 1.
 HS256, 24h, `SECRET_KEY` env), `get_current_user` FastAPI dependency (JWT
 `user_id` → DB lookup; 401 if missing/invalid). Login/register routes are
 H09AAPPLE-43.
+
+---
+
+## Table: `consent_acceptance` (H09AAPPLE-59)
+
+Append-only history of data-capture consent acceptances. There is no update or
+delete API for this table - every Accept inserts a new row so full history per
+`(user_id, consent_type)` remains reconstructable.
+
+| Column         | Type        | Null | Default             | Notes                                                     |
+| -------------- | ----------- | ---- | ------------------- | --------------------------------------------------------- |
+| `id`           | uuid        | no   | `gen_random_uuid()` | PK                                                        |
+| `user_id`      | uuid        | no   | -                   | FK -> `users.id` **CASCADE**                              |
+| `tenant_id`    | uuid        | no   | -                   | copied from authenticated user; indexed                   |
+| `consent_type` | varchar(32) | no   | -                   | `recording` · `walkthrough` (CHECK)                       |
+| `version`      | varchar(64) | no   | -                   | terms version string (e.g. `2026-07-01`); non-empty CHECK |
+| `accepted_at`  | timestamptz | no   | -                   | set by server at insert time                              |
+| `created_at`   | timestamptz | no   | `now()`             | row insert time                                           |
+
+**Indexes**
+
+- `ix_consent_acceptance_tenant_id(tenant_id)`
+- `ix_consent_acceptance_user_type_accepted(user_id, consent_type, accepted_at DESC)`
+
+**Deliberately excluded:** IP address, User-Agent, and other client metadata.
+Consent proof is `{user_id, tenant_id, consent_type, version, accepted_at}` only.
+
+**API**
+
+- `POST /api/v1/consent/accept` - insert one acceptance (`consent_type`, `version`)
+- `GET /api/v1/consent/status?consent_type=` - whether the current user has accepted
+  the current terms version for that type (`accepted`, `accepted_at`)
+
+**Revision:** `0007_consent_acceptance`
+
+---
+
+## Table: `refresh_tokens` (H09AAPPLE-63)
+
+Server-side registry of issued refresh JWT `jti` values so logout and password
+reset can revoke sessions without a denylist-only design.
+
+| Column       | Type        | Null | Default             | Notes                                 |
+| ------------ | ----------- | ---- | ------------------- | ------------------------------------- |
+| `id`         | uuid        | no   | `gen_random_uuid()` | PK                                    |
+| `jti`        | uuid        | no   | -                   | JWT `jti` claim; **UNIQUE**           |
+| `user_id`    | uuid        | no   | -                   | FK -> `users.id` **CASCADE**; indexed |
+| `expires_at` | timestamptz | no   | -                   | mirrors refresh JWT expiry            |
+| `revoked_at` | timestamptz | yes  | -                   | set on logout or bulk revoke          |
+| `created_at` | timestamptz | no   | `now()`             |                                       |
+
+**API**
+
+- Issued on `POST /api/v1/auth/login` and extension handoff redeem
+- Checked on `POST /api/v1/auth/refresh`
+- Current jti revoked on `POST /api/v1/auth/logout`
+- All jtis for a user revoked on successful password reset
+
+**Revision:** `0010_auth_token_tables`
+
+---
+
+## Table: `password_reset_tokens` (H09AAPPLE-63)
+
+One-time password reset tokens. Only a SHA-256 hash (peppered with `SECRET_KEY`)
+is stored; the raw token is emailed once via SES (or the mock sender in local/CI).
+
+| Column       | Type        | Null | Default             | Notes                                 |
+| ------------ | ----------- | ---- | ------------------- | ------------------------------------- |
+| `id`         | uuid        | no   | `gen_random_uuid()` | PK                                    |
+| `user_id`    | uuid        | no   | -                   | FK -> `users.id` **CASCADE**; indexed |
+| `token_hash` | varchar(64) | no   | -                   | hex digest; **UNIQUE**                |
+| `expires_at` | timestamptz | no   | -                   | 30 minutes from issue                 |
+| `used_at`    | timestamptz | yes  | -                   | set after successful reset            |
+| `created_at` | timestamptz | no   | `now()`             |                                       |
+
+**API**
+
+- `POST /api/v1/auth/forgot-password` - always 200; creates token + sends email when user exists
+- `POST /api/v1/auth/reset-password` - validates token, updates password, marks used, revokes refresh tokens
+
+**Revision:** `0010_auth_token_tables`

@@ -26,15 +26,13 @@ and the same rules apply in CI and local hooks.
 
 ## Enforcement layers
 
-| Layer                                  | Scope             | Blocks                                         |
-| -------------------------------------- | ----------------- | ---------------------------------------------- |
-| **CI `commit-policy`**                 | Every PR          | Forbidden trailers in commits on the branch    |
-| **Local `commit-msg` hook**            | Your machine      | Same patterns before `git commit` completes    |
-| **Cursor `beforeShellExecution` hook** | Cursor agent only | Agent running `git commit` / `git push`        |
-| **Cursor rule**                        | Cursor agent only | Reminds agent not to commit or add AI trailers |
+| Layer                       | Scope        | Blocks                                      |
+| --------------------------- | ------------ | ------------------------------------------- |
+| **CI `commit-policy`**      | Every PR     | Forbidden trailers in commits on the branch |
+| **Local `commit-msg` hook** | Your machine | Same patterns before `git commit` completes |
+| **Local `pre-commit` hook** | Your machine | CI-mirror checks on staged files            |
 
-Cursor hooks **do not** stop Codex CLI, Copilot in another editor, or you typing
-`git commit` manually. **CI is the team-wide gate.**
+**CI is the team-wide gate.**
 
 ## Setup (recommended)
 
@@ -42,11 +40,13 @@ After clone:
 
 ```bash
 ./scripts/install-githooks.sh
-./scripts/install-cursor-hooks.sh   # optional; writes gitignored .cursor/ locally
 ```
 
-Templates for Cursor live under `scripts/cursor/` (committed). The `.cursor/`
-directory is **gitignored** so IDE config stays on each developer's machine.
+Before push (full branch check vs `origin/main`):
+
+```bash
+bash scripts/ci/pre-commit-check.sh
+```
 
 ## Strict mode (optional)
 

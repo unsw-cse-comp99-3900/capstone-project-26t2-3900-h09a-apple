@@ -22,72 +22,132 @@
         </div>
       </header>
 
-      <section class="intro" aria-labelledby="capture-heading">
-        <div>
-          <h2 id="capture-heading">Record a workflow</h2>
-          <p>Name the task, then start capturing your process.</p>
-        </div>
-        <div id="statusBadge" class="status-badge status-ready" aria-live="polite">
-          <span class="status-dot"></span>
-          <span id="statusText">Ready</span>
-        </div>
+      <section id="authSection" class="auth-section" hidden>
+        <h2>Sign in to WorkTrace</h2>
+        <p>Open the web app to sign in. The extension connects automatically after login.</p>
+        <button id="signInButton" class="button button-primary" type="button">
+          Sign in to WorkTrace
+        </button>
       </section>
 
-      <form id="recordingForm" novalidate>
-        <label for="workflowName">Workflow name</label>
-        <div class="input-wrap">
+      <div id="recordingSection" hidden>
+        <section class="intro" aria-labelledby="capture-heading">
+          <div>
+            <h2 id="capture-heading">Record a workflow</h2>
+            <p>Name the task, then start capturing your process.</p>
+          </div>
+          <div id="statusBadge" class="status-badge status-ready" aria-live="polite">
+            <span class="status-dot"></span>
+            <span id="statusText">Ready</span>
+          </div>
+        </section>
+
+        <form id="recordingForm" novalidate>
+          <label for="workflowName">Workflow name</label>
+          <div class="input-wrap">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="3" y="3" width="7" height="6" rx="1.5"></rect>
+              <rect x="14" y="15" width="7" height="6" rx="1.5"></rect>
+              <path d="M6.5 9v3a2 2 0 0 0 2 2h6.5"></path>
+            </svg>
+            <input
+              id="workflowName"
+              name="workflowName"
+              type="text"
+              maxlength="80"
+              placeholder="e.g. Process a customer refund"
+              autocomplete="off"
+              required
+            />
+          </div>
+          <p id="workflowHint" class="field-hint">Required before recording can start.</p>
+
+          <div class="actions">
+            <button id="startButton" class="button button-primary" type="submit" disabled>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M7 5l12 7-12 7V5Z" fill="currentColor" stroke="none"></path>
+              </svg>
+              Start Recording
+            </button>
+            <button id="stopButton" class="button button-secondary" type="button" disabled>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <rect
+                  x="6"
+                  y="6"
+                  width="12"
+                  height="12"
+                  rx="2"
+                  fill="currentColor"
+                  stroke="none"
+                ></rect>
+              </svg>
+              Stop Recording
+            </button>
+          </div>
+        </form>
+
+        <button id="reviewButton" class="button button-review" type="button" hidden>
+          Review Session
+        </button>
+
+        <section class="walkthrough-section" aria-labelledby="walkthrough-heading">
+          <div class="walkthrough-header">
+            <div>
+              <h2 id="walkthrough-heading">Play a walkthrough</h2>
+              <p>Guide yourself on the live page with a non-blocking overlay.</p>
+            </div>
+            <div id="walkthroughBadge" class="status-badge status-ready" aria-live="polite">
+              <span class="status-dot"></span>
+              <span id="walkthroughStatusText">Idle</span>
+            </div>
+          </div>
+
+          <label for="sopIdInput">Published SOP id</label>
+          <div class="input-wrap">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 6h16M4 12h10M4 18h14"></path>
+            </svg>
+            <input
+              id="sopIdInput"
+              name="sopId"
+              type="text"
+              maxlength="80"
+              placeholder="Paste a published SOP UUID"
+              autocomplete="off"
+            />
+          </div>
+          <p id="walkthroughHint" class="field-hint">
+            Starts an overlay on the current tab. Progress is kept for this browser session.
+          </p>
+
+          <div class="actions">
+            <button
+              id="startWalkthroughButton"
+              class="button button-primary"
+              type="button"
+              disabled
+            >
+              Start Walkthrough
+            </button>
+            <button
+              id="stopWalkthroughButton"
+              class="button button-secondary"
+              type="button"
+              disabled
+            >
+              Stop Walkthrough
+            </button>
+          </div>
+        </section>
+
+        <footer>
           <svg viewBox="0 0 24 24" aria-hidden="true">
-            <rect x="3" y="3" width="7" height="6" rx="1.5"></rect>
-            <rect x="14" y="15" width="7" height="6" rx="1.5"></rect>
-            <path d="M6.5 9v3a2 2 0 0 0 2 2h6.5"></path>
+            <path d="M12 3l7 3v5c0 4.5-3 8.5-7 10-4-1.5-7-5.5-7-10V6l7-3Z"></path>
+            <path d="M9 12l2 2 4-4"></path>
           </svg>
-          <input
-            id="workflowName"
-            name="workflowName"
-            type="text"
-            maxlength="80"
-            placeholder="e.g. Process a customer refund"
-            autocomplete="off"
-            required
-          />
-        </div>
-        <p id="workflowHint" class="field-hint">Required before recording can start.</p>
-
-        <div class="actions">
-          <button id="startButton" class="button button-primary" type="submit" disabled>
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M7 5l12 7-12 7V5Z" fill="currentColor" stroke="none"></path>
-            </svg>
-            Start Recording
-          </button>
-          <button id="stopButton" class="button button-secondary" type="button" disabled>
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <rect
-                x="6"
-                y="6"
-                width="12"
-                height="12"
-                rx="2"
-                fill="currentColor"
-                stroke="none"
-              ></rect>
-            </svg>
-            Stop Recording
-          </button>
-        </div>
-      </form>
-
-      <button id="reviewButton" class="button button-review" type="button" hidden>
-        Review Session
-      </button>
-
-      <footer>
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M12 3l7 3v5c0 4.5-3 8.5-7 10-4-1.5-7-5.5-7-10V6l7-3Z"></path>
-          <path d="M9 12l2 2 4-4"></path>
-        </svg>
-        <span>This preview keeps recording state on your device only.</span>
-      </footer>
+          <span id="footerText">This preview keeps recording state on your device only.</span>
+        </footer>
+      </div>
     </main>
 
     <div id="consentOverlay" class="consent-overlay" hidden>

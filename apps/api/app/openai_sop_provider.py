@@ -1,9 +1,8 @@
 import json
 import os
 
-from openai import OpenAI
-
 from app.llm_provider import LlmProviderResult, SopLlmProvider, estimate_cost_usd
+from app.openai_client import create_openai_compatible_client
 from app.sop_schema import SopPayload
 
 SYSTEM_PROMPT = """
@@ -24,6 +23,15 @@ Use only the fields defined in the schema.
 Every step must reference the source event ids that support it.
 Do not invent source_event_ids.
 
+Estimate time_estimate only from the step's source events:
+- source event timestamps are in milliseconds since epoch.
+- Compute active time from consecutive source events.
+- Ignore idle gaps longer than 30 seconds.
+- If a step has only one source event, use 5 seconds.
+- If no reliable timestamp estimate can be inferred, use null.
+- Clamp each step's time_estimate to a maximum of 60 seconds.
+- Do not use total workflow duration as a step estimate.
+
 Session payload:
 {json.dumps(session_payload, default=str)}
 """
@@ -34,13 +42,9 @@ class OpenAiSopProvider(SopLlmProvider):
 
     def __init__(self):
         self.model = os.getenv("OPENAI_MODEL", "gpt-4o")
-        self.api_key = os.getenv("OPENAI_API_KEY")
 
     def generate_sop(self, session_payload: dict) -> LlmProviderResult:
-        if not self.api_key:
-            raise RuntimeError("OPENAI_API_KEY is not configured")
-
-        client = OpenAI(api_key=self.api_key)
+        client = create_openai_compatible_client()
 
         response = client.chat.completions.create(
             model=self.model,

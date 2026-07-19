@@ -10,10 +10,21 @@ class SopStep(BaseModel):
     instruction: str = Field(..., min_length=1)
     branch: str | None = None
     source_event_ids: list[str] = Field(default_factory=list)
+    time_estimate: int | None = Field(default=None, ge=0)
+
+
+class ScreenshotHighlight(BaseModel):
+    x: float = Field(..., ge=0)
+    y: float = Field(..., ge=0)
+    width: float = Field(..., gt=0)
+    height: float = Field(..., gt=0)
+    viewport_width: float = Field(..., gt=0)
+    viewport_height: float = Field(..., gt=0)
 
 
 class SopStepResponse(SopStep):
     screenshot_url: str | None = None
+    screenshot_highlight: ScreenshotHighlight | None = None
 
 
 class SopWarning(BaseModel):
@@ -36,6 +47,7 @@ class SopDetailPayload(BaseModel):
     summary: str
     version: int
     generated_at: datetime
+    status: str
 
     steps: list[SopStepResponse]
     warnings: list[SopWarning] = Field(default_factory=list)
@@ -46,6 +58,13 @@ class SopPublishResponse(BaseModel):
     status: str
     published_at: datetime
     library_url: str
+    embedding_status: str | None = None
+
+
+class SopEmbedResponse(BaseModel):
+    id: str
+    job_id: str
+    embedding_status: str
 
 
 class SopLibraryItem(BaseModel):
@@ -54,6 +73,7 @@ class SopLibraryItem(BaseModel):
     workflow_category: str | None = None
     step_count: int
     published_at: datetime | None = None
+    status: str
 
 
 class SopListResponse(BaseModel):
@@ -70,7 +90,14 @@ class WalkthroughStep(BaseModel):
     instruction: str = Field(..., min_length=1)
     css_selector: str | None = None
     xpath: str | None = None
+    target_label: str | None = None
     screenshot_url: str | None = None
+    time_estimate: int | None = Field(default=None, ge=0)
+    screenshot_highlight: ScreenshotHighlight | None = None
+    # element: has css/xpath; screenshot: no selector but has image; none: instruction-only.
+    anchor_mode: Literal["element", "screenshot", "none"] = "element"
+    expected_action: Literal["click", "input", "submit"] | None = None
+    expected_url: str | None = None
 
 
 class WalkthroughPayload(BaseModel):

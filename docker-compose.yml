@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg15
+    container_name: worktrace-postgres
+    environment:
+      POSTGRES_USER: worktrace
+      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: worktrace
+    ports:
+      - '5432:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U worktrace -d worktrace']
+      interval: 10s
+      timeout: 5s
+      retries: 5

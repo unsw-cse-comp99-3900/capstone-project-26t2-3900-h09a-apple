@@ -9,6 +9,7 @@ import { AuthEmailPasswordFields } from '@/components/auth/auth-email-password-f
 import { AuthFormCard } from '@/components/auth/auth-form-card';
 import { AuthFormPanel } from '@/components/auth/auth-form-panel';
 import { redirectPathForRole, useCurrentUser } from '@/contexts/auth-context';
+import { broadcastExtensionHandoff } from '@/lib/extension-handoff';
 
 import styles from './auth.module.css';
 
@@ -19,6 +20,13 @@ export function LoginForm() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('google') === 'failed') {
+      setError('Google sign-in failed. Please try again.');
+    }
+  }, []);
 
   useEffect(() => {
     if (!loading && user) {
@@ -45,6 +53,7 @@ export function LoginForm() {
 
       const nextUser = await refreshSession();
       if (nextUser) {
+        await broadcastExtensionHandoff();
         router.replace(redirectPathForRole(nextUser.role));
       }
     } catch {
@@ -67,6 +76,8 @@ export function LoginForm() {
             footer={
               <p className={styles.footer}>
                 No account yet? <Link href="/register">Create one</Link>
+                {' · '}
+                <Link href="/forgot-password">Forgot password</Link>
               </p>
             }
           >
@@ -82,6 +93,17 @@ export function LoginForm() {
               submitLabel="Sign in"
               submittingLabel="Signing in..."
             />
+
+            <div className={styles.oauthDivider}>
+              <span>or</span>
+            </div>
+
+            <a className={styles.googleButton} href="/api/auth/google/start">
+              <span className={styles.googleMark} aria-hidden="true">
+                G
+              </span>
+              Sign in with Google
+            </a>
           </AuthFormCard>
         )}
       </AuthFormPanel>

@@ -34,4 +34,38 @@ export type RefreshResponse = {
   expires_in: number;
 };
 
+export type ForgotPasswordRequest = {
+  email: string;
+};
+
+export type ForgotPasswordResponse = {
+  detail: string;
+};
+
+export type ResetPasswordRequest = {
+  token: string;
+  new_password: string;
+};
+
+export type ResetPasswordResponse = {
+  ok: boolean;
+};
+
+export type LogoutRequest = {
+  refresh_token: string;
+};
+
+export type LogoutResponse = {
+  ok: boolean;
+};
+
 export type MeResponse = AuthUser;
+
+export type ExtensionHandoffCreateResponse = {
+  code: string;
+  expires_in: number;
+};
+
+export type ExtensionHandoffRedeemRequest = {
+  code: string;
+};

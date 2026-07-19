@@ -1,7 +1,16 @@
-/** Keep in sync with apps/extension/src/consent.js */
+/** Keep in sync with apps/extension/src/consent.js and apps/api/app/consent_constants.py */
 export const CONSENT_TERMS_VERSION = '2026-07-01';
 
-export const CONSENT_STORAGE_KEY = 'worktrace:dataCaptureConsent';
+export const CONSENT_STORAGE_KEY_PREFIX = 'worktrace:dataCaptureConsent';
+
+/** Legacy single-flag key from H09AAPPLE-44 (treated as walkthrough). */
+export const CONSENT_STORAGE_KEY_LEGACY = 'worktrace:dataCaptureConsent';
+
+export type ConsentType = 'recording' | 'walkthrough';
+
+export function consentStorageKey(consentType: ConsentType): string {
+  return `${CONSENT_STORAGE_KEY_PREFIX}:${consentType}`;
+}
 
 export const CONSENT_COPY = {
   title: 'Data capture and privacy agreement',

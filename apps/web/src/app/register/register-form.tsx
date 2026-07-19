@@ -10,6 +10,7 @@ import { AuthFormCard } from '@/components/auth/auth-form-card';
 import { AuthFormPanel } from '@/components/auth/auth-form-panel';
 import { redirectPathForRole, useCurrentUser } from '@/contexts/auth-context';
 import { formatApiDetail } from '@/lib/auth/errors';
+import { broadcastExtensionHandoff } from '@/lib/extension-handoff';
 
 import styles from '../login/auth.module.css';
 
@@ -47,6 +48,7 @@ export function RegisterForm() {
 
       const nextUser = await refreshSession();
       if (nextUser) {
+        await broadcastExtensionHandoff();
         router.replace(redirectPathForRole(nextUser.role));
       }
     } catch {

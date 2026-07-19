@@ -2,7 +2,7 @@ from uuid import UUID
 
 import pytest
 
-from app.settings import SettingsError, get_default_tenant_id, get_secret_key
+from app.settings import SettingsError, get_default_tenant_id, get_secret_key, get_web_base_url
 
 
 def test_get_default_tenant_id_requires_env_var(monkeypatch):
@@ -36,3 +36,16 @@ def test_get_secret_key_returns_value(monkeypatch):
     monkeypatch.setenv("SECRET_KEY", "my-secret")
 
     assert get_secret_key() == "my-secret"
+
+
+def test_get_web_base_url_requires_env_var(monkeypatch):
+    monkeypatch.delenv("WEB_BASE_URL", raising=False)
+
+    with pytest.raises(SettingsError, match="WEB_BASE_URL is not configured"):
+        get_web_base_url()
+
+
+def test_get_web_base_url_strips_trailing_slash(monkeypatch):
+    monkeypatch.setenv("WEB_BASE_URL", "http://localhost:3000/")
+
+    assert get_web_base_url() == "http://localhost:3000"

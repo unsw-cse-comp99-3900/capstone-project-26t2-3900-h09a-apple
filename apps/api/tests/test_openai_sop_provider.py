@@ -46,8 +46,10 @@ class FakeOpenAIClient:
 
 
 def test_openai_sop_provider_returns_valid_sop(monkeypatch):
-    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
-    monkeypatch.setattr("app.openai_sop_provider.OpenAI", FakeOpenAIClient)
+    monkeypatch.setattr(
+        "app.openai_sop_provider.create_openai_compatible_client",
+        lambda: FakeOpenAIClient("test-key"),
+    )
 
     provider = OpenAiSopProvider()
 

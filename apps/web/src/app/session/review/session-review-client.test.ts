@@ -28,4 +28,10 @@ describe('session review timeline support', () => {
     // currently via default branch; prefer explicit event.type === 'tab_switch' later
     expect(reviewClientSource).toContain('Switched browser tab');
   });
+  it('notifies the extension after successful session submission', () => {
+    expect(reviewClientSource).toContain('postExtensionSessionSubmitted');
+    expect(reviewClientSource).toContain(
+      'await postExtensionSessionSubmitted(session.client_session_id)',
+    );
+  });
 });

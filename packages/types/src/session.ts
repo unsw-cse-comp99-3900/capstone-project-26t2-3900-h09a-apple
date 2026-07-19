@@ -155,6 +155,7 @@ export interface SopStep {
   instruction: string;
   branch?: string | null;
   source_event_ids: string[];
+  time_estimate?: number | null;
 }
 
 /** Mirrors `SopWarning` in `apps/api/app/sop_schema.py`. */
@@ -183,6 +184,7 @@ export interface SopStepResponse extends SopStep {
    * Null if no screenshot is associated with the step.
    */
   screenshot_url: string | null;
+  screenshot_highlight: ScreenshotHighlight | null;
 }
 
 /**
@@ -196,11 +198,79 @@ export interface SopDetailPayload {
   summary: string;
   version: number;
   generated_at: string;
+  status: SopStatus;
 
   steps: SopStepResponse[];
 
   warnings: SopWarning[];
 }
+
+/**
+ * Response returned by POST /api/v1/sops/{id}/approve.
+ *
+ * Mirrors `SopApproveResponse` in `apps/api/app/sop_schema.py`.
+ */
+export interface SopApproveResponse {
+  id: string;
+  status: string;
+}
+
+/**
+ * Response returned by POST /api/v1/sops/{id}/publish.
+ *
+ * Mirrors `SopPublishResponse` in `apps/api/app/sop_schema.py`.
+ */
+export interface SopPublishResponse {
+  id: string;
+  status: string;
+  /** ISO-8601. */
+  published_at: string;
+  library_url: string;
+  /** pending | complete | failed; set when publish enqueues embed work. */
+  embedding_status?: string | null;
+}
+
+/**
+ * Response returned by POST /api/v1/sops/{id}/embed (H09AAPPLE-35).
+ */
+export interface SopEmbedResponse {
+  id: string;
+  job_id: string;
+  embedding_status: string;
+}
+
+/**
+ * Item returned in the SOP Library listing.
+ *
+ * Mirrors `SopLibraryItem` in `apps/api/app/sop_schema.py`.
+ */
+export interface SopLibraryItem {
+  id: string;
+  title: string;
+  workflow_category?: string | null;
+  step_count: number;
+
+  /** ISO-8601. */
+  published_at?: string | null;
+
+  /** Current SOP status (draft, needs_review, approved, published). */
+  status: string;
+}
+
+/**
+ * Response returned by GET /api/v1/sops.
+ *
+ * Mirrors `SopListResponse` in `apps/api/app/sop_schema.py`.
+ */
+export interface SopListResponse {
+  sops: SopLibraryItem[];
+}
+
+/** How the live walkthrough player should anchor a step. */
+export type WalkthroughAnchorMode = 'element' | 'screenshot' | 'none';
+
+/** How the player should auto-advance for this step. */
+export type WalkthroughExpectedAction = 'click' | 'input' | 'submit';
 
 /** Mirrors `WalkthroughStep` in `apps/api/app/sop_schema.py`. */
 export interface WalkthroughStep {
@@ -208,10 +278,25 @@ export interface WalkthroughStep {
   instruction: string;
   css_selector?: string | null;
   xpath?: string | null;
+  target_label: string | null;
   screenshot_url?: string | null;
+  time_estimate?: number | null;
+  screenshot_highlight?: ScreenshotHighlight | null;
+  /** element: css/xpath; screenshot: image fallback; none: instruction-only. */
+  anchor_mode?: WalkthroughAnchorMode;
+  expected_action?: WalkthroughExpectedAction | null;
 }
 
 /** Response returned by GET /api/v1/sops/{id}/walkthrough. */
 export interface WalkthroughPayload {
   steps: WalkthroughStep[];
+}
+
+export interface ScreenshotHighlight {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  viewport_width: number;
+  viewport_height: number;
 }

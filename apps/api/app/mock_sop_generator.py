@@ -149,6 +149,7 @@ class MockSopGenerator(SopGenerator):
                     title=self._title(i, group),
                     instruction=self._instruction(group),
                     source_event_ids=[str(e.id) for e in group],
+                    time_estimate=5,
                 )
             )
 
