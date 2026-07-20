@@ -267,6 +267,26 @@ third-party vision vendor.
 Because §2.5 chose local-first, items (1)-(5) are **contingency design**, not the build plan for
 the first desktop capture slice.
 
+### 3.6 Local retention and capture-policy hardening (H09AAPPLE-76)
+
+Storage hardening sits on top of the §3.1 local buffer. Numbers and reasoning:
+
+| Rule                                 | Value                                                                                                       | Reasoning                                                                                                                                                                                    |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| General stopped-session cap          | **5** sessions (`evictStoppedSessions`, H09AAPPLE-71)                                                       | Bound disk use for abandoned local recordings without requiring immediate submit.                                                                                                            |
+| Sensitive-category post-submit purge | **Immediate** on successful `POST /api/v1/sessions` (`markSessionSubmitted`)                                | Clipboard/file attrs may still hold metadata the user no longer needs locally after upload; purge `value` + `attrs_json` for those rows before the session row itself is removed by the cap. |
+| Sensitive categories for purge       | `clipboard` (`CLIPBOARD_*`) and `file` (`FILE_*`)                                                           | Highest residual-risk local fields after redaction-at-save; mouse/keyboard/window rows keep attrs until session eviction.                                                                    |
+| Capture-time app skip list           | User-editable `sensitive-apps.json` (defaults: password managers + banking-adjacent title/process patterns) | Complements redaction: when the foreground app matches, **no event is buffered** (clicky-windows Privacy Guard pattern).                                                                     |
+| Audit summary                        | Local `capture-policy-audit.json` per session                                                               | Counts only (captured/redacted/skipped by category/pattern). Never contains redacted content.                                                                                                |
+
+**Defense in depth:** callers should redact before `saveEvent()`, but `saveEvent()` itself re-applies category policy and strips residual sensitive fields (redact-and-keep; never silent-drop of the whole event, except password fields which are skipped entirely to match the extension).
+
+**TEXT_INPUT:** mask with the same email/id/date regexes as `apps/extension/src/content.js` `maskValue()`. Password-type fields are not stored at all.
+
+**CLIPBOARD\_\***: never persist content (not even masked). Metadata only (`contentType`, source/target app).
+
+**FILE\_\***: persist `fileName` / `fileExt` / `pathMasked` only; never a raw absolute path.
+
 ## 4. Event taxonomy
 
 Three layers of classification per event:

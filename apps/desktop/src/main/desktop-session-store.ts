@@ -1,11 +1,15 @@
 import {
   assembleSessionFromRows,
+  clearSessionAudit,
   deleteSession,
+  getSessionAuditSummary,
   getSessionWithEvents,
+  markSessionSubmitted,
   openLocalBuffer,
   saveEvent,
   saveSession,
   type LocalBufferDatabase,
+  type SessionAuditSummary,
 } from '@h09a/desktop-storage';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
@@ -13,11 +17,12 @@ import { join } from 'node:path';
 import { rm } from 'node:fs/promises';
 
 export interface DesktopEventInput {
-  category: 'mouse' | 'keyboard';
-  type: 'click' | 'input';
+  category: string;
+  type: string;
   timestamp_ms: number;
   raw_x: number | null;
   raw_y: number | null;
+  value?: string | null;
   attrs: Record<string, unknown>;
 }
 
@@ -25,6 +30,8 @@ export interface CompletedLocalSession {
   sessionId: string;
   sessionDirectory: string;
   artifactPath: string;
+  auditSummaryPath: string;
+  auditSummary: SessionAuditSummary;
 }
 
 interface ActiveSession {
@@ -77,10 +84,14 @@ export class DesktopSessionStore {
     return id;
   }
 
-  saveCapturedEvent(event: DesktopEventInput): void {
+  getActiveSessionId(): string | null {
+    return this.activeSession?.id ?? null;
+  }
+
+  saveCapturedEvent(event: DesktopEventInput): boolean {
     const session = this.requireActiveSession();
 
-    saveEvent(this.db, {
+    const candidate = {
       id: randomUUID(),
       session_id: session.id,
       seq: session.nextSequence,
@@ -91,17 +102,25 @@ export class DesktopSessionStore {
       timestamp_ms: event.timestamp_ms,
       target_selector: null,
       target_label: null,
-      value: null,
+      value: event.value ?? null,
       url: null,
       screenshot_id: null,
       is_identified: false,
-      identification_source: 'unidentified',
+      identification_source: 'unidentified' as const,
       raw_x: event.raw_x,
       raw_y: event.raw_y,
       attrs: event.attrs,
-    });
+    };
+
+    // Policy/redaction runs once inside saveEvent so audit counters stay accurate.
+    const result = saveEvent(this.db, candidate);
+
+    if (!result.saved) {
+      return false;
+    }
 
     session.nextSequence += 1;
+    return true;
   }
 
   completeSession(status: 'captured' | 'failed' = 'captured'): CompletedLocalSession {
@@ -125,15 +144,35 @@ export class DesktopSessionStore {
 
     const payload = assembleSessionFromRows(rows);
     const artifactPath = join(session.directory, 'session.json');
+    const auditSummary = getSessionAuditSummary(session.id);
+    const auditSummaryPath = join(session.directory, 'capture-policy-audit.json');
 
     writeFileSync(artifactPath, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
+    writeFileSync(auditSummaryPath, `${JSON.stringify(auditSummary, null, 2)}\n`, 'utf8');
+
     this.activeSession = null;
 
     return {
       sessionId: session.id,
       sessionDirectory: session.directory,
       artifactPath,
+      auditSummaryPath,
+      auditSummary,
     };
+  }
+
+  markSubmitted(sessionId: string): {
+    sessionId: string;
+    submittedAtMs: number;
+    purgedEventCount: number;
+  } {
+    const result = markSessionSubmitted(this.db, sessionId);
+    clearSessionAudit(sessionId);
+    return result;
+  }
+
+  getAuditSummary(sessionId: string): SessionAuditSummary {
+    return getSessionAuditSummary(sessionId);
   }
 
   async deleteCompletedSession(sessionId: string, sessionDirectory: string): Promise<void> {

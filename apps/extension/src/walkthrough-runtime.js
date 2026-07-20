@@ -4,7 +4,8 @@
  *
  * Primary mode is LIVE overlay: resolve target on the page, anchor tooltip via
  * getBoundingClientRect. Screenshots are preview + fallback only (H09AAPPLE-28).
- * Full CSS → XPath → text+role → vision chain lands in H09AAPPLE-29.
+ * Resolution chain: CSS → XPath → label, then H09AAPPLE-53 vision grid locate
+ * on selector_miss (pixel overlay; manual Next). Full text+role is H09AAPPLE-29.
  */
 (() => {
   const STORAGE_STATE_KEY = 'walkthroughState';
@@ -55,6 +56,139 @@
   // Reset whenever the active step actually changes (see enterCurrentStep).
   /** @type {number | null} */
   let missFrictionStepIndex = null;
+
+  // H09AAPPLE-53: pixel rect from vision grid locate (no DOM handle).
+  /** @type {{ x: number, y: number, width: number, height: number } | null} */
+  let visionRect = null;
+  /** @type {number | null} */
+  let visionLocateStepIndex = null;
+  /** @type {number | null} */
+  let visionLocateFailedStepIndex = null;
+  let visionLocateInFlight = false;
+
+  function describeStepForVision(step) {
+    if (typeof step?.target_label === 'string' && step.target_label.trim()) {
+      return step.target_label.trim();
+    }
+    if (typeof step?.instruction === 'string' && step.instruction.trim()) {
+      return step.instruction.trim().slice(0, 500);
+    }
+    return '';
+  }
+
+  function resetVisionLocateLocal() {
+    visionRect = null;
+    visionLocateStepIndex = null;
+    visionLocateFailedStepIndex = null;
+    visionLocateInFlight = false;
+  }
+
+  function asAnchorRect(rect) {
+    if (!rect) {
+      return viewportCenterRect();
+    }
+    if (Number.isFinite(rect.left) && Number.isFinite(rect.top)) {
+      return rect;
+    }
+    const x = Number(rect.x) || 0;
+    const y = Number(rect.y) || 0;
+    const width = Number(rect.width) || 0;
+    const height = Number(rect.height) || 0;
+    return {
+      left: x,
+      top: y,
+      right: x + width,
+      bottom: y + height,
+      width,
+      height,
+    };
+  }
+
+  function applyPixelHighlight(highlightEl, rect) {
+    if (!highlightEl || !rect) {
+      return;
+    }
+    const anchor = asAnchorRect(rect);
+    highlightEl.hidden = false;
+    highlightEl.style.top = `${anchor.top}px`;
+    highlightEl.style.left = `${anchor.left}px`;
+    highlightEl.style.width = `${anchor.width}px`;
+    highlightEl.style.height = `${anchor.height}px`;
+  }
+
+  function requestVisionLocateIfNeeded(step, anchorMode) {
+    if (anchorMode !== 'element' || !activeState || !step) {
+      return;
+    }
+    if (visionLocateInFlight) {
+      return;
+    }
+    if (visionLocateStepIndex === activeState.stepIndex && visionRect) {
+      return;
+    }
+    if (visionLocateFailedStepIndex === activeState.stepIndex) {
+      return;
+    }
+
+    const description = describeStepForVision(step);
+    if (!description) {
+      visionLocateFailedStepIndex = activeState.stepIndex;
+      return;
+    }
+
+    const stepIndex = activeState.stepIndex;
+    visionLocateInFlight = true;
+
+    try {
+      chrome.runtime?.sendMessage?.(
+        {
+          type: 'WALKTHROUGH_VISION_LOCATE',
+          sopId: activeState.sopId,
+          stepNumber: step.step_number ?? stepIndex + 1,
+          tabId: activeState.tabId ?? myTabId ?? null,
+          pageKey: `${window.location.origin}${window.location.pathname}${window.location.search}`,
+          description,
+          instruction:
+            typeof step.instruction === 'string' ? step.instruction.slice(0, 2000) : null,
+          viewportWidth: window.innerWidth,
+          viewportHeight: window.innerHeight,
+        },
+        (response) => {
+          visionLocateInFlight = false;
+          if (!activeState || activeState.stepIndex !== stepIndex) {
+            return;
+          }
+          if (
+            response?.ok &&
+            response.rect &&
+            Number.isFinite(response.rect.x) &&
+            Number.isFinite(response.rect.y) &&
+            Number.isFinite(response.rect.width) &&
+            Number.isFinite(response.rect.height) &&
+            response.rect.width > 0 &&
+            response.rect.height > 0
+          ) {
+            visionLocateStepIndex = stepIndex;
+            visionRect = {
+              x: response.rect.x,
+              y: response.rect.y,
+              width: response.rect.width,
+              height: response.rect.height,
+            };
+          } else {
+            visionLocateFailedStepIndex = stepIndex;
+          }
+          // Re-render tooltip / pixel highlight without re-entering the step.
+          if (shadowRoot && activeState?.status === 'playing') {
+            reposition();
+          }
+        },
+      );
+    } catch {
+      visionLocateInFlight = false;
+      visionLocateFailedStepIndex = stepIndex;
+    }
+  }
 
   // Keep in sync with walkthrough-url-resolve.js (classic content script cannot import ESM).
   const ID_SEGMENT = /^(?:\d+|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
@@ -773,44 +907,64 @@
       applyHighlight(resolved.element);
       attachStepListener(step, resolved.element);
 
-      // Legacy overlay highlight kept temporarily but no longer used.
+      // DOM outline is primary; hide pixel overlay when a real element exists.
       highlight.hidden = true;
 
       fallbackNote.hidden = true;
       fallbackNote.textContent = '';
 
       placeTooltip(tooltip, rect);
+      tooltip.dataset.anchorMode = 'element';
     } else {
       recordSelectorMissOnce(step, anchorMode);
 
       removeHighlight();
       detachStepListener();
 
-      highlight.hidden = true;
+      const hasVisionRect =
+        visionRect &&
+        visionLocateStepIndex === activeState.stepIndex &&
+        visionRect.width > 0 &&
+        visionRect.height > 0;
 
-      placeTooltip(tooltip, viewportCenterRect());
-
-      if (showPreview) {
+      if (hasVisionRect) {
+        applyPixelHighlight(highlight, visionRect);
+        placeTooltip(tooltip, asAnchorRect(visionRect));
         fallbackNote.hidden = false;
         fallbackNote.textContent =
-          anchorMode === 'screenshot'
-            ? 'No on-page target for this step. Showing captured preview.'
-            : 'Target element not found on this page. Showing captured preview.';
+          'Target located visually (DOM unavailable). Use Next to continue.';
+        tooltip.dataset.anchorMode = 'vision';
       } else {
-        fallbackNote.hidden = false;
-        fallbackNote.textContent = 'No on-page target available for this step.';
+        highlight.hidden = true;
+        placeTooltip(tooltip, viewportCenterRect());
+
+        if (showPreview) {
+          fallbackNote.hidden = false;
+          fallbackNote.textContent =
+            anchorMode === 'screenshot'
+              ? 'No on-page target for this step. Showing captured preview.'
+              : 'Target element not found on this page. Showing captured preview.';
+        } else {
+          fallbackNote.hidden = false;
+          fallbackNote.textContent = 'No on-page target available for this step.';
+        }
+
+        tooltip.dataset.anchorMode = showPreview ? 'screenshot' : 'none';
+        requestVisionLocateIfNeeded(step, anchorMode);
       }
     }
 
-    if (showPreview) {
+    if (showPreview && tooltip.dataset.anchorMode !== 'vision') {
       preview.hidden = false;
       preview.src = step.screenshot_url;
+    } else if (showPreview && tooltip.dataset.anchorMode === 'vision') {
+      // Prefer live vision highlight; keep screenshot available but collapsed.
+      preview.hidden = true;
+      preview.removeAttribute('src');
     } else {
       preview.hidden = true;
       preview.removeAttribute('src');
     }
-
-    tooltip.dataset.anchorMode = resolved.element ? 'element' : showPreview ? 'screenshot' : 'none';
   }
 
   function enterCurrentStep() {
@@ -828,6 +982,7 @@
 
     // New step visit: allow a fresh selector_miss/wrong_page recording for it.
     missFrictionStepIndex = null;
+    resetVisionLocateLocal();
 
     const stepNumber = step.step_number ?? activeState.stepIndex + 1;
     lastEnteredStepIndex = activeState.stepIndex;
