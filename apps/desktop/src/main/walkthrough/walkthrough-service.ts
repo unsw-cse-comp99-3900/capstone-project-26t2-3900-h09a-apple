@@ -1,9 +1,14 @@
 import { clipboard, dialog, shell } from 'electron';
 import { writeFile } from 'node:fs/promises';
-import { resolveAccessibilityTarget } from './accessibility-resolve';
+import {
+  accessibilityDegradeNote,
+  isAccessibilityResolveSupported,
+  resolveAccessibilityTarget,
+} from './accessibility-resolve';
 import { getActiveDisplayBounds } from './active-display';
 import { WalkthroughAutoAdvance } from './auto-advance';
 import { postWalkthroughCompletion } from './completion-client';
+import { readForegroundBrowserUrl } from './foreground-url';
 import { resolveOcrTarget } from './ocr-resolve';
 import { WalkthroughOverlayWindow } from './overlay-window';
 import { formatAgentPromptDocument, hasCompleteCoachingSections } from './prompt-export';
@@ -24,6 +29,7 @@ import type {
   WalkthroughUiState,
 } from './types';
 import { resolveStepPageUrl } from './step-navigation';
+import { learnFromStepTransition, resolvePlaybackTargetUrl } from './walkthrough-url-resolve';
 import { resetVisionSessionGate, resolveVisionGridOnScreen } from './vision-locate-client';
 import { parseVoiceCommand, voiceCommandToAction } from './voice-commands';
 
@@ -50,6 +56,10 @@ export class WalkthroughService {
   private lastOpenedUrl: string | null = null;
   /** Serialize Previous/Next so overlapping clicks cannot race stepIndex. */
   private navInFlight = false;
+  /** Session map: generalized resource template -> live absolute URL (extension parity). */
+  private resolvedUrls: Record<string, string> = {};
+  /** Note when we refuse to reopen a stale recorded dynamic URL. */
+  private urlNavNote: string | null = null;
 
   private readonly overlay = new WalkthroughOverlayWindow();
   private readonly autoAdvance = new WalkthroughAutoAdvance();
@@ -62,6 +72,9 @@ export class WalkthroughService {
     const steps = this.payload?.steps ?? [];
     const step = steps[this.stepIndex] ?? null;
     const exportAvailable = hasCompleteCoachingSections(this.payload?.coaching_sections);
+    const noteParts = [this.lastResolvedNote, this.urlNavNote].filter((part): part is string =>
+      Boolean(part && part.trim()),
+    );
 
     return {
       status: this.status,
@@ -71,10 +84,11 @@ export class WalkthroughService {
       instruction: step?.instruction ?? '',
       eyebrow: steps.length > 0 ? `Step ${this.stepIndex + 1} of ${steps.length}` : 'Walkthrough',
       screenshotUrl: step?.screenshot_url ?? null,
-      fallbackNote: this.lastResolvedNote,
+      fallbackNote: noteParts.length > 0 ? noteParts.join(' ') : null,
       highlight: this.lastHighlight,
-      previousDisabled: this.stepIndex <= 0,
+      previousDisabled: this.stepIndex <= 0 || this.navInFlight,
       isLastStep: steps.length > 0 && this.stepIndex >= steps.length - 1,
+      navBusy: this.navInFlight,
       exportAvailable,
       exportPreview: this.exportPreview,
       error: this.error,
@@ -99,7 +113,16 @@ export class WalkthroughService {
     this.ignoreAutoAdvanceUntil = 0;
     this.lastOpenedUrl = null;
     this.navInFlight = false;
+    this.resolvedUrls = {};
+    this.urlNavNote = null;
     resetVisionSessionGate();
+
+    if (!isAccessibilityResolveSupported()) {
+      console.info(
+        `[walkthrough] starting on ${process.platform}: a11y is Windows-only; ` +
+          'OCR + vision-only mode for this session',
+      );
+    }
 
     const display = await getActiveDisplayBounds();
     this.overlay.coverDisplay(display);
@@ -122,17 +145,20 @@ export class WalkthroughService {
     }
 
     this.navInFlight = true;
+    this.publish();
     try {
       const destinationIndex = this.stepIndex - 1;
       const destinationStep = this.payload.steps[destinationIndex];
       const destinationStepNumber = destinationStep?.step_number ?? destinationIndex + 1;
 
+      this.learnLiveResourceUrlFromForeground();
       this.abandonCurrentStep();
       this.stepTimings = retractTimingsToStep(this.stepTimings, destinationStepNumber);
       this.frictionEvents = retractFrictionToStep(this.frictionEvents, destinationStepNumber);
       this.stepIndex = destinationIndex;
       this.lastHighlight = null;
       this.lastResolvedNote = null;
+      this.urlNavNote = null;
       this.suppressAutoAdvance();
       this.advanceArmed = false;
       // Paint step copy immediately; resolve can take seconds.
@@ -143,6 +169,7 @@ export class WalkthroughService {
       return this.publish();
     } finally {
       this.navInFlight = false;
+      this.publish();
     }
   }
 
@@ -156,14 +183,17 @@ export class WalkthroughService {
     }
 
     this.navInFlight = true;
+    this.publish();
     try {
       // Tooltip Next is itself a global click; without this, auto-advance fires
       // on the same click and skips an extra step (2 -> 4).
       this.suppressAutoAdvance();
+      this.learnLiveResourceUrlFromForeground();
       this.leaveCurrentStep();
       this.stepIndex += 1;
       this.lastHighlight = null;
       this.lastResolvedNote = null;
+      this.urlNavNote = null;
       this.advanceArmed = false;
       this.publish();
       console.info(`[walkthrough] Next -> step ${this.stepIndex + 1}`);
@@ -172,6 +202,7 @@ export class WalkthroughService {
       return this.publish();
     } finally {
       this.navInFlight = false;
+      this.publish();
     }
   }
 
@@ -377,6 +408,8 @@ export class WalkthroughService {
     let resolved;
     try {
       resolved = await resolvePlaybackTarget(step, display, {
+        a11yAvailable: isAccessibilityResolveSupported(),
+        a11yDegradeNote: accessibilityDegradeNote(),
         resolveAccessibility: async (liveStep) => resolveAccessibilityTarget(liveStep),
         resolveOcr: async (liveStep) => {
           ensureCloak();
@@ -433,18 +466,63 @@ export class WalkthroughService {
   }
 
   /**
-   * Open the step's recorded/declared page URL (same contract as the extension).
-   * Does not invent site-specific paths from button labels.
+   * Learn create -> live id transitions from the foreground browser URL
+   * (extension resolvedUrls parity). active-win supplies URL on macOS browsers;
+   * when unavailable we still refuse stale dynamic opens via unresolved_dynamic.
+   */
+  private learnLiveResourceUrlFromForeground(): void {
+    const step = this.currentStep();
+    if (!step) {
+      return;
+    }
+    const recorded = resolveStepPageUrl(step);
+    const live = readForegroundBrowserUrl();
+    if (!live) {
+      return;
+    }
+    const before = Object.keys(this.resolvedUrls).length;
+    this.resolvedUrls = learnFromStepTransition(this.resolvedUrls, recorded, live);
+    if (Object.keys(this.resolvedUrls).length > before) {
+      console.info('[walkthrough] learned live resource URL from foreground:', live);
+    }
+  }
+
+  /**
+   * Open the step page URL using extension-style dynamic resource resolution.
+   * Never reopens a stale recorded id when the create flow produced a new resource.
    * @returns opened URL, or null if nothing new was opened
    */
   private maybeOpenInstructionUrl(step: WalkthroughStep): string | null {
-    const url = resolveStepPageUrl(step);
+    const recorded = resolveStepPageUrl(step);
+    const live = readForegroundBrowserUrl();
+    const { url, mode } = resolvePlaybackTargetUrl(recorded, this.resolvedUrls, live);
+
+    if (mode === 'unresolved_dynamic') {
+      console.info(
+        '[walkthrough] skipping stale dynamic URL (stay on the resource you created):',
+        recorded,
+      );
+      this.urlNavNote =
+        'This step recorded a dynamic resource URL. Stay on the page you just created in the browser; ' +
+        'desktop will not reopen the old recorded id.';
+      return null;
+    }
+
+    if (mode === 'live') {
+      // Already on a matching live resource; do not bounce to the recorded id.
+      this.lastOpenedUrl = url;
+      this.urlNavNote = null;
+      console.info('[walkthrough] using live matching resource URL (no reopen):', url);
+      return null;
+    }
+
     if (!url || url === this.lastOpenedUrl) {
       return null;
     }
 
     this.lastOpenedUrl = url;
-    console.info('[walkthrough] opening step URL in default browser:', url);
+    this.urlNavNote = null;
+    console.info(`[walkthrough] opening step URL (${mode}) in default browser:`, url);
     void shell.openExternal(url);
     return url;
   }

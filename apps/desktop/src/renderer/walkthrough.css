@@ -137,6 +137,14 @@ button:disabled {
   cursor: not-allowed;
 }
 
+.actions.is-busy button:disabled {
+  opacity: 0.55;
+}
+
+.actions.is-busy .btn-primary:disabled {
+  background: #64748b;
+}
+
 .btn-secondary {
   background: #334155;
   color: #f8fafc;

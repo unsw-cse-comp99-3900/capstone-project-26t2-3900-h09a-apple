@@ -10,6 +10,7 @@ interface WalkthroughUiState {
   highlight: { x: number; y: number; width: number; height: number } | null;
   previousDisabled: boolean;
   isLastStep: boolean;
+  navBusy: boolean;
   exportAvailable: boolean;
   exportPreview: string | null;
   error: string | null;

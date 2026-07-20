@@ -96,9 +96,17 @@ function renderPanel(state: WalkthroughUiState): void {
     exportPanel.hidden = true;
     eyebrow.textContent = state.eyebrow;
     instruction.textContent = state.instruction;
-    previousBtn.disabled = state.previousDisabled;
+    const busy = Boolean(state.navBusy);
+    previousBtn.disabled = state.previousDisabled || busy;
+    nextBtn.disabled = busy;
+    finishBtn.disabled = busy;
     nextBtn.hidden = state.isLastStep;
     finishBtn.hidden = !state.isLastStep;
+    previousBtn.textContent = busy ? 'Resolving...' : 'Previous';
+    nextBtn.textContent = busy ? 'Resolving...' : 'Next';
+    finishBtn.textContent = busy ? 'Resolving...' : 'Finish';
+    actions.classList.toggle('is-busy', busy);
+    actions.setAttribute('aria-busy', busy ? 'true' : 'false');
 
     if (state.screenshotUrl) {
       preview.hidden = false;

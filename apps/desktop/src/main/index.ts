@@ -459,6 +459,7 @@ if (!gotSingleInstanceLock) {
         highlight: null,
         previousDisabled: true,
         isLastStep: false,
+        navBusy: false,
         exportAvailable: false,
         exportPreview: null,
         error: null,

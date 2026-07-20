@@ -315,6 +315,19 @@ test('miss fallback suggests Previous after step 1', () => {
   );
 });
 
+test('miss fallback explicitly names Windows-only a11y degrade on non-Windows', () => {
+  const note = buildMissFallbackNote(
+    { step_number: 1, instruction: 'Start' },
+    {
+      a11yAvailable: false,
+      a11yDegradeNote:
+        'Accessibility (a11y) lookup is Windows-only; this session uses OCR + vision only.',
+    },
+  );
+  assert.match(note, /Windows-only/);
+  assert.match(note, /OCR \+ vision only/);
+});
+
 test('resolvePlaybackTarget never paints non-screen recorded hints', async () => {
   const display = { x: 100, y: 50, width: 1920, height: 1080 };
 

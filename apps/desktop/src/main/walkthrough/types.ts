@@ -71,6 +71,8 @@ export interface WalkthroughUiState {
   highlight: ScreenRect | null;
   previousDisabled: boolean;
   isLastStep: boolean;
+  /** True while Previous/Next is waiting on openExternal / resolve (navInFlight). */
+  navBusy: boolean;
   exportAvailable: boolean;
   exportPreview: string | null;
   error: string | null;

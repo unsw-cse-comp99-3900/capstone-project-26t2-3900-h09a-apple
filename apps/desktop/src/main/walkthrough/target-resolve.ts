@@ -5,18 +5,32 @@ import type { ResolvedTarget, ScreenRect, WalkthroughStep } from './types';
 
 export { hasScreenSpaceCoordinates, mapViewportRectToScreen } from './coordinate-space';
 
-export function buildMissFallbackNote(step: WalkthroughStep): string {
-  if (step.step_number > 1) {
-    return (
-      'No live target on the current screen. If you advanced too far or opened the wrong page, ' +
-      'press Previous to go back, bring the target app to the front, then re-check. ' +
-      'Showing captured preview.'
-    );
+export type MissFallbackOptions = {
+  /** When false, append an explicit Windows-only a11y degrade note. */
+  a11yAvailable?: boolean;
+  a11yDegradeNote?: string | null;
+};
+
+export function buildMissFallbackNote(
+  step: WalkthroughStep,
+  options: MissFallbackOptions = {},
+): string {
+  const base =
+    step.step_number > 1
+      ? 'No live target on the current screen. If you advanced too far or opened the wrong page, ' +
+        'press Previous to go back, bring the target app to the front, then re-check. ' +
+        'Showing captured preview.'
+      : 'No live target on the current screen. Bring the target app to the front (not the SOP page), ' +
+        'then use Next to re-check. Showing captured preview.';
+
+  if (options.a11yAvailable === false) {
+    const degrade =
+      options.a11yDegradeNote?.trim() ||
+      'Accessibility (a11y) lookup is Windows-only; this session uses OCR + vision only.';
+    return `${base} ${degrade}`;
   }
-  return (
-    'No live target on the current screen. Bring the target app to the front (not the SOP page), ' +
-    'then use Next to re-check. Showing captured preview.'
-  );
+
+  return base;
 }
 
 function hasSelectorHint(step: WalkthroughStep): boolean {
@@ -65,6 +79,9 @@ export type PlaybackResolveOptions = {
   resolveAccessibility?: (step: WalkthroughStep) => Promise<ScreenRect | null>;
   resolveOcr?: (step: WalkthroughStep) => Promise<ScreenRect | null>;
   resolveVisionGrid?: (step: WalkthroughStep) => Promise<ScreenRect | null>;
+  /** When false, miss notes explicitly say a11y is unavailable (Mac OCR+vision-only). */
+  a11yAvailable?: boolean;
+  a11yDegradeNote?: string | null;
 };
 
 /**
@@ -77,7 +94,10 @@ export async function resolvePlaybackTarget(
   displayBounds: ScreenRect,
   options?: PlaybackResolveOptions,
 ): Promise<ResolvedTarget> {
-  const missNote = buildMissFallbackNote(step);
+  const missNote = buildMissFallbackNote(step, {
+    a11yAvailable: options?.a11yAvailable,
+    a11yDegradeNote: options?.a11yDegradeNote,
+  });
 
   if (!shouldAttemptLiveResolve(step)) {
     return { rect: null, source: 'unidentified', fallbackNote: missNote };

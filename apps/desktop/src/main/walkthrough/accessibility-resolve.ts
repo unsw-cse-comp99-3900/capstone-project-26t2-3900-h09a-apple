@@ -6,7 +6,24 @@ import { needleForStep } from './step-navigation';
  * Windows UI Automation lookup by Name.
  * Prefers compact interactive controls (link/button/list item) over large text
  * nodes that share the same name (e.g. sidebar "Code frequency" vs page H1).
+ *
+ * macOS AXUIElement is intentionally out of scope for H09AAPPLE-78; non-Windows
+ * platforms degrade to OCR + vision only (never a silent no-op without log/UI).
  */
+export function isAccessibilityResolveSupported(): boolean {
+  return process.platform === 'win32';
+}
+
+export function accessibilityDegradeNote(): string | null {
+  if (isAccessibilityResolveSupported()) {
+    return null;
+  }
+  return (
+    'Accessibility (a11y) lookup is Windows-only on this build. ' +
+    `${process.platform} playback uses OCR + vision only (two-stage grid when vision runs).`
+  );
+}
+
 export async function resolveAccessibilityTarget(
   step: WalkthroughStep,
 ): Promise<ScreenRect | null> {
@@ -15,8 +32,11 @@ export async function resolveAccessibilityTarget(
     return null;
   }
 
-  if (process.platform !== 'win32') {
-    console.info('[walkthrough] a11y resolve skipped: UI Automation helper is Windows-only');
+  if (!isAccessibilityResolveSupported()) {
+    console.info(
+      `[walkthrough] a11y unavailable on ${process.platform}: UI Automation helper is Windows-only; ` +
+        'degrading to OCR + vision-only mode (macOS AXUIElement not implemented in this release)',
+    );
     return null;
   }
 
