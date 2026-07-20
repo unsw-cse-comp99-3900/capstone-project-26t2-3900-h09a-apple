@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>WorkTrace - Coming soon</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Manrope:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body class="coming-soon-body">
+    <div class="atmosphere" aria-hidden="true"></div>
+
+    <main class="coming-soon">
+      <p class="brand">WorkTrace</p>
+      <h1 id="headline">Thanks - we will be in touch.</h1>
+      <p class="lead" id="tier-line">
+        We recorded your interest. We are not charging a card today.
+      </p>
+      <p class="honest">
+        This was a willingness-to-pay check (painted door). Your click still helps us decide what to
+        build next.
+      </p>
+      <p><a class="back-link" href="./index.html">Back to pricing</a></p>
+    </main>
+
+    <script>
+      (function () {
+        const params = new URLSearchParams(location.search);
+        const tier = params.get('tier');
+        const action = params.get('action');
+        const headline = document.getElementById('headline');
+        const line = document.getElementById('tier-line');
+
+        if (action === 'choose_free' || tier === 'free') {
+          headline.textContent = 'Free plan interest recorded.';
+          line.textContent =
+            'Thanks for choosing Free. Billing is not open yet; when accounts open, the free tier is meant for browser-only solo use (no desktop capture, up to 3 published SOPs).';
+          return;
+        }
+
+        if (action === 'contact' || tier === 'business') {
+          headline.textContent = 'Thanks - we will be in touch.';
+          line.textContent =
+            'We recorded your Contact us request for Business / early access. We are not charging a card today. When sales conversations open, we will follow up.';
+          return;
+        }
+
+        const labels = { solo: 'Solo', team: 'Team' };
+        if (tier && labels[tier]) {
+          headline.textContent = 'Thanks - paid plans are coming soon.';
+          line.textContent =
+            'We recorded your interest in Subscribe to ' +
+            labels[tier] +
+            '. We are not charging a card today. When billing opens, we will be in touch.';
+        }
+      })();
+    </script>
+  </body>
+</html>
