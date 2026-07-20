@@ -10,11 +10,14 @@ import { hasCurrentConsent, saveConsent } from './consent/consent-store';
 import { postConsentAccept } from './consent/consent-service';
 import { getCurrentAuth, logout } from './auth/auth-service';
 import { submitSession } from './session/submission-service';
+import { fetchWalkthroughPayload } from './walkthrough/payload-client';
+import { WalkthroughService } from './walkthrough/walkthrough-service';
 import { readFile } from 'node:fs/promises';
 import type { CompletedLocalSession } from './desktop-session-store';
 
 let sessionStore: DesktopSessionStore | undefined;
 let recordingService: RecordingService | undefined;
+let walkthroughService: WalkthroughService | undefined;
 let recorderWindow: BrowserWindow | undefined;
 let lastCompletedSession: CompletedLocalSession | null = null;
 let windowDragState:
@@ -28,7 +31,7 @@ type WindowMode = 'compact' | 'expanded';
 
 const WINDOW_SIZES: Record<WindowMode, { width: number; height: number }> = {
   compact: { width: 88, height: 88 },
-  expanded: { width: 440, height: 370 },
+  expanded: { width: 440, height: 460 },
 };
 
 interface RecordingStatus {
@@ -229,6 +232,75 @@ if (!gotSingleInstanceLock) {
     return result;
   });
 
+  ipcMain.handle('walkthrough:start', async (_event, sopId: string) => {
+    if (!walkthroughService) {
+      throw new Error('Walkthrough service is not ready');
+    }
+
+    if (recordingService?.getState() === 'recording') {
+      throw new Error('Stop recording before starting a walkthrough');
+    }
+
+    const auth = getCurrentAuth();
+    if (!auth) {
+      throw new Error('Desktop is not authenticated');
+    }
+
+    const payload = await fetchWalkthroughPayload(String(sopId ?? ''));
+    return walkthroughService.start(payload);
+  });
+
+  ipcMain.handle('walkthrough:previous', async () => {
+    if (!walkthroughService) {
+      throw new Error('Walkthrough service is not ready');
+    }
+    return walkthroughService.previous();
+  });
+
+  ipcMain.handle('walkthrough:next', async () => {
+    if (!walkthroughService) {
+      throw new Error('Walkthrough service is not ready');
+    }
+    return walkthroughService.next();
+  });
+
+  ipcMain.handle('walkthrough:finish', async () => {
+    if (!walkthroughService) {
+      throw new Error('Walkthrough service is not ready');
+    }
+    return walkthroughService.finish();
+  });
+
+  ipcMain.handle('walkthrough:dismiss', async () => {
+    await walkthroughService?.dismiss();
+    return { ok: true };
+  });
+
+  ipcMain.handle('walkthrough:copy-export', async () => {
+    if (!walkthroughService) {
+      return { ok: false, error: 'Walkthrough service is not ready' };
+    }
+    return walkthroughService.copyExport();
+  });
+
+  ipcMain.handle('walkthrough:save-export', async () => {
+    if (!walkthroughService) {
+      return { ok: false, error: 'Walkthrough service is not ready' };
+    }
+    return walkthroughService.saveExport();
+  });
+
+  ipcMain.handle('walkthrough:voice', async (_event, transcript: string) => {
+    if (!walkthroughService) {
+      throw new Error('Walkthrough service is not ready');
+    }
+    return walkthroughService.handleVoiceTranscript(String(transcript ?? ''));
+  });
+
+  ipcMain.on('walkthrough:tooltip-interactive', (_event, enabled: boolean) => {
+    walkthroughService?.setTooltipHitTesting(Boolean(enabled));
+  });
+
   ipcMain.handle('consent:get-status', async () => {
     const tokens = await loadTokens();
 
@@ -312,6 +384,7 @@ if (!gotSingleInstanceLock) {
   });
 
   app.on('before-quit', () => {
+    void walkthroughService?.dismiss();
     stopHandoffServer();
   });
 
@@ -335,6 +408,7 @@ if (!gotSingleInstanceLock) {
       join(userDataDirectory, 'sessions'),
     );
     recordingService = new RecordingService(sessionStore);
+    walkthroughService = new WalkthroughService();
 
     createWindow();
 

@@ -23,6 +23,8 @@ contextBridge.exposeInMainWorld('desktopAPI', {
   reviewSession: () => ipcRenderer.invoke('recording:review'),
   submitSession: () => ipcRenderer.invoke('recording:submit'),
 
+  startWalkthrough: (sopId: string) => ipcRenderer.invoke('walkthrough:start', sopId),
+
   // Window
   setWindowMode: (mode: 'compact' | 'expanded') => ipcRenderer.invoke('window:set-mode', mode),
   beginWindowDrag: () => ipcRenderer.send('window:drag-start'),

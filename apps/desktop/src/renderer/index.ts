@@ -34,6 +34,9 @@ const durationText = requireElement<HTMLSpanElement>('review-duration');
 const eventsText = requireElement<HTMLSpanElement>('review-events');
 const submitButton = requireElement<HTMLButtonElement>('submit-session-button');
 const cancelButton = requireElement<HTMLButtonElement>('cancel-review-button');
+const walkthroughSopInput = requireElement<HTMLInputElement>('walkthrough-sop-id');
+const startWalkthroughButton = requireElement<HTMLButtonElement>('start-walkthrough');
+const walkthroughMessage = requireElement<HTMLParagraphElement>('walkthrough-message');
 
 let busy = false;
 let dragPointerId: number | null = null;
@@ -159,6 +162,29 @@ submitButton.addEventListener('click', async () => {
   } catch (error) {
     alert(error instanceof Error ? error.message : String(error));
   }
+});
+
+startWalkthroughButton.addEventListener('click', () => {
+  void (async () => {
+    const sopId = walkthroughSopInput.value.trim();
+    if (!sopId) {
+      walkthroughMessage.textContent = 'Enter a published SOP id first.';
+      return;
+    }
+
+    startWalkthroughButton.disabled = true;
+    walkthroughMessage.textContent = 'Starting walkthrough...';
+
+    try {
+      await window.desktopAPI.startWalkthrough(sopId);
+      walkthroughMessage.textContent = 'Walkthrough overlay is active.';
+      document.body.dataset.windowMode = await window.desktopAPI.setWindowMode('compact');
+    } catch (error) {
+      walkthroughMessage.textContent = error instanceof Error ? error.message : String(error);
+    } finally {
+      startWalkthroughButton.disabled = false;
+    }
+  })();
 });
 
 floatingOrbShell.addEventListener('pointerdown', (event) => {

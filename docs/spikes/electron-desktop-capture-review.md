@@ -444,14 +444,19 @@ valid at playback time. Playback re-runs the same layered lookup as §2.2 (Acces
 local OCR concurrently, vision model as conditional fallback) to re-locate the logical target on
 the new screen - this is the same mechanism reused for a different purpose, not a new one.
 
-### 5.3 Open question that blocks detailed design: what does "the user has built their own agent" concretely produce?
+### 5.3 RESOLVED (H09AAPPLE-78): what "the user has built their own agent" produces
 
-The end goal per Tang's brief is that walking through the guide results in the user having built
-their first Claude Code agent. What that means as a concrete artifact (a config file? a prompt? a
-running agent instance?) is undefined. This needs to be confirmed with Tang before Module 3's final
-step can be designed - everything upstream of that final step (highlighting, auto-advance
-detection, step text generation reusing the Module 2 LLM pipeline) can be designed without this
-answer, but the module's actual endpoint cannot.
+Per the client's definition ("an agent is not code, it is a well-written instruction in a plain
+text file") and because this product has no agent-execution engine, Finish exports the finished
+prompt only: if the walkthrough included a prompt-coaching step (H09AAPPLE-50), assemble the five
+validated sections (Identity / Context / Steps / Output / Guardrails) into one markdown document
+and offer save-to-file + copy-to-clipboard. WorkTrace does not execute, schedule, or run the agent.
+If there was no coaching step, the completion screen has no export action.
+
+Implementation lives under `apps/desktop/src/main/walkthrough/` (overlay BrowserWindow + same
+spotlight/tooltip visual language as the extension). Auto-advance first pass uses the global input
+hook; Accessibility-tree diff remains follow-up (§5.4). Voice advance is a fixed vocabulary
+(`next` / `continue` / `previous` / `repeat` / `stop`) over the H09AAPPLE-32 STT path when present.
 
 ### 5.4 Auto-advance ("has this step been completed") needs a new detection mechanism
 
@@ -465,8 +470,8 @@ unselected to selected). Needs its own design pass once Module 3 is picked back 
 1. ~~Local vs external model for OCR/vision analysis~~ - **Decided in H09AAPPLE-73** (§2.5 / §3.5):
    local Tesseract.js for OCR; local-first vision; no external screenshot APIs by default;
    moondream not production-ready yet (follow-up model selection).
-2. What "the user has built their own agent" concretely means as Module 3's final deliverable
-   (§5.3) - needs Tang's input.
+2. ~~What "the user has built their own agent" concretely means~~ - **Resolved in H09AAPPLE-78**
+   (§5.3): export the validated five-section prompt file; do not execute the agent.
 3. Whether to eventually retire the Chrome extension's browser capture pipeline in favor of the
    desktop app's, once the desktop app ships (§4.3) - deliberately deferred, not urgent.
 

@@ -56,6 +56,9 @@ interface DesktopAPI {
   reviewSession(): Promise<RecordingStatus>;
   submitSession(): Promise<SubmissionResult>;
 
+  // Walkthrough
+  startWalkthrough(sopId: string): Promise<unknown>;
+
   // Window
   setWindowMode(mode: 'compact' | 'expanded'): Promise<'compact' | 'expanded'>;
   beginWindowDrag(): void;
