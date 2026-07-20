@@ -1,5 +1,5 @@
-import { RoleLanding } from '@/components/role-landing';
+import { ReviewQueueClient } from './review-queue-client';
 
 export default function ReviewPage() {
-  return <RoleLanding title="Review queue" role="REVIEWER" />;
+  return <ReviewQueueClient />;
 }

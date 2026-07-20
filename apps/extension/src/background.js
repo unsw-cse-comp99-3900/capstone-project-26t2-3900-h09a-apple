@@ -8,11 +8,23 @@ import { authenticatedFetch, clearStoredAuthTokens, redeemHandoffCode } from './
 import { clearDataCaptureConsent } from './consent.js';
 import { handleExternalAuthMessage } from './external-auth.js';
 import { buildVisionCacheKey } from './vision-locate.js';
+import {
+  WALKTHROUGH_PAYLOAD_KEY,
+  WALKTHROUGH_STORAGE_KEY,
+  startWalkthrough,
+} from './walkthrough-state.js';
+import {
+  ensureWalkthroughPage,
+  inferLaunchUrl,
+  syncWalkthroughToTab,
+  waitForTabComplete,
+} from './walkthrough-launch.js';
 
 const externalAuthHandlers = {
   redeemHandoffCode,
   clearStoredAuthTokens,
   deleteSessionPayload,
+  startWalkthroughFromSop,
 };
 
 let writeQueue = Promise.resolve();
@@ -119,6 +131,63 @@ function parseScreenshotDataUrl(dataUrl) {
   return {
     content_type: match[1],
     data_base64: match[2],
+  };
+}
+
+async function startWalkthroughFromSop(sopId) {
+  const trimmedSopId = typeof sopId === 'string' ? sopId.trim() : '';
+  if (!trimmedSopId) {
+    throw new Error('Missing SOP id');
+  }
+
+  const response = await authenticatedFetch(
+    `/api/v1/sops/${encodeURIComponent(trimmedSopId)}/walkthrough`,
+  );
+  if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error('Sign in to the WorkTrace extension before starting walkthroughs.');
+    }
+    if (response.status === 404) {
+      throw new Error('Published SOP not found for this workspace.');
+    }
+    if (response.status === 422) {
+      throw new Error('Walkthrough data is incomplete for this SOP.');
+    }
+    throw new Error('Could not load walkthrough data.');
+  }
+
+  const payload = await response.json();
+  if (!Array.isArray(payload?.steps) || payload.steps.length === 0) {
+    throw new Error('This SOP has no walkthrough steps.');
+  }
+
+  const launchUrl = inferLaunchUrl(payload);
+  if (!launchUrl) {
+    throw new Error(
+      'This walkthrough has no start page URL. Re-publish the SOP from a session that recorded page URLs.',
+    );
+  }
+
+  const tab = await chrome.tabs.create({ url: launchUrl, active: true });
+  const nextState = startWalkthrough(
+    { status: 'idle', sopId: null, stepIndex: 0, tabId: null },
+    trimmedSopId,
+    { tabId: tab?.id ?? null },
+  );
+
+  await chrome.storage?.session?.set({
+    [WALKTHROUGH_STORAGE_KEY]: nextState,
+    [WALKTHROUGH_PAYLOAD_KEY]: payload,
+  });
+
+  if (tab?.id != null) {
+    await waitForTabComplete(chrome.tabs, tab.id);
+    await syncWalkthroughToTab(chrome.tabs, tab.id);
+  }
+
+  return {
+    sopId: trimmedSopId,
+    tabId: tab?.id ?? null,
   };
 }
 
@@ -257,6 +326,26 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({
           ok: false,
           error: error instanceof Error ? error.message : 'Vision locate failed',
+        });
+      });
+    return true;
+  }
+
+  if (message.type === 'WALKTHROUGH_ENSURE_PAGE') {
+    ensureWalkthroughPage(
+      chrome.tabs,
+      chrome.storage,
+      { stateKey: WALKTHROUGH_STORAGE_KEY },
+      message.url,
+      message.tabId ?? sender.tab?.id ?? null,
+    )
+      .then((tab) => {
+        sendResponse({ ok: true, tabId: tab?.id ?? null });
+      })
+      .catch((error) => {
+        sendResponse({
+          ok: false,
+          error: error instanceof Error ? error.message : 'Failed to open walkthrough page',
         });
       });
     return true;

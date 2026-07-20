@@ -67,6 +67,22 @@ export function handleExternalAuthMessage(message, sender, sendResponse, handler
     return true;
   }
 
+  if (message.type === 'START_WALKTHROUGH') {
+    handlers
+      .startWalkthroughFromSop(message.sopId)
+      .then((result) => {
+        sendResponse({ ok: true, ...result });
+      })
+      .catch((error) => {
+        sendResponse({
+          ok: false,
+          error: error instanceof Error ? error.message : 'Failed to start walkthrough',
+        });
+      });
+
+    return true;
+  }
+
   sendResponse({ ok: false, error: 'Unknown message type' });
   return false;
 }

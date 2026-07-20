@@ -150,11 +150,12 @@ def _resolve_step_metadata(
 
         # Record the first page URL associated with this step so the
         # walkthrough runtime can distinguish selector misses from
-        # genuine navigation to the wrong page.
+        # genuine navigation to the wrong page, and so web launch can
+        # open the correct start/target page.
         if expected_url is None:
-            url = getattr(event, "url", None)
-            if url:
-                expected_url = url
+            raw_url = getattr(event, "url", None)
+            if isinstance(raw_url, str) and raw_url.strip():
+                expected_url = raw_url.strip()
 
         event_type = getattr(event, "type", None)
         current_priority = priority.get(event_type, 0)

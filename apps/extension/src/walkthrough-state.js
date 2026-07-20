@@ -12,6 +12,8 @@ export function createWalkthroughState() {
     sopId: null,
     stepIndex: 0,
     tabId: null,
+    // origin+path-template -> live absolute URL learned during this playback
+    resolvedUrls: {},
   };
 }
 
@@ -40,6 +42,7 @@ export function startWalkthrough(state, sopId, { tabId = null } = {}) {
     sopId: trimmed,
     stepIndex: 0,
     tabId: tabId ?? null,
+    resolvedUrls: {},
   };
 }
 
