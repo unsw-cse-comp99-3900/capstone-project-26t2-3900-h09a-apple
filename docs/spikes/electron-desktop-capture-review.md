@@ -464,6 +464,20 @@ valid at playback time. Playback re-runs the same layered lookup as §2.2 (Acces
 local OCR concurrently, vision model as conditional fallback) to re-locate the logical target on
 the new screen - this is the same mechanism reused for a different purpose, not a new one.
 
+**Coordinate-space trap (H09AAPPLE-78):** extension `screenshot_highlight` /
+`target_rect` values are **viewport/CSS pixels** (plus `viewport_width` /
+`viewport_height`). The desktop overlay paints in **screen coordinates**. Those
+spaces are not interchangeable. Painting a viewport rect as a screen spotlight
+misplaces the hole (often mid-page). Mapping viewport → screen is only valid
+when you also know the on-screen `contentBounds` of the same surface (browser
+client area, or a full-display capture used as the vision image). If live
+resolve fails: **do not invent a centered fake highlight**; recenter the
+tooltip, show the captured preview, and the "no live target" note (AC).
+Desktop implementation: `apps/desktop/src/main/walkthrough/coordinate-space.ts`
+
+- `target-resolve.ts` + optional `vision-locate-client.ts` (screen capture →
+  `POST /api/v1/walkthroughs/locate-element` → map image rect onto display bounds).
+
 ### 5.3 RESOLVED (H09AAPPLE-78): what "the user has built their own agent" produces
 
 Per the client's definition ("an agent is not code, it is a well-written instruction in a plain

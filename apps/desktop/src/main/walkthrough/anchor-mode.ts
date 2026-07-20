@@ -12,12 +12,11 @@ export function resolveAnchorMode(step: WalkthroughStep | null | undefined): Anc
   const hasSelector =
     (typeof step?.css_selector === 'string' && step.css_selector.trim().length > 0) ||
     (typeof step?.xpath === 'string' && step.xpath.trim().length > 0);
-  const hasDesktopHint =
-    Boolean(step?.raw_coordinates) ||
-    Boolean(step?.screenshot_highlight) ||
-    Boolean(step?.target_label?.trim());
+  // screenshot_highlight alone is browser viewport space, not a live desktop
+  // target. Still treat target_label / selectors / screen raw coords as element.
+  const hasLiveHint = Boolean(step?.raw_coordinates) || Boolean(step?.target_label?.trim());
 
-  if (hasSelector || hasDesktopHint) {
+  if (hasSelector || hasLiveHint) {
     return 'element';
   }
 

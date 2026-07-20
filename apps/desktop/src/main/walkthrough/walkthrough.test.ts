@@ -2,6 +2,11 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { resolveAnchorMode } from './anchor-mode.js';
+import {
+  hasScreenSpaceCoordinates,
+  mapViewportRectToScreen,
+  misuseViewportAsScreen,
+} from './coordinate-space.js';
 import { mapWalkthroughStep } from './payload-map.js';
 import { formatAgentPromptDocument, hasCompleteCoachingSections } from './prompt-export.js';
 import {
@@ -41,6 +46,16 @@ test('resolveAnchorMode mirrors extension element/screenshot/none rules', () => 
       instruction: 'x',
       anchor_mode: 'screenshot',
       css_selector: '#ignored',
+    }),
+    'screenshot',
+  );
+  // Viewport screenshot_highlight alone is not a live desktop target hint.
+  assert.equal(
+    resolveAnchorMode({
+      step_number: 1,
+      instruction: 'x',
+      screenshot_highlight: { x: 10, y: 20, width: 30, height: 40 },
+      screenshot_url: 'https://example/s.png',
     }),
     'screenshot',
   );
@@ -97,18 +112,111 @@ test('previous retracts forward timings like the extension', () => {
   assert.deepEqual(friction, [{ step_number: 1, event_type: 'selector_miss', occurred_at: 'a' }]);
 });
 
-test('resolvePlaybackTarget prefers live resolvers then recorded hints', async () => {
+test('viewport coords need contentBounds; misuse as screen diverges', () => {
+  const viewportHighlight = { x: 1100, y: 80, width: 120, height: 36 };
+  const viewportWidth = 1440;
+  const viewportHeight = 900;
+
+  // Browser window content area on a larger desktop (not full display).
+  const browserContent = { x: 120, y: 80, width: 1280, height: 800 };
+  const display = { x: 0, y: 0, width: 1920, height: 1080 };
+
+  const correct = mapViewportRectToScreen(
+    viewportHighlight,
+    browserContent,
+    viewportWidth,
+    viewportHeight,
+  );
+  assert.ok(correct);
+  assert.ok(correct.x > browserContent.x);
+  assert.ok(correct.y > browserContent.y);
+
+  // Wrong: paint viewport pixels as screen pixels (pre-fix desktop bug).
+  const misused = misuseViewportAsScreen(viewportHighlight);
+  assert.notEqual(Math.round(misused.x), Math.round(correct.x));
+  assert.notEqual(Math.round(misused.y), Math.round(correct.y));
+
+  // Also wrong: scale onto full display when the browser did not fill it.
+  const scaledToDisplay = mapViewportRectToScreen(
+    viewportHighlight,
+    display,
+    viewportWidth,
+    viewportHeight,
+  );
+  assert.ok(scaledToDisplay);
+  assert.notEqual(Math.round(scaledToDisplay.x), Math.round(correct.x));
+});
+
+test('hasScreenSpaceCoordinates only trusts desktop-marked raw coords', () => {
+  assert.equal(
+    hasScreenSpaceCoordinates({
+      step_number: 1,
+      instruction: 'x',
+      raw_coordinates: { x: 1, y: 2 },
+    }),
+    false,
+  );
+  assert.equal(
+    hasScreenSpaceCoordinates({
+      step_number: 1,
+      instruction: 'x',
+      raw_coordinates: { x: 1, y: 2 },
+      attrs: { layer: 'desktop' },
+    }),
+    true,
+  );
+  assert.equal(
+    hasScreenSpaceCoordinates({
+      step_number: 1,
+      instruction: 'x',
+      raw_coordinates: { x: 1, y: 2 },
+      attrs: { coordinate_space: 'screen' },
+    }),
+    true,
+  );
+  assert.equal(
+    hasScreenSpaceCoordinates({
+      step_number: 1,
+      instruction: 'x',
+      raw_coordinates: { x: 1, y: 2 },
+      attrs: { platform: 'darwin', foreground_app: 'Chrome' },
+    }),
+    true,
+  );
+});
+
+test('resolvePlaybackTarget runs a11y and OCR concurrently then vision', async () => {
   const display = { x: 100, y: 50, width: 1920, height: 1080 };
+  const order: string[] = [];
 
   const viaA11y = await resolvePlaybackTarget(
     { step_number: 1, instruction: 'Click', target_label: 'Send' },
     display,
     {
-      resolveAccessibility: async () => ({ x: 200, y: 100, width: 80, height: 40 }),
+      resolveAccessibility: async () => {
+        order.push('a11y-start');
+        await new Promise((r) => setTimeout(r, 20));
+        order.push('a11y-done');
+        return { x: 200, y: 100, width: 80, height: 40 };
+      },
+      resolveOcr: async () => {
+        order.push('ocr-start');
+        await new Promise((r) => setTimeout(r, 5));
+        order.push('ocr-done');
+        return { x: 220, y: 120, width: 70, height: 30 };
+      },
+      resolveVisionGrid: async () => {
+        order.push('vision');
+        return { x: 300, y: 200, width: 90, height: 50 };
+      },
     },
   );
   assert.equal(viaA11y.source, 'accessibility_api');
   assert.equal(viaA11y.fallbackNote, null);
+  // Both live layers start before either finishes (concurrent).
+  assert.ok(order.indexOf('a11y-start') < order.indexOf('ocr-done'));
+  assert.ok(order.indexOf('ocr-start') < order.indexOf('a11y-done'));
+  assert.ok(!order.includes('vision'));
 
   const viaOcr = await resolvePlaybackTarget(
     { step_number: 1, instruction: 'Click', target_label: 'Send' },
@@ -116,40 +224,52 @@ test('resolvePlaybackTarget prefers live resolvers then recorded hints', async (
     {
       resolveAccessibility: async () => null,
       resolveOcr: async () => ({ x: 220, y: 120, width: 70, height: 30 }),
+      resolveVisionGrid: async () => ({ x: 300, y: 200, width: 90, height: 50 }),
     },
   );
   assert.equal(viaOcr.source, 'ocr');
 
+  let visionCalls = 0;
   const viaVision = await resolvePlaybackTarget(
-    { step_number: 1, instruction: 'Click', target_label: 'Send' },
+    { step_number: 1, instruction: 'Click', target_label: 'New issue' },
     display,
     {
       resolveAccessibility: async () => null,
       resolveOcr: async () => null,
-      resolveVisionGrid: async () => ({ x: 300, y: 200, width: 90, height: 50 }),
+      resolveVisionGrid: async () => {
+        visionCalls += 1;
+        return { x: 300, y: 200, width: 90, height: 50 };
+      },
     },
   );
   assert.equal(viaVision.source, 'vision_model');
+  assert.equal(visionCalls, 1);
+});
+
+test('resolvePlaybackTarget never paints non-screen recorded hints', async () => {
+  const display = { x: 100, y: 50, width: 1920, height: 1080 };
 
   const viaHighlight = await resolvePlaybackTarget(
     {
       step_number: 1,
-      instruction: 'Click',
+      instruction: 'Click New issue',
+      target_label: 'New issue',
       screenshot_highlight: { x: 150, y: 80, width: 100, height: 40 },
     },
     display,
   );
-  assert.equal(viaHighlight.source, 'recorded_hint');
-  assert.ok(viaHighlight.rect);
+  assert.equal(viaHighlight.source, 'unidentified');
+  assert.equal(viaHighlight.rect, null);
+  assert.match(String(viaHighlight.fallbackNote), /No live target/);
 
   const missed = await resolvePlaybackTarget(
     { step_number: 1, instruction: 'Click Send', target_label: 'Send' },
     display,
   );
   assert.equal(missed.source, 'unidentified');
-  assert.match(String(missed.fallbackNote), /No live target/);
+  assert.equal(missed.rect, null);
 
-  const hinted = await resolvePlaybackTarget(
+  const browserRaw = await resolvePlaybackTarget(
     {
       step_number: 2,
       instruction: 'Open Claude',
@@ -157,8 +277,22 @@ test('resolvePlaybackTarget prefers live resolvers then recorded hints', async (
     },
     display,
   );
+  assert.equal(browserRaw.source, 'unidentified');
+  assert.equal(browserRaw.rect, null);
+
+  const hinted = await resolvePlaybackTarget(
+    {
+      step_number: 2,
+      instruction: 'Open Claude',
+      raw_coordinates: { x: 400, y: 300 },
+      attrs: { layer: 'desktop', platform: 'win32', foreground_app: 'Chrome' },
+    },
+    display,
+  );
   assert.equal(hinted.source, 'recorded_hint');
   assert.ok(hinted.rect);
+  assert.equal(hinted.rect?.x, 360);
+  assert.equal(hinted.rect?.y, 280);
 
   const screenshotOnly = await resolvePlaybackTarget(
     {
@@ -170,6 +304,17 @@ test('resolvePlaybackTarget prefers live resolvers then recorded hints', async (
   );
   assert.equal(screenshotOnly.source, 'unidentified');
   assert.equal(screenshotOnly.rect, null);
+});
+
+test('full-display vision mapping uses contentBounds equal to display', () => {
+  const display = { x: 0, y: 0, width: 1920, height: 1080 };
+  const located = mapViewportRectToScreen(
+    { x: 1600, y: 40, width: 140, height: 40 },
+    display,
+    1920,
+    1080,
+  );
+  assert.deepEqual(located, { x: 1600, y: 40, width: 140, height: 40 });
 });
 
 test('two-stage grid refine stays inside the coarse region', () => {

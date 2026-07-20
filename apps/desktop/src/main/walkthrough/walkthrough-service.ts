@@ -19,6 +19,7 @@ import type {
   WalkthroughStep,
   WalkthroughUiState,
 } from './types';
+import { resolveVisionGridOnScreen } from './vision-locate-client';
 import { parseVoiceCommand, voiceCommandToAction } from './voice-commands';
 
 export class WalkthroughService {
@@ -278,7 +279,21 @@ export class WalkthroughService {
     const display = screen.getPrimaryDisplay().bounds;
     this.overlay.coverDisplay(display);
 
-    const resolved = await resolvePlaybackTarget(step, display);
+    // a11y/OCR hooks stay injectable; vision uses screen capture + locate-element.
+    // Hide the overlay while capturing so the spotlight is not in the image.
+    const resolved = await resolvePlaybackTarget(step, display, {
+      resolveAccessibility: async () => null,
+      resolveOcr: async () => null,
+      resolveVisionGrid: async (liveStep) =>
+        resolveVisionGridOnScreen(liveStep, display, {
+          beforeCapture: () => {
+            this.overlay.hide();
+          },
+          afterCapture: () => {
+            this.overlay.show();
+          },
+        }),
+    });
     this.lastHighlight = resolved.rect
       ? {
           x: resolved.rect.x - display.x,

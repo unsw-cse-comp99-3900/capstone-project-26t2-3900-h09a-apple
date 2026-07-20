@@ -1,9 +1,12 @@
 import { resolveAnchorMode } from './anchor-mode';
+import { hasScreenSpaceCoordinates } from './coordinate-space';
 import type { ResolvedTarget, ScreenRect, WalkthroughStep } from './types';
+
+export { hasScreenSpaceCoordinates, mapViewportRectToScreen } from './coordinate-space';
 
 const FALLBACK_NOTE = 'No live target for this step. Showing captured preview.';
 
-function clampHintRect(hint: ScreenRect, displayBounds: ScreenRect): ScreenRect {
+export function clampHintRect(hint: ScreenRect, displayBounds: ScreenRect): ScreenRect {
   const width = Math.max(40, Math.min(hint.width || 160, displayBounds.width));
   const height = Math.max(40, Math.min(hint.height || 80, displayBounds.height));
   const x = Math.min(
@@ -17,25 +20,21 @@ function clampHintRect(hint: ScreenRect, displayBounds: ScreenRect): ScreenRect 
   return { x, y, width, height };
 }
 
-function centerRect(displayBounds: ScreenRect): ScreenRect {
-  const width = 160;
-  const height = 80;
-  return {
-    x: displayBounds.x + displayBounds.width / 2 - width / 2,
-    y: displayBounds.y + displayBounds.height / 2 - height / 2,
-    width,
-    height,
-  };
-}
+export type PlaybackResolveOptions = {
+  resolveAccessibility?: (step: WalkthroughStep) => Promise<ScreenRect | null>;
+  resolveOcr?: (step: WalkthroughStep) => Promise<ScreenRect | null>;
+  resolveVisionGrid?: (step: WalkthroughStep) => Promise<ScreenRect | null>;
+};
 
+/**
+ * Playback re-identification per H09AAPPLE-78 / spike §5.2:
+ * Accessibility + OCR concurrently, then vision as conditional fallback.
+ * Recorded browser viewport highlights are never treated as screen rects.
+ */
 export async function resolvePlaybackTarget(
   step: WalkthroughStep,
   displayBounds: ScreenRect,
-  options?: {
-    resolveAccessibility?: (step: WalkthroughStep) => Promise<ScreenRect | null>;
-    resolveOcr?: (step: WalkthroughStep) => Promise<ScreenRect | null>;
-    resolveVisionGrid?: (step: WalkthroughStep) => Promise<ScreenRect | null>;
-  },
+  options?: PlaybackResolveOptions,
 ): Promise<ResolvedTarget> {
   const mode = resolveAnchorMode(step);
 
@@ -43,22 +42,27 @@ export async function resolvePlaybackTarget(
     return { rect: null, source: 'unidentified', fallbackNote: FALLBACK_NOTE };
   }
 
-  if (options?.resolveAccessibility) {
-    const rect = await options.resolveAccessibility(step);
-    if (rect) {
-      return {
-        rect: clampHintRect(rect, displayBounds),
-        source: 'accessibility_api',
-        fallbackNote: null,
-      };
-    }
+  const accessibilityPromise = options?.resolveAccessibility
+    ? options.resolveAccessibility(step)
+    : Promise.resolve(null);
+  const ocrPromise = options?.resolveOcr ? options.resolveOcr(step) : Promise.resolve(null);
+
+  const [accessibilityRect, ocrRect] = await Promise.all([accessibilityPromise, ocrPromise]);
+
+  if (accessibilityRect) {
+    return {
+      rect: clampHintRect(accessibilityRect, displayBounds),
+      source: 'accessibility_api',
+      fallbackNote: null,
+    };
   }
 
-  if (options?.resolveOcr) {
-    const rect = await options.resolveOcr(step);
-    if (rect) {
-      return { rect: clampHintRect(rect, displayBounds), source: 'ocr', fallbackNote: null };
-    }
+  if (ocrRect) {
+    return {
+      rect: clampHintRect(ocrRect, displayBounds),
+      source: 'ocr',
+      fallbackNote: null,
+    };
   }
 
   if (options?.resolveVisionGrid) {
@@ -72,15 +76,7 @@ export async function resolvePlaybackTarget(
     }
   }
 
-  if (step.screenshot_highlight) {
-    return {
-      rect: clampHintRect(step.screenshot_highlight, displayBounds),
-      source: 'recorded_hint',
-      fallbackNote: null,
-    };
-  }
-
-  if (step.raw_coordinates) {
+  if (hasScreenSpaceCoordinates(step) && step.raw_coordinates) {
     return {
       rect: clampHintRect(
         {
@@ -96,8 +92,12 @@ export async function resolvePlaybackTarget(
     };
   }
 
+  // screenshot_highlight stays unused here: it is viewport/CSS space from the
+  // extension. Without the browser content bounds on screen, mapping it onto
+  // display.bounds invents a wrong spotlight (the mid-page "fake hole" bug).
+
   return {
-    rect: centerRect(displayBounds),
+    rect: null,
     source: 'unidentified',
     fallbackNote: FALLBACK_NOTE,
   };
