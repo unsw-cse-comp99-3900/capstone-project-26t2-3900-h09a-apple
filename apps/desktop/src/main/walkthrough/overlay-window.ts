@@ -70,15 +70,18 @@ export class WalkthroughOverlayWindow {
     // Preferred signal: renderer has attached walkthrough:state listeners.
     this.window.webContents.ipc.on(RENDERER_READY_CHANNEL, markReady);
 
-    this.window.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
-      console.error(
-        '[walkthrough] overlay failed to load:',
-        errorCode,
-        errorDescription,
-        validatedURL,
-      );
-      markReady();
-    });
+    this.window.webContents.on(
+      'did-fail-load',
+      (_event, errorCode, errorDescription, validatedURL) => {
+        console.error(
+          '[walkthrough] overlay failed to load:',
+          errorCode,
+          errorDescription,
+          validatedURL,
+        );
+        markReady();
+      },
+    );
 
     // Fallback if the renderer never signals (e.g. script error).
     this.window.webContents.once('did-finish-load', () => {
