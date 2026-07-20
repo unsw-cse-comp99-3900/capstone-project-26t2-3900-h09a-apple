@@ -120,6 +120,17 @@ export class WalkthroughOverlayWindow {
     }
   }
 
+  /**
+   * Briefly cloak the overlay for vision/OCR capture without destroying the
+   * BrowserWindow (less flicker than hide/show).
+   */
+  setCaptureCloak(cloaked: boolean): void {
+    if (!this.window || this.window.isDestroyed()) {
+      return;
+    }
+    this.window.setOpacity(cloaked ? 0 : 1);
+  }
+
   destroy(): void {
     if (this.window && !this.window.isDestroyed()) {
       this.window.destroy();

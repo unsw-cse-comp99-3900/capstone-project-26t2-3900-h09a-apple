@@ -475,8 +475,12 @@ resolve fails: **do not invent a centered fake highlight**; recenter the
 tooltip, show the captured preview, and the "no live target" note (AC).
 Desktop implementation: `apps/desktop/src/main/walkthrough/coordinate-space.ts`
 
-- `target-resolve.ts` + optional `vision-locate-client.ts` (screen capture →
-  `POST /api/v1/walkthroughs/locate-element` → map image rect onto display bounds).
+- `target-resolve.ts` + `vision-locate-client.ts` (foreground-window crop →
+  `POST /api/v1/walkthroughs/locate-element` two-stage grid → map image rect onto
+  that window's screen bounds). Full multi-app screen upload is refused when
+  foreground bounds are unknown (privacy; distinct from H09AAPPLE-76 SQLite
+  redaction). Stale async resolves are discarded via a per-enter generation
+  token. Overlay uses opacity cloak during capture to reduce hide/show flicker.
 
 ### 5.3 RESOLVED (H09AAPPLE-78): what "the user has built their own agent" produces
 

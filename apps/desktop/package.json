@@ -19,6 +19,7 @@
   "dependencies": {
     "@h09a/desktop-storage": "workspace:*",
     "active-win": "^8.2.1",
+    "tesseract.js": "^5.1.1",
     "uiohook-napi": "^1.5.4"
   },
   "devDependencies": {

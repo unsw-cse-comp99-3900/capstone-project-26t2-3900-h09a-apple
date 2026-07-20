@@ -15,6 +15,9 @@ import {
   retractTimingsToStep,
   totalDurationSeconds,
 } from './step-timing.js';
+import { findTextRectInOcrWords } from './ocr-resolve.js';
+import { intersectRects } from './foreground-window.js';
+import { formatVisionFailureLog, shouldApplyResolution } from './resolve-failure.js';
 import { refineGridCell, resolvePlaybackTarget } from './target-resolve.js';
 import { parseVoiceCommand, voiceCommandToAction } from './voice-commands.js';
 
@@ -341,4 +344,157 @@ test('mapWalkthroughStep reads desktop attrs hints', () => {
   assert.deepEqual(mapped.raw_coordinates, { x: 12, y: 34 });
   assert.equal(mapped.field_kind, 'prompt');
   assert.equal(mapped.expected_action, 'click');
+});
+
+test('vision env failures log distinct diagnosable reasons', () => {
+  assert.match(formatVisionFailureLog('not_authenticated'), /not signed in/);
+  assert.match(formatVisionFailureLog('config_missing'), /API key/);
+  assert.match(formatVisionFailureLog('network_error', 'ECONNRESET'), /network error.*ECONNRESET/);
+  assert.match(formatVisionFailureLog('no_match'), /no usable match/);
+  assert.notEqual(formatVisionFailureLog('config_missing'), formatVisionFailureLog('no_match'));
+});
+
+test('stale resolve generation is discarded (rapid Next race)', async () => {
+  assert.equal(shouldApplyResolution(1, 1), true);
+  assert.equal(shouldApplyResolution(1, 2), false);
+  assert.equal(shouldApplyResolution(3, 3), true);
+
+  // Simulate three rapid Next clicks while one slow vision call is in flight.
+  let appliedStep: number | null = null;
+  let currentGeneration = 0;
+  const slowVisionForStep = async (stepIndex: number, gen: number) => {
+    await new Promise((r) => setTimeout(r, stepIndex === 0 ? 40 : 5));
+    if (!shouldApplyResolution(gen, currentGeneration)) {
+      return;
+    }
+    appliedStep = stepIndex;
+  };
+
+  const g0 = ++currentGeneration;
+  const p0 = slowVisionForStep(0, g0);
+  const g1 = ++currentGeneration;
+  const p1 = slowVisionForStep(1, g1);
+  const g2 = ++currentGeneration;
+  const p2 = slowVisionForStep(2, g2);
+  await Promise.all([p0, p1, p2]);
+  assert.equal(appliedStep, 2);
+});
+
+test('vision unavailable still resolves via a11y or OCR', async () => {
+  const display = { x: 0, y: 0, width: 1920, height: 1080 };
+
+  const viaA11y = await resolvePlaybackTarget(
+    { step_number: 1, instruction: 'Click Save', target_label: 'Save' },
+    display,
+    {
+      resolveAccessibility: async () => ({ x: 10, y: 20, width: 60, height: 24 }),
+      resolveOcr: async () => null,
+      resolveVisionGrid: async () => {
+        throw new Error('should not call vision when a11y hits');
+      },
+    },
+  );
+  assert.equal(viaA11y.source, 'accessibility_api');
+  assert.ok(viaA11y.rect);
+
+  const viaOcr = await resolvePlaybackTarget(
+    { step_number: 1, instruction: 'Click Save', target_label: 'Save' },
+    display,
+    {
+      resolveAccessibility: async () => null,
+      resolveOcr: async () => ({ x: 40, y: 50, width: 70, height: 28 }),
+      resolveVisionGrid: async () => null,
+    },
+  );
+  assert.equal(viaOcr.source, 'ocr');
+});
+
+test('OCR text matcher maps image boxes onto window contentBounds', () => {
+  const windowBounds = { x: 100, y: 80, width: 800, height: 600 };
+  const words = [
+    { text: 'New', x0: 10, y0: 20, x1: 50, y1: 40 },
+    { text: 'issue', x0: 55, y0: 20, x1: 120, y1: 40 },
+  ];
+  const rect = findTextRectInOcrWords(words, 'New issue', windowBounds, 800, 600);
+  assert.ok(rect);
+  assert.equal(rect.x, 110);
+  assert.equal(rect.y, 100);
+  assert.equal(rect.width, 110);
+  assert.equal(rect.height, 20);
+});
+
+test('privacy crop uses window intersect, not full display', () => {
+  const display = { x: 0, y: 0, width: 1920, height: 1080 };
+  const windowBounds = { x: 200, y: 100, width: 1000, height: 700 };
+  const clipped = intersectRects(display, windowBounds);
+  assert.deepEqual(clipped, windowBounds);
+  assert.notDeepEqual(clipped, display);
+
+  const offscreen = intersectRects(display, { x: -50, y: 0, width: 80, height: 100 });
+  assert.deepEqual(offscreen, { x: 0, y: 0, width: 30, height: 100 });
+});
+
+test('viewport highlight alone cannot become a screen-space resolve', async () => {
+  const display = { x: 0, y: 0, width: 1920, height: 1080 };
+  const result = await resolvePlaybackTarget(
+    {
+      step_number: 1,
+      instruction: 'Click',
+      target_label: 'X',
+      screenshot_highlight: { x: 400, y: 300, width: 120, height: 40 },
+    },
+    display,
+    {
+      resolveAccessibility: async () => null,
+      resolveOcr: async () => null,
+      resolveVisionGrid: async () => null,
+    },
+  );
+  assert.equal(result.rect, null);
+  assert.equal(result.source, 'unidentified');
+});
+
+test('two-stage grid mapping works at non-default DPI scale factors', () => {
+  // Physical capture at 150% DPI: image pixels are 1.5x logical CSS size,
+  // but contentBounds stay in screen logical units used by the overlay.
+  const scaleFactor = 1.5;
+  const logicalWindow = { x: 80, y: 60, width: 1000, height: 700 };
+  const imageWidth = Math.round(logicalWindow.width * scaleFactor);
+  const imageHeight = Math.round(logicalWindow.height * scaleFactor);
+
+  const coarse = refineGridCell(
+    { x: 0, y: 0, width: imageWidth, height: imageHeight },
+    2,
+    1,
+    12,
+    8,
+    0,
+    0,
+    6,
+    6,
+  );
+  const fine = refineGridCell(
+    { x: 0, y: 0, width: imageWidth, height: imageHeight },
+    2,
+    1,
+    12,
+    8,
+    3,
+    2,
+    6,
+    6,
+  );
+
+  const screenFine = mapViewportRectToScreen(fine, logicalWindow, imageWidth, imageHeight);
+  assert.ok(screenFine);
+  assert.ok(screenFine.x >= logicalWindow.x);
+  assert.ok(screenFine.y >= logicalWindow.y);
+  assert.ok(screenFine.x + screenFine.width <= logicalWindow.x + logicalWindow.width + 1);
+  assert.ok(screenFine.y + screenFine.height <= logicalWindow.y + logicalWindow.height + 1);
+
+  // Coarse cell maps into a larger region containing the fine cell.
+  const screenCoarse = mapViewportRectToScreen(coarse, logicalWindow, imageWidth, imageHeight);
+  assert.ok(screenCoarse);
+  assert.ok(screenFine.x >= screenCoarse.x - 0.5);
+  assert.ok(screenFine.y >= screenCoarse.y - 0.5);
 });

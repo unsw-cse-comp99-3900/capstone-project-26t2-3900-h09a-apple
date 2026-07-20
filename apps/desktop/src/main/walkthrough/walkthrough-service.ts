@@ -1,9 +1,12 @@
 import { clipboard, dialog, screen } from 'electron';
 import { writeFile } from 'node:fs/promises';
+import { resolveAccessibilityTarget } from './accessibility-resolve';
 import { WalkthroughAutoAdvance } from './auto-advance';
 import { postWalkthroughCompletion } from './completion-client';
+import { resolveOcrTarget } from './ocr-resolve';
 import { WalkthroughOverlayWindow } from './overlay-window';
 import { formatAgentPromptDocument, hasCompleteCoachingSections } from './prompt-export';
+import { shouldApplyResolution } from './resolve-failure';
 import {
   appendStepTiming,
   retractFrictionToStep,
@@ -37,6 +40,8 @@ export class WalkthroughService {
   private exportPreview: string | null = null;
   private error: string | null = null;
   private advanceArmed = true;
+  /** Bumped on every step enter so stale async resolve results are discarded. */
+  private resolveGeneration = 0;
 
   private readonly overlay = new WalkthroughOverlayWindow();
   private readonly autoAdvance = new WalkthroughAutoAdvance();
@@ -82,6 +87,7 @@ export class WalkthroughService {
     this.exportPreview = null;
     this.error = null;
     this.advanceArmed = true;
+    this.resolveGeneration = 0;
 
     const display = screen.getPrimaryDisplay().bounds;
     this.overlay.coverDisplay(display);
@@ -145,6 +151,7 @@ export class WalkthroughService {
 
     this.leaveCurrentStep();
     this.autoAdvance.stop();
+    this.resolveGeneration += 1;
 
     const result = await postWalkthroughCompletion({
       sop_id: this.payload.sop_id,
@@ -163,11 +170,13 @@ export class WalkthroughService {
       : null;
 
     this.status = 'finished';
+    this.lastHighlight = null;
     return this.publish();
   }
 
   async dismiss(): Promise<void> {
     this.autoAdvance.stop();
+    this.resolveGeneration += 1;
     this.overlay.hide();
     this.overlay.destroy();
     this.status = 'idle';
@@ -191,6 +200,10 @@ export class WalkthroughService {
     }
     if (action === 'finish') {
       return this.finish();
+    }
+    if (action === 'repeat') {
+      // Replay instruction only: no new resolve / vision / LLM call.
+      return this.publish();
     }
 
     return this.publish();
@@ -263,6 +276,7 @@ export class WalkthroughService {
     }
 
     const stepNumber = step.step_number ?? this.stepIndex + 1;
+    const generation = ++this.resolveGeneration;
 
     if (this.lastEnteredStepIndex !== this.stepIndex) {
       this.missFrictionStepIndex = null;
@@ -279,21 +293,37 @@ export class WalkthroughService {
     const display = screen.getPrimaryDisplay().bounds;
     this.overlay.coverDisplay(display);
 
-    // a11y/OCR hooks stay injectable; vision uses screen capture + locate-element.
-    // Hide the overlay while capturing so the spotlight is not in the image.
+    const cloak = () => {
+      this.overlay.setCaptureCloak(true);
+    };
+    const uncloak = () => {
+      this.overlay.setCaptureCloak(false);
+    };
+
     const resolved = await resolvePlaybackTarget(step, display, {
-      resolveAccessibility: async () => null,
-      resolveOcr: async () => null,
+      resolveAccessibility: async (liveStep) => resolveAccessibilityTarget(liveStep),
+      resolveOcr: async (liveStep) => {
+        cloak();
+        try {
+          return await resolveOcrTarget(liveStep, display);
+        } finally {
+          uncloak();
+        }
+      },
       resolveVisionGrid: async (liveStep) =>
         resolveVisionGridOnScreen(liveStep, display, {
-          beforeCapture: () => {
-            this.overlay.hide();
-          },
-          afterCapture: () => {
-            this.overlay.show();
-          },
+          beforeCapture: cloak,
+          afterCapture: uncloak,
         }),
     });
+
+    if (!shouldApplyResolution(generation, this.resolveGeneration)) {
+      console.info(
+        `[walkthrough] discarded stale resolve for step index ${this.stepIndex} (gen ${generation} != ${this.resolveGeneration})`,
+      );
+      return;
+    }
+
     this.lastHighlight = resolved.rect
       ? {
           x: resolved.rect.x - display.x,

@@ -1,6 +1,13 @@
-import { desktopCapturer, screen } from 'electron';
-import { authenticatedFetch } from '../auth/auth-service';
+import { screen } from 'electron';
+import { authenticatedFetch, getCurrentAuth } from '../auth/auth-service';
 import { mapViewportRectToScreen } from './coordinate-space';
+import { getForegroundWindowBounds } from './foreground-window';
+import {
+  formatVisionFailureLog,
+  type VisionFailureReason,
+  type VisionLocateOutcome,
+} from './resolve-failure';
+import { captureDisplayRegionPng } from './screen-capture';
 import type { ScreenRect, WalkthroughStep } from './types';
 
 function describeStepForVision(step: WalkthroughStep): string {
@@ -13,39 +20,13 @@ function describeStepForVision(step: WalkthroughStep): string {
   return '';
 }
 
-async function capturePrimaryDisplayPng(
-  displayBounds: ScreenRect,
-): Promise<{ base64: string; width: number; height: number } | null> {
-  const scaleFactor = screen.getPrimaryDisplay().scaleFactor || 1;
-  const thumbWidth = Math.max(1, Math.round(displayBounds.width * scaleFactor));
-  const thumbHeight = Math.max(1, Math.round(displayBounds.height * scaleFactor));
-
-  const sources = await desktopCapturer.getSources({
-    types: ['screen'],
-    thumbnailSize: { width: thumbWidth, height: thumbHeight },
-  });
-
-  const primaryId = String(screen.getPrimaryDisplay().id);
-  const source =
-    sources.find((entry) => entry.display_id === primaryId) ??
-    sources.find((entry) => /screen|entire/i.test(entry.name)) ??
-    sources[0];
-
-  if (!source || source.thumbnail.isEmpty()) {
-    return null;
-  }
-
-  const size = source.thumbnail.getSize();
-  return {
-    base64: source.thumbnail.toPNG().toString('base64'),
-    width: size.width,
-    height: size.height,
-  };
+function logVisionFailure(reason: VisionFailureReason, detail?: string): void {
+  console.warn(`[walkthrough] ${formatVisionFailureLog(reason, detail)}`);
 }
 
 /**
- * Conditional vision fallback (H09AAPPLE-53 API + screen capture).
- * Returns screen-space rect, or null when locate is unavailable.
+ * Conditional vision fallback: crop to foreground window, call locate-element,
+ * map image rect onto that window's screen bounds.
  */
 export async function resolveVisionGridOnScreen(
   step: WalkthroughStep,
@@ -55,22 +36,51 @@ export async function resolveVisionGridOnScreen(
     afterCapture?: () => void | Promise<void>;
   },
 ): Promise<ScreenRect | null> {
+  const outcome = await resolveVisionGridOnScreenDetailed(step, displayBounds, options);
+  return outcome.ok ? outcome.rect : null;
+}
+
+export async function resolveVisionGridOnScreenDetailed(
+  step: WalkthroughStep,
+  displayBounds: ScreenRect,
+  options?: {
+    beforeCapture?: () => void | Promise<void>;
+    afterCapture?: () => void | Promise<void>;
+  },
+): Promise<VisionLocateOutcome> {
   const description = describeStepForVision(step);
   if (!description) {
-    return null;
+    logVisionFailure('no_description');
+    return { ok: false, reason: 'no_description' };
+  }
+
+  if (!getCurrentAuth()) {
+    logVisionFailure('not_authenticated');
+    return { ok: false, reason: 'not_authenticated' };
+  }
+
+  const foreground = await getForegroundWindowBounds();
+  const cropBounds = foreground?.bounds ?? null;
+  if (!cropBounds) {
+    console.info(
+      '[walkthrough] vision: no foreground window bounds; refusing full-screen upload for privacy',
+    );
+    logVisionFailure('capture_failed', 'no foreground window bounds');
+    return { ok: false, reason: 'capture_failed', detail: 'no foreground window bounds' };
   }
 
   const capture = await (async () => {
     await options?.beforeCapture?.();
     try {
-      return await capturePrimaryDisplayPng(displayBounds);
+      return await captureDisplayRegionPng(displayBounds, cropBounds);
     } finally {
       await options?.afterCapture?.();
     }
   })();
 
   if (!capture) {
-    return null;
+    logVisionFailure('capture_failed');
+    return { ok: false, reason: 'capture_failed' };
   }
 
   try {
@@ -88,8 +98,24 @@ export async function resolveVisionGridOnScreen(
       }),
     });
 
+    if (response.status === 401 || response.status === 403) {
+      logVisionFailure('not_authenticated', `HTTP ${response.status}`);
+      return { ok: false, reason: 'not_authenticated', detail: `HTTP ${response.status}` };
+    }
+
+    if (response.status === 503) {
+      logVisionFailure('config_missing', `HTTP ${response.status}`);
+      return { ok: false, reason: 'config_missing', detail: `HTTP ${response.status}` };
+    }
+
+    if (response.status === 422) {
+      logVisionFailure('no_match', `HTTP ${response.status}`);
+      return { ok: false, reason: 'no_match', detail: `HTTP ${response.status}` };
+    }
+
     if (!response.ok) {
-      return null;
+      logVisionFailure('http_error', `HTTP ${response.status}`);
+      return { ok: false, reason: 'http_error', detail: `HTTP ${response.status}` };
     }
 
     const body = (await response.json()) as {
@@ -109,24 +135,36 @@ export async function resolveVisionGridOnScreen(
       !(Number(body.width) > 0) ||
       !(Number(body.height) > 0)
     ) {
-      return null;
+      logVisionFailure('invalid_response');
+      return { ok: false, reason: 'invalid_response' };
     }
 
-    // Full-display capture: image pixels correspond to the primary display
-    // content bounds, so mapping through displayBounds is valid here.
-    return mapViewportRectToScreen(
+    const rect = mapViewportRectToScreen(
       {
         x: Number(body.x),
         y: Number(body.y),
         width: Number(body.width),
         height: Number(body.height),
       },
-      displayBounds,
+      capture.contentBounds,
       Number(body.viewport_width) || capture.width,
       Number(body.viewport_height) || capture.height,
     );
+
+    if (!rect) {
+      logVisionFailure('invalid_response', 'coordinate map failed');
+      return { ok: false, reason: 'invalid_response', detail: 'coordinate map failed' };
+    }
+
+    return { ok: true, rect };
   } catch (error) {
-    console.warn('[walkthrough] vision locate failed:', error);
-    return null;
+    const message = error instanceof Error ? error.message : String(error);
+    logVisionFailure('network_error', message);
+    return { ok: false, reason: 'network_error', detail: message };
   }
+}
+
+/** @deprecated kept for call-site clarity; scaleFactor reserved for future DPI tests */
+export function primaryScaleFactor(): number {
+  return screen.getPrimaryDisplay().scaleFactor || 1;
 }
