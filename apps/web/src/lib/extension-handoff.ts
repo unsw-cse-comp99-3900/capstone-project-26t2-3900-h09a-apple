@@ -5,6 +5,20 @@ type HandoffResponse = {
   code?: string;
 };
 
+async function mintHandoffCode(): Promise<string | null> {
+  const response = await fetch('/api/auth/extension-handoff', {
+    method: 'POST',
+    cache: 'no-store',
+  });
+
+  if (!response.ok) {
+    return null;
+  }
+
+  const payload = (await response.json()) as HandoffResponse;
+  return payload.code ?? null;
+}
+
 export async function broadcastExtensionHandoff(): Promise<void> {
   // Check which clients are available before requesting a handoff code.
   const [extensionPresent, desktopPresent] = await Promise.all([pingExtension(), pingDesktop()]);
@@ -14,28 +28,17 @@ export async function broadcastExtensionHandoff(): Promise<void> {
     return;
   }
 
-  const response = await fetch('/api/auth/extension-handoff', {
-    method: 'POST',
-    cache: 'no-store',
-  });
-
-  if (!response.ok) {
-    return;
-  }
-
-  const payload = (await response.json()) as HandoffResponse;
-
-  if (!payload.code) {
-    return;
-  }
-
-  // Existing Chrome extension handoff.
   if (extensionPresent) {
-    await postExtensionHandoff(payload.code);
+    const code = await mintHandoffCode();
+    if (code) {
+      await postExtensionHandoff(code);
+    }
   }
 
-  // Desktop handoff.
   if (desktopPresent) {
-    launchDesktopHandoff(payload.code);
+    const code = await mintHandoffCode();
+    if (code) {
+      launchDesktopHandoff(code);
+    }
   }
 }

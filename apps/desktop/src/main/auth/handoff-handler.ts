@@ -1,3 +1,4 @@
+import { syncConsentFromServer } from '../consent/consent-service';
 import { redeemHandoffCode } from './auth-service';
 
 const HANDOFF_HOST = 'auth-callback';
@@ -27,6 +28,11 @@ export async function handleProtocolUrl(url: string): Promise<boolean> {
     return false;
   }
   await redeemHandoffCode(code);
+  try {
+    await syncConsentFromServer();
+  } catch (error) {
+    console.error('Failed to sync consent on login:', error);
+  }
 
   return true;
 }

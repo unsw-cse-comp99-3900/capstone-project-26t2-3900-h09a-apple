@@ -8,7 +8,7 @@ import { loadTokens } from './auth/token-store';
 import { startHandoffServer, stopHandoffServer } from './auth/handoff-server';
 import { hasCurrentConsent, saveConsent } from './consent/consent-store';
 import { postConsentAccept } from './consent/consent-service';
-import { logout } from './auth/auth-service';
+import { getCurrentAuth, logout } from './auth/auth-service';
 import { submitSession } from './session/submission-service';
 import { readFile } from 'node:fs/promises';
 import type { CompletedLocalSession } from './desktop-session-store';
@@ -147,6 +147,15 @@ if (!gotSingleInstanceLock) {
 
   ipcMain.handle('recording:start', () => {
     try {
+      const auth = getCurrentAuth();
+      if (!auth) {
+        throw new Error('Desktop is not authenticated');
+      }
+
+      if (!hasCurrentConsent(auth.userId)) {
+        throw new Error('Consent required');
+      }
+
       if (!recordingService) {
         throw new Error('The recording service is not ready');
       }
