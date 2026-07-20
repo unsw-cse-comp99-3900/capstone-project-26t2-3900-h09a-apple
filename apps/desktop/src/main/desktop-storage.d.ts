@@ -49,4 +49,5 @@ declare module '@h09a/desktop-storage' {
     sessionId: string,
   ): StoredSessionRows | null;
   export function assembleSessionFromRows(rows: StoredSessionRows): Record<string, unknown>;
+  export function deleteSession(db: LocalBufferDatabase, sessionId: string): number;
 }
