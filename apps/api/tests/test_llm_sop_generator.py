@@ -97,6 +97,71 @@ def test_llm_sop_generator_returns_llm_payload(monkeypatch):
     assert event_payload["timestamp_ms"] == 1000
 
 
+class OrphanNavigationProvider:
+    """Simulates an LLM that merges click+nav but only cites the click id."""
+
+    name = "openai"
+    model = "gpt-4o"
+
+    def generate_sop(self, session_payload: dict) -> LlmProviderResult:
+        return LlmProviderResult(
+            sop=SopPayload(
+                title="Insights flow",
+                summary="Generated with orphaned navigation id.",
+                steps=[
+                    SopStep(
+                        order=1,
+                        title="Open Insights",
+                        instruction="Click Insights.",
+                        source_event_ids=["1"],
+                    )
+                ],
+            ),
+            prompt_tokens=10,
+            completion_tokens=20,
+        )
+
+
+def test_llm_sop_generator_repairs_orphaned_navigation_source_ids(monkeypatch):
+    monkeypatch.setattr(
+        "app.llm_sop_generator.get_llm_provider",
+        lambda: OrphanNavigationProvider(),
+    )
+
+    session = SimpleNamespace(
+        id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        workflow_name="Insights flow",
+        events=[
+            SimpleNamespace(
+                id=1,
+                seq=1,
+                type="click",
+                target_label="Insights",
+                target_selector="a[href='/pulse']",
+                value=None,
+                url=None,
+                attrs={},
+                timestamp_ms=1_000,
+            ),
+            SimpleNamespace(
+                id=2,
+                seq=2,
+                type="navigation",
+                target_label=None,
+                target_selector=None,
+                value=None,
+                url="https://github.com/org/repo/pulse",
+                attrs={"page_title": "Pulse"},
+                timestamp_ms=1_200,
+            ),
+        ],
+    )
+
+    payload = LlmSopGenerator(db=FakeDb()).generate(session)
+
+    assert payload.steps[0].source_event_ids == ["1", "2"]
+
+
 class FailingProvider:
     name = "openai"
     model = "gpt-4o"

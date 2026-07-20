@@ -7,6 +7,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session as DBSession
 
 from app import models
+from app.navigation_source_ids import repair_orphaned_navigation_source_event_ids
 from app.sop_schema import WalkthroughPayload, WalkthroughStep
 from app.storage import get_storage
 
@@ -221,13 +222,36 @@ def resolve_anchor_mode(
     return "none"
 
 
+def _load_session_events(
+    session_id: UUID,
+    tenant_id: UUID,
+    db: DBSession,
+) -> list[models.Event]:
+    return (
+        db.query(models.Event)
+        .join(models.Session, models.Event.session_id == models.Session.id)
+        .filter(
+            models.Event.session_id == session_id,
+            models.Session.tenant_id == tenant_id,
+        )
+        .order_by(models.Event.seq)
+        .all()
+    )
+
+
 def build_walkthrough_payload(sop: models.Sop, db: DBSession) -> WalkthroughPayload:
     if not sop.steps:
         raise WalkthroughDataError("SOP has no walkthrough steps")
 
+    session_events = _load_session_events(sop.session_id, sop.tenant_id, db)
+    repaired_steps = repair_orphaned_navigation_source_event_ids(
+        list(sop.steps),
+        session_events,
+    )
+
     steps: list[WalkthroughStep] = []
 
-    for step in sop.steps:
+    for step in repaired_steps:
         if "order" not in step:
             raise WalkthroughDataError("Step is missing order")
         if "instruction" not in step:

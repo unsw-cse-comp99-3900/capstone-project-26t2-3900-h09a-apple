@@ -4,6 +4,7 @@ from app import models
 from app.llm_provider_factory import get_llm_provider
 from app.mock_sop_generator import MockSopGenerator
 from app.models import Session
+from app.navigation_source_ids import repair_sop_payload_navigation_source_event_ids
 from app.sop_generator import SopGenerator
 from app.sop_schema import SopPayload
 
@@ -39,7 +40,10 @@ class LlmSopGenerator(SopGenerator):
 
                 payload.generation_mode = "llm"
                 self.generation_mode = "llm"
-                return payload
+                return repair_sop_payload_navigation_source_event_ids(
+                    payload,
+                    session.events,
+                )
             except Exception as exc:
                 latency_ms = int((time.perf_counter() - started) * 1000)
                 self._log_audit(

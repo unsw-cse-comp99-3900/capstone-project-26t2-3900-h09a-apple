@@ -2,6 +2,7 @@ import json
 import os
 
 from app.llm_provider import LlmProviderResult, SopLlmProvider, estimate_cost_usd
+from app.navigation_source_ids import NAVIGATION_SOURCE_EVENT_ID_RULE
 from app.openai_client import create_openai_compatible_client
 from app.sop_schema import SopPayload
 
@@ -22,6 +23,7 @@ The output must validate against this JSON schema:
 Use only the fields defined in the schema.
 Every step must reference the source event ids that support it.
 Do not invent source_event_ids.
+{NAVIGATION_SOURCE_EVENT_ID_RULE}
 
 Estimate time_estimate only from the step's source events:
 - source event timestamps are in milliseconds since epoch.

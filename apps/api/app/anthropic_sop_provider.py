@@ -4,6 +4,7 @@ import os
 from anthropic import Anthropic
 
 from app.llm_provider import LlmProviderResult, SopLlmProvider, estimate_cost_usd
+from app.navigation_source_ids import NAVIGATION_SOURCE_EVENT_ID_RULE
 from app.sop_schema import SopPayload
 
 SYSTEM_PROMPT = """
@@ -20,6 +21,7 @@ Generate a structured SOP from the following session payload.
 Use only the create_sop tool schema.
 Every step must reference the source event ids that support it.
 Do not invent source_event_ids.
+{NAVIGATION_SOURCE_EVENT_ID_RULE}
 
 For each step, include time_estimate as an integer number of seconds.
 
