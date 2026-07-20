@@ -27,6 +27,7 @@ test('handleExternalAuthMessage responds to ping requests from allowed origins',
       redeemHandoffCode: async () => {},
       clearStoredAuthTokens: async () => {},
       deleteSessionPayload: async () => {},
+      startWalkthroughFromSop: async () => {},
     },
   );
 
@@ -50,6 +51,7 @@ test('handleExternalAuthMessage rejects requests from untrusted origins', () => 
       redeemHandoffCode: async () => {},
       clearStoredAuthTokens: async () => {},
       deleteSessionPayload: async () => {},
+      startWalkthroughFromSop: async () => {},
     },
   );
 
@@ -75,6 +77,7 @@ test('handleExternalAuthMessage redeems handoff codes for allowed origins', asyn
       },
       clearStoredAuthTokens: async () => {},
       deleteSessionPayload: async () => {},
+      startWalkthroughFromSop: async () => {},
     },
   );
 
@@ -100,6 +103,7 @@ test('handleExternalAuthMessage deletes submitted sessions for allowed origins',
       deleteSessionPayload: async (sessionId) => {
         deletedSessionIds.push(sessionId);
       },
+      startWalkthroughFromSop: async () => {},
     },
   );
 
@@ -107,4 +111,31 @@ test('handleExternalAuthMessage deletes submitted sessions for allowed origins',
   await new Promise((resolve) => setTimeout(resolve, 0));
   assert.deepEqual(deletedSessionIds, ['session-123']);
   assert.deepEqual(response, { ok: true });
+});
+
+test('handleExternalAuthMessage starts walkthroughs for allowed origins', async () => {
+  let response = null;
+  const startedSopIds = [];
+
+  const keepChannelOpen = handleExternalAuthMessage(
+    { type: 'START_WALKTHROUGH', sopId: 'sop-123' },
+    { origin: 'http://localhost:3000' },
+    (payload) => {
+      response = payload;
+    },
+    {
+      redeemHandoffCode: async () => {},
+      clearStoredAuthTokens: async () => {},
+      deleteSessionPayload: async () => {},
+      startWalkthroughFromSop: async (sopId) => {
+        startedSopIds.push(sopId);
+        return { sopId, tabId: 42 };
+      },
+    },
+  );
+
+  assert.equal(keepChannelOpen, true);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.deepEqual(startedSopIds, ['sop-123']);
+  assert.deepEqual(response, { ok: true, sopId: 'sop-123', tabId: 42 });
 });

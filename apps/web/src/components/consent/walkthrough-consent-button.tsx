@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import React, { useState } from 'react';
 
 import {
   DataCaptureConsentModal,
@@ -10,13 +10,37 @@ import {
 import styles from './walkthrough-consent-button.module.css';
 
 type WalkthroughConsentButtonProps = {
-  onReady?: () => void;
+  label?: string;
+  readyLabel?: string;
+  onReady?: () => void | Promise<void>;
 };
 
-export function WalkthroughConsentButton({ onReady }: WalkthroughConsentButtonProps) {
+export function WalkthroughConsentButton({
+  label = 'Start walkthrough capture',
+  readyLabel = label,
+  onReady,
+}: WalkthroughConsentButtonProps) {
   const { ready, hasConsent, refresh } = useDataCaptureConsent('walkthrough');
   const [modalOpen, setModalOpen] = useState(false);
   const [blockedMessage, setBlockedMessage] = useState<string | null>(null);
+  const [launching, setLaunching] = useState(false);
+
+  async function runReadyAction() {
+    setBlockedMessage(null);
+    setLaunching(true);
+
+    try {
+      await onReady?.();
+    } catch (error) {
+      setBlockedMessage(
+        error instanceof Error
+          ? error.message
+          : 'The WorkTrace extension could not start this walkthrough.',
+      );
+    } finally {
+      setLaunching(false);
+    }
+  }
 
   function handleLaunchClick() {
     setBlockedMessage(null);
@@ -25,14 +49,14 @@ export function WalkthroughConsentButton({ onReady }: WalkthroughConsentButtonPr
       return;
     }
 
-    onReady?.();
+    void runReadyAction();
   }
 
   function handleAccepted() {
     refresh();
     setModalOpen(false);
     setBlockedMessage(null);
-    onReady?.();
+    void runReadyAction();
   }
 
   function handleDeclined() {
@@ -44,8 +68,13 @@ export function WalkthroughConsentButton({ onReady }: WalkthroughConsentButtonPr
 
   return (
     <>
-      <button type="button" className={styles.button} disabled={!ready} onClick={handleLaunchClick}>
-        Start walkthrough capture
+      <button
+        type="button"
+        className={styles.button}
+        disabled={!ready || launching}
+        onClick={handleLaunchClick}
+      >
+        {launching ? readyLabel : label}
       </button>
       {blockedMessage ? <p className={styles.blocked}>{blockedMessage}</p> : null}
       <DataCaptureConsentModal

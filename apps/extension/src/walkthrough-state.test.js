@@ -32,6 +32,7 @@ test('starting a walkthrough resets to step 0 and can bind a tab id', () => {
   assert.equal(playing.sopId, 'sop-abc');
   assert.equal(playing.stepIndex, 0);
   assert.equal(playing.tabId, 42);
+  assert.deepEqual(playing.resolvedUrls, {});
   assert.equal(canStopWalkthrough(playing), true);
   assert.equal(canStartWalkthrough(playing, 'sop-abc'), false);
 });

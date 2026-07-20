@@ -5,6 +5,7 @@ export const EXTENSION_MESSAGE_TYPES = {
   handoff: 'EXTENSION_HANDOFF',
   logout: 'EXTENSION_LOGOUT',
   sessionSubmitted: 'SESSION_SUBMITTED',
+  startWalkthrough: 'START_WALKTHROUGH',
 } as const;
 
 const DEFAULT_PING_TIMEOUT_MS = 1500;
@@ -104,4 +105,20 @@ export async function postExtensionSessionSubmitted(sessionId: string): Promise<
     requestId: crypto.randomUUID(),
     sessionId,
   });
+}
+
+export async function postExtensionStartWalkthrough(sopId: string): Promise<void> {
+  const response = await sendExtensionMessage({
+    type: EXTENSION_MESSAGE_TYPES.startWalkthrough,
+    requestId: crypto.randomUUID(),
+    sopId,
+  });
+
+  if (!response) {
+    throw new Error('Install or enable the WorkTrace extension to start walkthroughs.');
+  }
+
+  if (!response.ok) {
+    throw new Error(response.error ?? 'The WorkTrace extension could not start this walkthrough.');
+  }
 }
