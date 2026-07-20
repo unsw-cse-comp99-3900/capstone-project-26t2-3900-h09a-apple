@@ -46,6 +46,7 @@ from app.sop_service import (
 )
 from app.storage import ObjectStorage, get_storage
 from app.walkthrough_routes import router as walkthrough_router
+from app.workflow_routes import router as workflow_router
 
 load_dotenv()
 
@@ -71,6 +72,7 @@ app.include_router(auth_router)
 app.include_router(feedback_router)
 app.include_router(consent_router)
 app.include_router(walkthrough_router)
+app.include_router(workflow_router)
 
 
 @app.get("/health")
