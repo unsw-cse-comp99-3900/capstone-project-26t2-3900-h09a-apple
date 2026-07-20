@@ -55,3 +55,29 @@ class WalkthroughCompletionPayload(BaseModel):
 
 class WalkthroughCompletionResponse(BaseModel):
     completion_id: UUID
+
+
+class WalkthroughLocateRequest(BaseModel):
+    """Viewport screenshot + element description for vision grid locate."""
+
+    image_base64: str = Field(..., min_length=32, max_length=8_000_000)
+    content_type: str = Field(default="image/jpeg", max_length=64)
+    description: str = Field(..., min_length=1, max_length=500)
+    instruction: str | None = Field(default=None, max_length=2000)
+    viewport_width: int = Field(..., ge=1, le=10_000)
+    viewport_height: int = Field(..., ge=1, le=10_000)
+    step_number: int | None = Field(default=None, ge=1)
+
+
+class WalkthroughLocateResponse(BaseModel):
+    x: float
+    y: float
+    width: float
+    height: float
+    image_width: int
+    image_height: int
+    viewport_width: int
+    viewport_height: int
+    coarse_cell: str
+    fine_cell: str
+    method: str = "vision_grid_2stage"
