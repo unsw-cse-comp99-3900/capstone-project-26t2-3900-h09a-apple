@@ -16,3 +16,5 @@ anthropic==0.42.0
 openai-whisper==20250625
 Pillow==11.1.0
 python-multipart
+scikit-learn==1.6.1
+numpy==2.2.3

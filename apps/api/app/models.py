@@ -537,6 +537,98 @@ class SopStepEmbedding(Base):
     )
 
 
+class WorkflowCluster(Base):
+    """One cluster from a workflow variance run (H09AAPPLE-36)."""
+
+    __tablename__ = "workflow_clusters"
+
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    tenant_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    workflow_name = Column(String(200), nullable=False)
+    run_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    cluster_id = Column(Integer, nullable=False)
+    chosen_k = Column(Integer, nullable=False)
+    chosen_silhouette = Column(Numeric(12, 8), nullable=False)
+    candidate_silhouettes = Column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    centroid_vector = Column(Vector(1536), nullable=False)
+    member_session_ids = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
+    high_variance_session_ids = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=text("now()"),
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "run_id",
+            "cluster_id",
+            name="uq_workflow_clusters_run_cluster",
+        ),
+        CheckConstraint("cluster_id >= 0", name="ck_workflow_clusters_cluster_id_nonneg"),
+        CheckConstraint("chosen_k >= 2 AND chosen_k <= 4", name="ck_workflow_clusters_chosen_k"),
+        CheckConstraint(
+            "jsonb_typeof(member_session_ids) = 'array'",
+            name="ck_workflow_clusters_member_session_ids_array",
+        ),
+        CheckConstraint(
+            "jsonb_typeof(high_variance_session_ids) = 'array'",
+            name="ck_workflow_clusters_high_variance_session_ids_array",
+        ),
+        Index(
+            "ix_workflow_clusters_tenant_workflow_created",
+            "tenant_id",
+            "workflow_name",
+            "created_at",
+        ),
+    )
+
+
+class WorkflowStepVariance(Base):
+    """Per-step semantic divergence across sessions of one workflow (H09AAPPLE-36)."""
+
+    __tablename__ = "workflow_step_variance"
+
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    tenant_id = Column(UUID(as_uuid=True), nullable=False)
+    workflow_name = Column(String(200), nullable=False)
+    run_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    step_number = Column(Integer, nullable=False)
+    semantic_variance = Column(Numeric(12, 8), nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=text("now()"),
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "workflow_name",
+            "step_number",
+            name="uq_workflow_step_variance_tenant_workflow_step",
+        ),
+        CheckConstraint("step_number >= 1", name="ck_workflow_step_variance_step_number_pos"),
+        CheckConstraint(
+            "semantic_variance >= 0",
+            name="ck_workflow_step_variance_semantic_nonneg",
+        ),
+        Index(
+            "ix_workflow_step_variance_tenant_workflow",
+            "tenant_id",
+            "workflow_name",
+        ),
+    )
+
+
 class LlmAuditLog(Base):
     __tablename__ = "llm_audit_log"
 
@@ -826,4 +918,6 @@ __all__ = [
     "WalkthroughFrictionEvent",
     "WalkthroughStepTiming",
     "WalkthroughFrictionType",
+    "WorkflowCluster",
+    "WorkflowStepVariance",
 ]
