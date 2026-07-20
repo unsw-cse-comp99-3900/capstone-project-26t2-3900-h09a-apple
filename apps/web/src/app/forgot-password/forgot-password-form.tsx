@@ -49,7 +49,7 @@ export function ForgotPasswordForm() {
       <AuthFormPanel>
         <AuthFormCard
           title="Reset your password"
-          lead="Enter your email and we will send a reset link if an account exists."
+          lead="Enter your email and we will send a reset link if an account exists. Google sign-in users can use this to set a password."
           footer={
             <p className={styles.footer}>
               Remembered it? <Link href="/login">Sign in</Link>
