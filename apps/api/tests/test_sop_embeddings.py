@@ -291,7 +291,52 @@ def test_process_embed_job_fails_when_later_step_fails(monkeypatch):
 
     assert sop.embedding_status == models.EmbeddingStatus.failed.value
     assert job.status == models.CodificationJobStatus.failed.value
-    assert len(db.embeddings) == 1
+    # Failed runs must not leave a partial replacement set.
+    assert db.embeddings == []
+
+
+def test_process_embed_job_preserves_previous_complete_set_on_reembed_failure(monkeypatch):
+    monkeypatch.setattr("app.sop_embeddings.time.sleep", lambda *_args, **_kwargs: None)
+    calls = {"n": 0}
+
+    class FlakyClient:
+        model = EMBEDDING_MODEL
+
+        def embed(self, text: str):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                return MockEmbeddingClient().embed(text)
+            raise RuntimeError("step 2 failed")
+
+    db = EmbedFakeDb()
+    sop = _sop_with_steps(2)
+    db.sops.append(sop)
+    prior = [
+        models.SopStepEmbedding(
+            id=uuid4(),
+            sop_id=sop.id,
+            step_number=1,
+            embedding=[0.1] * EMBEDDING_DIM,
+        ),
+        models.SopStepEmbedding(
+            id=uuid4(),
+            sop_id=sop.id,
+            step_number=2,
+            embedding=[0.2] * EMBEDDING_DIM,
+        ),
+    ]
+    db.embeddings.extend(prior)
+    sop.embedding_status = models.EmbeddingStatus.complete.value
+    job = enqueue_embed_job(db, sop)
+    db.commit()
+
+    _process_embed_job(db, job.id, FlakyClient())
+
+    assert sop.embedding_status == models.EmbeddingStatus.failed.value
+    assert job.status == models.CodificationJobStatus.failed.value
+    assert {row.step_number for row in db.embeddings} == {1, 2}
+    assert db.embeddings[0].embedding[0] == 0.1
+    assert db.embeddings[1].embedding[0] == 0.2
 
 
 def test_get_embedding_client_defaults_to_mock(monkeypatch):
