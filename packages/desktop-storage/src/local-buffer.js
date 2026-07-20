@@ -1,5 +1,18 @@
 import Database from 'better-sqlite3';
 
+import {
+  recordCaptured,
+  recordDefensiveStrip,
+  recordPasswordSkip,
+  recordRedacted,
+} from './audit-counters.js';
+import {
+  applyCapturePolicy,
+  applyDefensiveRedaction,
+  isClipboardEvent,
+  isFileEvent,
+} from './capture-policy.js';
+
 const IDENTIFICATION_SOURCES = new Set([
   'accessibility_api',
   'ocr',
@@ -39,6 +52,7 @@ export function initSchema(db) {
       recorded_by TEXT,
       started_at_ms INTEGER NOT NULL,
       stopped_at_ms INTEGER,
+      submitted_at_ms INTEGER,
       status TEXT NOT NULL DEFAULT 'recording',
       created_at_ms INTEGER NOT NULL,
       updated_at_ms INTEGER NOT NULL
@@ -78,6 +92,7 @@ export function initSchema(db) {
   ensureColumn(db, 'events', 'source', "TEXT NOT NULL DEFAULT 'user'");
   ensureColumn(db, 'events', 'layer', "TEXT NOT NULL DEFAULT 'desktop'");
   ensureColumn(db, 'events', 'category', "TEXT NOT NULL DEFAULT 'desktop'");
+  ensureColumn(db, 'sessions', 'submitted_at_ms', 'INTEGER');
 }
 
 export function openLocalBuffer(dbPath = ':memory:') {
@@ -136,6 +151,40 @@ export function saveSession(db, session) {
 
 export function saveEvent(db, event) {
   const now = Date.now();
+  const sessionId = event.session_id;
+  const category = event.category ?? 'desktop';
+
+  const policy = applyCapturePolicy(event);
+
+  if (policy.skipped) {
+    recordPasswordSkip(sessionId);
+    console.warn(
+      `[desktop-storage] skipped event (reason=${policy.reason}, category=${category}, type=${event.type})`,
+    );
+    return { saved: false, skipped: true, redacted: false, reason: policy.reason };
+  }
+
+  let sanitized = policy.event;
+  let redacted = policy.redacted;
+
+  const defensive = applyDefensiveRedaction(sanitized);
+  sanitized = defensive.event;
+
+  if (defensive.stripped) {
+    redacted = true;
+    recordDefensiveStrip(sessionId);
+    console.warn(
+      `[desktop-storage] defensive redact before insert (category=${category}, type=${sanitized.type})`,
+    );
+  } else if (policy.redacted && (isClipboardEvent(sanitized) || isFileEvent(sanitized))) {
+    console.warn(
+      `[desktop-storage] capture policy redacted event (category=${category}, type=${sanitized.type}, reason=${policy.reason})`,
+    );
+  }
+
+  if (redacted) {
+    recordRedacted(sessionId, category);
+  }
 
   db.prepare(
     `
@@ -201,26 +250,30 @@ export function saveEvent(db, event) {
         attrs_json = excluded.attrs_json
     `,
   ).run({
-    id: event.id,
-    session_id: event.session_id,
-    seq: event.seq,
-    source: event.source ?? 'user',
-    layer: event.layer ?? 'desktop',
-    category: event.category ?? 'desktop',
-    type: event.type,
-    timestamp_ms: event.timestamp_ms,
-    target_selector: nullable(event.target_selector),
-    target_label: nullable(event.target_label),
-    value: nullable(event.value),
-    url: nullable(event.url),
-    screenshot_id: nullable(event.screenshot_id),
-    is_identified: event.is_identified ? 1 : 0,
-    identification_source: normalizeIdentificationSource(event),
-    raw_x: nullable(event.raw_x),
-    raw_y: nullable(event.raw_y),
-    attrs_json: JSON.stringify(event.attrs ?? {}),
-    created_at_ms: event.created_at_ms ?? now,
+    id: sanitized.id,
+    session_id: sanitized.session_id,
+    seq: sanitized.seq,
+    source: sanitized.source ?? 'user',
+    layer: sanitized.layer ?? 'desktop',
+    category: sanitized.category ?? 'desktop',
+    type: sanitized.type,
+    timestamp_ms: sanitized.timestamp_ms,
+    target_selector: nullable(sanitized.target_selector),
+    target_label: nullable(sanitized.target_label),
+    value: nullable(sanitized.value),
+    url: nullable(sanitized.url),
+    screenshot_id: nullable(sanitized.screenshot_id),
+    is_identified: sanitized.is_identified ? 1 : 0,
+    identification_source: normalizeIdentificationSource(sanitized),
+    raw_x: nullable(sanitized.raw_x),
+    raw_y: nullable(sanitized.raw_y),
+    attrs_json: JSON.stringify(sanitized.attrs ?? {}),
+    created_at_ms: sanitized.created_at_ms ?? now,
   });
+
+  recordCaptured(sessionId, sanitized.category ?? category);
+
+  return { saved: true, skipped: false, redacted, reason: policy.reason };
 }
 
 export function getSessionWithEvents(db, sessionId) {
