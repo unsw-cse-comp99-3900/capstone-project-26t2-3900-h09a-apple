@@ -101,4 +101,36 @@ describe('extension bridge', () => {
       expect.any(Function),
     );
   });
+
+  it('sends start walkthrough requests through chrome.runtime.sendMessage', async () => {
+    const sendMessage = vi.fn((_extensionId, _message, callback) => {
+      callback({ ok: true });
+    });
+
+    vi.stubGlobal(
+      'window',
+      createWindowStub({
+        runtime: {
+          sendMessage,
+        },
+      }),
+    );
+
+    const { postExtensionStartWalkthrough } = await import('@/lib/extension-bridge');
+    await postExtensionStartWalkthrough('sop-123');
+
+    expect(sendMessage).toHaveBeenCalledWith(
+      EXTENSION_ID,
+      expect.objectContaining({ type: 'START_WALKTHROUGH', sopId: 'sop-123' }),
+      expect.any(Function),
+    );
+  });
+
+  it('rejects start walkthrough requests when extension is unavailable', async () => {
+    const { postExtensionStartWalkthrough } = await import('@/lib/extension-bridge');
+
+    await expect(postExtensionStartWalkthrough('sop-123')).rejects.toThrow(
+      'Install or enable the WorkTrace extension',
+    );
+  });
 });

@@ -5,7 +5,7 @@ import {
 } from '@h09a/desktop-storage';
 import activeWindow from 'active-win';
 import { uIOhook } from 'uiohook-napi';
-import { DesktopSessionStore } from './desktop-session-store';
+import { DesktopSessionStore, type CompletedLocalSession } from './desktop-session-store';
 
 export type RecorderState = 'idle' | 'recording' | 'paused' | 'error';
 
@@ -86,19 +86,18 @@ export class RecordingService {
     this.state = 'recording';
   }
 
-  stop(): string | null {
+  stop(): CompletedLocalSession | null {
     if (this.state === 'idle') return null;
-
-    let artifactPath: string | null = null;
+    let completedSession: CompletedLocalSession | null = null;
 
     try {
       uIOhook.stop();
     } finally {
       try {
         if (this.sessionStore.hasActiveSession()) {
-          const completedSession = this.sessionStore.completeSession();
-          artifactPath = completedSession.artifactPath;
-          console.log(`[desktop] Session saved: ${artifactPath}`);
+          completedSession = this.sessionStore.completeSession();
+
+          console.log(`[desktop] Session saved: ${completedSession.artifactPath}`);
         }
 
         this.state = 'idle';
@@ -109,7 +108,7 @@ export class RecordingService {
       }
     }
 
-    return artifactPath;
+    return completedSession;
   }
 
   getState(): RecorderState {
@@ -218,7 +217,7 @@ export class RecordingService {
         attrs.active_win_error = event.active_win_error;
       }
 
-      this.sessionStore.saveCapturedEvent({
+      const saved = this.sessionStore.saveCapturedEvent({
         category: isClick ? 'mouse' : 'keyboard',
         type: isClick ? 'click' : 'keydown',
         timestamp_ms: event.timestamp as number,
@@ -226,6 +225,10 @@ export class RecordingService {
         raw_y: isClick ? (event.y as number) : null,
         attrs,
       });
+
+      if (!saved) {
+        return;
+      }
 
       this.eventCount += 1;
       console.log(

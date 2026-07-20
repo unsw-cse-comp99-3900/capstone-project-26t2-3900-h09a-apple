@@ -1,7 +1,7 @@
 import {
-  applyCapturePolicy,
   assembleSessionFromRows,
   clearSessionAudit,
+  deleteSession,
   getSessionAuditSummary,
   getSessionWithEvents,
   markSessionSubmitted,
@@ -14,6 +14,7 @@ import {
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
+import { rm } from 'node:fs/promises';
 
 export interface DesktopEventInput {
   category: string;
@@ -111,8 +112,8 @@ export class DesktopSessionStore {
       attrs: event.attrs,
     };
 
-    const prepared = applyCapturePolicy(candidate);
-    const result = saveEvent(this.db, prepared.event ?? candidate);
+    // Policy/redaction runs once inside saveEvent so audit counters stay accurate.
+    const result = saveEvent(this.db, candidate);
 
     if (!result.saved) {
       return false;
@@ -172,6 +173,15 @@ export class DesktopSessionStore {
 
   getAuditSummary(sessionId: string): SessionAuditSummary {
     return getSessionAuditSummary(sessionId);
+  }
+
+  async deleteCompletedSession(sessionId: string, sessionDirectory: string): Promise<void> {
+    deleteSession(this.db, sessionId);
+
+    await rm(sessionDirectory, {
+      recursive: true,
+      force: true,
+    });
   }
 
   hasActiveSession(): boolean {
