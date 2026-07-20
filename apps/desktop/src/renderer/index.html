@@ -54,38 +54,104 @@
         </div>
       </header>
 
-      <section class="recording-summary" aria-label="Recording summary">
-        <div>
-          <p class="summary-label">Captured events</p>
-          <p id="event-count" class="event-count">0</p>
+      <div id="signin-panel" hidden>
+        <p class="signin-message">Sign in to WorkTrace before recording your desktop workflow.</p>
+
+        <button id="signin-button" class="button button-primary" type="button">Sign In</button>
+      </div>
+
+      <div id="recorder-panel" hidden>
+        <section class="recording-summary" aria-label="Recording summary">
+          <div>
+            <p class="summary-label">Captured events</p>
+            <p id="event-count" class="event-count">0</p>
+          </div>
+          <p id="status-message" class="status-message">Ready to capture your desktop workflow.</p>
+        </section>
+
+        <div class="actions">
+          <button id="start-recording" class="button button-primary" type="button">
+            <span class="record-icon" aria-hidden="true"></span>
+            Start Recording
+          </button>
+          <button id="stop-recording" class="button button-secondary" type="button" disabled>
+            <span class="stop-icon" aria-hidden="true"></span>
+            Stop Recording
+          </button>
+          <button id="review-session" class="button button-review" type="button" disabled>
+            <span class="review-icon" aria-hidden="true"></span>
+            Review Session
+          </button>
         </div>
-        <p id="status-message" class="status-message">Ready to capture your desktop workflow.</p>
-      </section>
 
-      <div class="actions">
-        <button id="start-recording" class="button button-primary" type="button">
-          <span class="record-icon" aria-hidden="true"></span>
-          Start Recording
-        </button>
-        <button id="stop-recording" class="button button-secondary" type="button" disabled>
-          <span class="stop-icon" aria-hidden="true"></span>
-          Stop Recording
-        </button>
-        <button id="review-session" class="button button-review" type="button" disabled>
-          <span class="review-icon" aria-hidden="true"></span>
-          Review Session
-        </button>
+        <div id="session-result" class="session-result" hidden>
+          <span>Saved</span>
+          <code id="session-path"></code>
+        </div>
+
+        <footer>
+          <span>Local capture</span>
+
+          <div class="footer-actions">
+            <button id="logout-button" class="footer-link" type="button" hidden>Log out</button>
+
+            <span id="platform" class="platform"></span>
+          </div>
+        </footer>
       </div>
 
-      <div id="session-result" class="session-result" hidden>
-        <span>Saved</span>
-        <code id="session-path"></code>
+      <div id="review-modal" hidden>
+        <div class="review-card">
+          <h3>Review Session</h3>
+
+          <p>
+            <strong>Workflow:</strong>
+            <span id="review-workflow"></span>
+          </p>
+
+          <p>
+            <strong>Duration:</strong>
+            <span id="review-duration"></span>
+          </p>
+
+          <p>
+            <strong>Events:</strong>
+            <span id="review-events"></span>
+          </p>
+
+          <div class="review-actions">
+            <button id="submit-session-button">Submit</button>
+
+            <button id="cancel-review-button">Cancel</button>
+          </div>
+        </div>
       </div>
 
-      <footer>
-        <span>Local capture</span>
-        <span id="platform" class="platform"></span>
-      </footer>
+      <div id="consent-overlay" class="consent-overlay" hidden>
+        <div class="consent-dialog">
+          <h2>Data Capture Consent</h2>
+
+          <p>
+            WorkTrace Desktop records your interactions across desktop applications while recording
+            is active.
+          </p>
+
+          <p>
+            Captured data may include window titles, mouse interactions, keyboard input metadata,
+            screenshots, and workflow events required to generate SOPs.
+          </p>
+
+          <p>Recording only occurs while you explicitly start a recording session.</p>
+
+          <div class="consent-actions">
+            <button id="consent-decline" class="button button-secondary" type="button">
+              Decline
+            </button>
+
+            <button id="consent-accept" class="button button-primary" type="button">Accept</button>
+          </div>
+        </div>
+      </div>
     </main>
 
     <script type="module" src="./index.ts"></script>

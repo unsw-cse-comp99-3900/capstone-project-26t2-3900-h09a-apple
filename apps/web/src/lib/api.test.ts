@@ -1,5 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ApiError, apiUrl, getPublishedSops, getSop } from './api';
+import {
+  ApiError,
+  apiUrl,
+  approveSop,
+  getPublishedSops,
+  getSop,
+  getSopsByStatus,
+  publishSop,
+} from './api';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -62,6 +70,62 @@ describe('getPublishedSops', () => {
       expect.objectContaining({
         cache: 'no-store',
       }),
+    );
+  });
+});
+
+describe('review queue API helpers', () => {
+  it('requests SOPs by status', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ sops: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+
+    await expect(getSopsByStatus('draft')).resolves.toEqual({ sops: [] });
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/api/backend/sops?status=draft',
+      expect.objectContaining({ cache: 'no-store' }),
+    );
+  });
+
+  it('posts approve and publish actions', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch');
+    fetchMock
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ id: 'sop-1', status: 'approved' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            id: 'sop-1',
+            status: 'published',
+            published_at: '2026-07-20T00:00:00Z',
+            library_url: '/library/sops/sop-1',
+          }),
+          {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          },
+        ),
+      );
+
+    await expect(approveSop('sop-1')).resolves.toEqual({ id: 'sop-1', status: 'approved' });
+    await expect(publishSop('sop-1')).resolves.toMatchObject({ status: 'published' });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      '/api/backend/sops/sop-1/approve',
+      expect.objectContaining({ method: 'POST' }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      '/api/backend/sops/sop-1/publish',
+      expect.objectContaining({ method: 'POST' }),
     );
   });
 });
