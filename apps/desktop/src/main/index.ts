@@ -279,6 +279,28 @@ if (!gotSingleInstanceLock) {
     return { ok: true };
   });
 
+  ipcMain.handle('walkthrough:get-state', () => {
+    if (!walkthroughService) {
+      return {
+        status: 'idle',
+        sopId: null,
+        stepIndex: 0,
+        stepCount: 0,
+        instruction: '',
+        eyebrow: 'Walkthrough',
+        screenshotUrl: null,
+        fallbackNote: null,
+        highlight: null,
+        previousDisabled: true,
+        isLastStep: false,
+        exportAvailable: false,
+        exportPreview: null,
+        error: null,
+      };
+    }
+    return walkthroughService.getUiState();
+  });
+
   ipcMain.handle('walkthrough:copy-export', async () => {
     if (!walkthroughService) {
       return { ok: false, error: 'Walkthrough service is not ready' };

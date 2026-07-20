@@ -28,7 +28,8 @@ body {
 }
 
 .highlight[hidden],
-.tooltip[hidden] {
+.tooltip[hidden],
+.actions[hidden] {
   display: none !important;
 }
 

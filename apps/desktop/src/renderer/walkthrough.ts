@@ -46,14 +46,27 @@ function render(state: WalkthroughUiState): void {
   if (state.status === 'finished') {
     highlight.hidden = true;
     actions.hidden = true;
-    exportPanel.hidden = !state.exportAvailable;
+    exportPanel.hidden = false;
     eyebrow.textContent = 'Walkthrough complete';
     instruction.textContent = state.exportAvailable
       ? 'Your validated agent prompt is ready to paste into Claude.'
       : 'Session complete. No agent prompt export for this walkthrough.';
     preview.hidden = true;
     fallbackNote.hidden = true;
+
+    const copyBtn = exportPanel.querySelector('[data-action="copy-export"]') as HTMLButtonElement;
+    const saveBtn = exportPanel.querySelector('[data-action="save-export"]') as HTMLButtonElement;
+    copyBtn.hidden = !state.exportAvailable;
+    saveBtn.hidden = !state.exportAvailable;
+    const exportLabel = exportPanel.querySelector('.export-label') as HTMLParagraphElement | null;
+    if (exportLabel) {
+      exportLabel.hidden = !state.exportAvailable;
+    }
+
     placeTooltip(centerAnchor());
+  } else if (state.status === 'idle') {
+    tooltip.hidden = true;
+    highlight.hidden = true;
   } else {
     actions.hidden = false;
     exportPanel.hidden = true;
@@ -131,8 +144,19 @@ tooltip.addEventListener('click', (event) => {
   } else if (action === 'save-export') {
     void window.walkthroughAPI.saveExport();
   } else if (action === 'dismiss') {
-    void window.walkthroughAPI.dismiss();
+    void window.walkthroughAPI.dismiss().then(() => {
+      tooltip.hidden = true;
+      highlight.hidden = true;
+    });
   }
 });
 
 window.walkthroughAPI.onState(render);
+window.walkthroughAPI.notifyReady();
+
+// Pull current state after listeners are attached in case a push raced load.
+void window.walkthroughAPI.getState().then((state) => {
+  if (state.status === 'playing' || state.status === 'finished') {
+    render(state);
+  }
+});

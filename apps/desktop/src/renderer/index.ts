@@ -178,7 +178,13 @@ startWalkthroughButton.addEventListener('click', () => {
     try {
       await window.desktopAPI.startWalkthrough(sopId);
       walkthroughMessage.textContent = 'Walkthrough overlay is active.';
+      // Shrinking under the cursor would otherwise deliver this click to the orb
+      // and immediately re-expand the recorder panel.
+      suppressOrbClick = true;
       document.body.dataset.windowMode = await window.desktopAPI.setWindowMode('compact');
+      window.setTimeout(() => {
+        suppressOrbClick = false;
+      }, 350);
     } catch (error) {
       walkthroughMessage.textContent = error instanceof Error ? error.message : String(error);
     } finally {

@@ -84,6 +84,9 @@ export class WalkthroughService {
 
     const display = screen.getPrimaryDisplay().bounds;
     this.overlay.coverDisplay(display);
+    // Wait until walkthrough.html has loaded and can receive IPC, otherwise the
+    // first walkthrough:state is dropped and the overlay stays blank/transparent.
+    await this.overlay.awaitReady();
     this.overlay.show();
 
     this.autoAdvance.start(() => {
@@ -129,7 +132,13 @@ export class WalkthroughService {
   }
 
   async finish(): Promise<WalkthroughUiState> {
-    if (!this.payload) {
+    // Complete screen Finish/Close should dismiss, not re-POST completion.
+    if (this.status === 'finished') {
+      await this.dismiss();
+      return this.getUiState();
+    }
+
+    if (!this.payload || this.status !== 'playing') {
       return this.publish();
     }
 

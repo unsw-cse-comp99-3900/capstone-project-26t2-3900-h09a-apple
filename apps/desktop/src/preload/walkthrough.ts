@@ -6,6 +6,8 @@ contextBridge.exposeInMainWorld('walkthroughAPI', {
     ipcRenderer.on('walkthrough:state', listener);
     return () => ipcRenderer.removeListener('walkthrough:state', listener);
   },
+  getState: () => ipcRenderer.invoke('walkthrough:get-state'),
+  notifyReady: () => ipcRenderer.send('walkthrough:renderer-ready'),
   previous: () => ipcRenderer.invoke('walkthrough:previous'),
   next: () => ipcRenderer.invoke('walkthrough:next'),
   finish: () => ipcRenderer.invoke('walkthrough:finish'),
