@@ -56,6 +56,54 @@ const EVENT_ICONS: Record<EventType, ReactNode> = {
       <path d="M8 20h8M12 16v4" />
     </svg>
   ),
+  keydown: (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <rect x="2" y="7" width="20" height="10" rx="2" />
+      <path d="M6 12h0M10 12h0M14 12h0M18 12h0" />
+    </svg>
+  ),
+  clipboard_copy: (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <rect x="8" y="4" width="10" height="14" rx="1" />
+      <path d="M6 8H5a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-1" />
+    </svg>
+  ),
+  clipboard_paste: (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <rect x="7" y="5" width="10" height="14" rx="1" />
+      <path d="M9 3h6v3H9z" />
+    </svg>
+  ),
+  file_select: (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4 4h9l5 5v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z" />
+    </svg>
+  ),
+  file_open: (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M3 6h6l2 2h10v10H3z" />
+    </svg>
+  ),
+  file_save: (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M5 3h11l3 3v15H5z" />
+      <path d="M8 3v6h8V3" />
+    </svg>
+  ),
+  file_upload: (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M12 3v12" />
+      <path d="m7 8 5-5 5 5" />
+      <path d="M4 19h16" />
+    </svg>
+  ),
+  file_download: (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M12 3v12" />
+      <path d="m7 10 5 5 5-5" />
+      <path d="M4 19h16" />
+    </svg>
+  ),
 };
 
 const EVENT_LABELS: Record<EventType, string> = {
@@ -64,6 +112,14 @@ const EVENT_LABELS: Record<EventType, string> = {
   input: 'Input',
   submit: 'Submit',
   tab_switch: 'Tab switch',
+  keydown: 'Keydown',
+  clipboard_copy: 'Clipboard copy',
+  clipboard_paste: 'Clipboard paste',
+  file_select: 'File select',
+  file_open: 'File open',
+  file_save: 'File save',
+  file_upload: 'File upload',
+  file_download: 'File download',
 };
 
 const SESSION_REQUEST_ATTEMPTS = [
@@ -177,27 +233,52 @@ function formatEventTime(timestampMs: number): string {
 }
 
 function describeEvent(event: WTEventInput): string {
+  const target = event.target_label ?? event.target_selector;
+
   if (event.type === 'navigation') {
     return event.url ?? 'Navigated to a new page';
   }
 
   if (event.type === 'input') {
-    const target = event.target_label ?? event.target_selector ?? 'field';
-    return `Entered ${event.value ?? 'a value'} in ${target}`;
+    return `Entered ${event.value ?? 'a value'} in ${target ?? 'field'}`;
   }
 
   if (event.type === 'click') {
-    return event.target_label ?? event.target_selector ?? 'Clicked page element';
+    return target ?? 'Clicked page element';
   }
 
   if (event.type === 'submit') {
-    return event.target_label ?? event.target_selector ?? 'Submitted form';
+    return target ?? 'Submitted form';
   }
+
   if (event.type === 'tab_switch') {
     return event.url ?? 'Switched browser tab';
   }
 
-  return event.url ?? 'Switched browser tab';
+  if (event.type === 'keydown') {
+    const keycode = event.attrs?.keycode;
+    return keycode != null ? `Keydown (keycode ${String(keycode)})` : 'Keydown';
+  }
+
+  if (event.type === 'clipboard_copy') {
+    return 'Copied to clipboard';
+  }
+
+  if (event.type === 'clipboard_paste') {
+    return target ? `Pasted into ${target}` : 'Pasted from clipboard';
+  }
+
+  if (
+    event.type === 'file_select' ||
+    event.type === 'file_open' ||
+    event.type === 'file_save' ||
+    event.type === 'file_upload' ||
+    event.type === 'file_download'
+  ) {
+    return EVENT_LABELS[event.type];
+  }
+
+  return target ?? event.url ?? EVENT_LABELS[event.type];
 }
 
 function submitButtonLabel(submitState: SubmitState): string {

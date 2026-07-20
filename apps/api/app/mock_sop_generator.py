@@ -46,6 +46,20 @@ class MockSopGenerator(SopGenerator):
             return f"Click {label}" if label else "Click the control"
         if event_type == EventType.input.value:
             return f"Enter {label}" if label else "Enter information"
+        if event_type == EventType.keydown.value:
+            return f"Type in {label}" if label else "Use the keyboard"
+        if event_type == EventType.clipboard_copy.value:
+            return "Copy to clipboard"
+        if event_type == EventType.clipboard_paste.value:
+            return f"Paste into {label}" if label else "Paste from clipboard"
+        if event_type in {
+            EventType.file_select.value,
+            EventType.file_open.value,
+            EventType.file_save.value,
+            EventType.file_upload.value,
+            EventType.file_download.value,
+        }:
+            return self._humanize_type(event_type)
         if event_type == EventType.submit.value:
             return f"Submit {label}" if label else "Submit the form"
         if event_type == EventType.tab_switch.value:
@@ -85,6 +99,27 @@ class MockSopGenerator(SopGenerator):
         if event_type == EventType.input.value:
             target = label or "the field"
             return f"Enter the required information in the {target} field."
+        if event_type == EventType.keydown.value:
+            target = label or "the focused field"
+            keycode = self._event_attrs(event).get("keycode")
+            if keycode is not None:
+                return f"Press the required key in {target} (keycode {keycode})."
+            return f"Use the keyboard in {target}."
+        if event_type == EventType.clipboard_copy.value:
+            return "Copy the required content to the clipboard."
+        if event_type == EventType.clipboard_paste.value:
+            target = label or "the field"
+            return f"Paste the clipboard content into {target}."
+        if event_type == EventType.file_select.value:
+            return "Select the required file."
+        if event_type == EventType.file_open.value:
+            return "Open the required file."
+        if event_type == EventType.file_save.value:
+            return "Save the file."
+        if event_type == EventType.file_upload.value:
+            return "Upload the required file."
+        if event_type == EventType.file_download.value:
+            return "Download the required file."
         if event_type == EventType.submit.value:
             target = label or "the form"
             return f"Submit {target}."

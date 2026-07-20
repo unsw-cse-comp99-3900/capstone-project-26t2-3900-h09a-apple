@@ -62,6 +62,15 @@ class EventType(str, enum.Enum):
     input = "input"
     submit = "submit"
     tab_switch = "tab_switch"
+    # Desktop recorder surface (global hooks / OS clipboard / file dialogs).
+    keydown = "keydown"
+    clipboard_copy = "clipboard_copy"
+    clipboard_paste = "clipboard_paste"
+    file_select = "file_select"
+    file_open = "file_open"
+    file_save = "file_save"
+    file_upload = "file_upload"
+    file_download = "file_download"
 
 
 class SopStatus(str, enum.Enum):

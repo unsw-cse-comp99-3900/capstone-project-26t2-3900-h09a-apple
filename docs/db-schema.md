@@ -193,7 +193,9 @@ the team can ratify (and so the Jira card gets updated to match).
 - `ix_events_session_type(session_id, type)`
 - `ix_events_occurred_brin USING BRIN(occurred_at)` - cheap time-range scans on append-only data
 
-**Allowed `type` values:** `click` · `navigation` · `input` · `submit` · `tab_switch`.
+**Allowed `type` values:** `click` · `navigation` · `input` · `submit` · `tab_switch` · `keydown` · `clipboard_copy` · `clipboard_paste` · `file_select` · `file_open` · `file_save` · `file_upload` · `file_download`.
+
+Desktop recordings may emit the keyboard / clipboard / file variants; the browser extension continues to use the original five interaction types.
 
 ---
 

@@ -17,7 +17,20 @@
 // ---------------------------------------------------------------------------
 export type SessionStatus = 'recording' | 'captured' | 'submitted' | 'processed' | 'failed';
 
-export type EventType = 'click' | 'navigation' | 'input' | 'submit' | 'tab_switch';
+export type EventType =
+  | 'click'
+  | 'navigation'
+  | 'input'
+  | 'submit'
+  | 'tab_switch'
+  | 'keydown'
+  | 'clipboard_copy'
+  | 'clipboard_paste'
+  | 'file_select'
+  | 'file_open'
+  | 'file_save'
+  | 'file_upload'
+  | 'file_download';
 
 export type SopStatus = 'draft' | 'needs_review' | 'approved' | 'published';
 
@@ -270,7 +283,7 @@ export interface SopListResponse {
 export type WalkthroughAnchorMode = 'element' | 'screenshot' | 'none';
 
 /** How the player should auto-advance for this step. */
-export type WalkthroughExpectedAction = 'click' | 'input' | 'submit';
+export type WalkthroughExpectedAction = 'click' | 'input' | 'submit' | 'keydown';
 
 /** Mirrors `WalkthroughStep` in `apps/api/app/sop_schema.py`. */
 export interface WalkthroughStep {
@@ -285,6 +298,9 @@ export interface WalkthroughStep {
   /** element: css/xpath; screenshot: image fallback; none: instruction-only. */
   anchor_mode?: WalkthroughAnchorMode;
   expected_action?: WalkthroughExpectedAction | null;
+  expected_url?: string | null;
+  /** Source-event attrs (desktop screen coords, foreground app, …). */
+  attrs?: Record<string, unknown>;
 }
 
 /** Response returned by GET /api/v1/sops/{id}/walkthrough. */

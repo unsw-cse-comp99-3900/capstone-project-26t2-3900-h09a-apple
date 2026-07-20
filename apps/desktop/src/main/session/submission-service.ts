@@ -1,3 +1,4 @@
+import { sanitizeSessionPayloadForApi } from '@h09a/desktop-storage';
 import { readFile } from 'node:fs/promises';
 import { authenticatedFetch } from '../auth/auth-service';
 
@@ -16,7 +17,9 @@ export async function submitSession(artifactPath: string): Promise<SubmissionRes
   // Read the completed session payload written by DesktopSessionStore.
   const content = await readFile(artifactPath, 'utf8');
 
-  const payload = JSON.parse(content);
+  const rawPayload = JSON.parse(content) as Record<string, unknown>;
+  // Normalize aliases / strip non-WT fields; unknown types throw (never silently drop).
+  const { payload } = sanitizeSessionPayloadForApi(rawPayload);
 
   const response = await authenticatedFetch('/api/v1/sessions', {
     method: 'POST',

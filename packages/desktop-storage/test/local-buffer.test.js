@@ -6,9 +6,11 @@ import {
   deleteSession,
   evictStoppedSessions,
   getSessionWithEvents,
+  mapEventTypeForApi,
   openLocalBuffer,
   saveEvent,
   saveSession,
+  sanitizeSessionPayloadForApi,
 } from '../src/index.js';
 
 const BASE_TIME_MS = Date.UTC(2026, 0, 1, 10, 0, 0);
@@ -179,10 +181,26 @@ test('stores, reads, and assembles a completed desktop session', () => {
     x: 412,
     y: 238,
   });
+  // screenshot_id is cleared when the referenced screenshot blob is absent.
   assert.equal(payload.events[7].screenshot_id, null);
   assert.equal(payload.events[10].target_label, 'Done');
   assert.equal(payload.events[10].timestamp_ms, BASE_TIME_MS + 11_000);
   assert.deepEqual(payload.screenshots, []);
+
+  const withScreenshots = assembleSessionFromRows({
+    ...stored,
+    screenshots: [
+      {
+        id: EVENT_SCREENSHOT_ID,
+        data_base64: Buffer.from('png').toString('base64'),
+        content_type: 'image/png',
+        width: 10,
+        height: 10,
+      },
+    ],
+  });
+  assert.equal(withScreenshots.events[7].screenshot_id, EVENT_SCREENSHOT_ID);
+  assert.equal(withScreenshots.screenshots.length, 1);
 
   db.close();
 });
@@ -198,6 +216,87 @@ test('normalizes non-uuid recorded_by values to null during assembly', () => {
   assert.equal(payload.recorded_by, null);
 
   db.close();
+});
+
+test('assembly keeps keydown and maps TEXT_INPUT to input for API schema', () => {
+  const db = openLocalBuffer();
+
+  saveSession(db, makeSession());
+  saveEvent(db, makeEvent({ seq: 1, type: 'click', category: 'mouse' }));
+  saveEvent(
+    db,
+    makeEvent({
+      seq: 2,
+      type: 'keydown',
+      category: 'keyboard',
+      attrs: { keycode: 30 },
+    }),
+  );
+  saveEvent(
+    db,
+    makeEvent({
+      seq: 3,
+      type: 'TEXT_INPUT',
+      category: 'keyboard',
+      value: 'hello',
+      target_label: 'Name',
+    }),
+  );
+  saveEvent(
+    db,
+    makeEvent({
+      seq: 4,
+      type: 'clipboard_copy',
+      category: 'clipboard',
+      value: 'secret',
+    }),
+  );
+
+  const payload = assembleSessionFromRows(getSessionWithEvents(db, 'desktop-session-1'));
+
+  assert.equal(payload.events.length, 4);
+  assert.equal(payload.events[0].type, 'click');
+  assert.equal(payload.events[1].type, 'keydown');
+  assert.equal(payload.events[2].type, 'input');
+  assert.equal(payload.events[2].value, 'hello');
+  assert.equal(payload.events[3].type, 'clipboard_copy');
+  assert.equal(mapEventTypeForApi('keydown'), 'keydown');
+  assert.equal(mapEventTypeForApi('TEXT_INPUT'), 'input');
+  assert.equal(mapEventTypeForApi('CLIPBOARD_COPY'), 'clipboard_copy');
+
+  db.close();
+});
+
+test('sanitizeSessionPayloadForApi keeps desktop types and rejects unknown ones', () => {
+  const { payload, droppedCount } = sanitizeSessionPayloadForApi({
+    client_session_id: 'desktop-session-1',
+    workflow_name: 'Demo',
+    events: [
+      { type: 'click', timestamp_ms: BASE_TIME_MS + 1000 },
+      { type: 'keydown', timestamp_ms: BASE_TIME_MS + 2000 },
+      { type: 'navigation', timestamp_ms: BASE_TIME_MS + 3000, url: 'https://example.com' },
+      { type: 'clipboard_paste', timestamp_ms: BASE_TIME_MS + 4000 },
+    ],
+    screenshots: [],
+  });
+
+  assert.equal(droppedCount, 0);
+  assert.equal(payload.events.length, 4);
+  assert.deepEqual(
+    payload.events.map((event) => event.type),
+    ['click', 'keydown', 'navigation', 'clipboard_paste'],
+  );
+
+  assert.throws(
+    () =>
+      sanitizeSessionPayloadForApi({
+        client_session_id: 'desktop-session-1',
+        workflow_name: 'Demo',
+        events: [{ type: 'drag', timestamp_ms: BASE_TIME_MS + 1000 }],
+        screenshots: [],
+      }),
+    /Unsupported event type/,
+  );
 });
 
 test('rejects unsupported identification_source values', () => {

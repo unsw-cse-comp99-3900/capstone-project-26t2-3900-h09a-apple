@@ -92,6 +92,35 @@ def _xpath_from_attrs(attrs: object) -> str | None:
     return xpath_text or None
 
 
+def _merge_step_attrs(existing: dict | None, event_attrs: object) -> dict:
+    merged = dict(existing or {})
+    if not isinstance(event_attrs, dict):
+        return merged
+
+    for key, value in event_attrs.items():
+        if key not in merged and value is not None:
+            merged[key] = value
+
+    return merged
+
+
+def _walkthrough_expected_action(
+    event_type: object,
+) -> Literal["click", "input", "submit", "keydown"] | None:
+    if event_type == models.EventType.click.value:
+        return "click"
+    if event_type in {
+        models.EventType.input.value,
+        models.EventType.clipboard_paste.value,
+    }:
+        return "input"
+    if event_type == models.EventType.submit.value:
+        return "submit"
+    if event_type == models.EventType.keydown.value:
+        return "keydown"
+    return None
+
+
 def _resolve_step_metadata(
     source_event_ids: list[str],
     session_id: UUID,
@@ -103,8 +132,9 @@ def _resolve_step_metadata(
     str | None,
     str | None,
     dict | None,
-    Literal["click", "input", "submit"] | None,
+    Literal["click", "input", "submit", "keydown"] | None,
     str | None,
+    dict,
 ]:
     css_selector = None
     xpath = None
@@ -113,16 +143,22 @@ def _resolve_step_metadata(
     screenshot_highlight = None
     expected_action = None
     expected_url = None
+    attrs: dict = {}
 
     priority = {
-        models.EventType.click.value: 1,
-        models.EventType.input.value: 2,
-        models.EventType.submit.value: 3,
+        models.EventType.keydown.value: 1,
+        models.EventType.clipboard_copy.value: 1,
+        models.EventType.clipboard_paste.value: 2,
+        models.EventType.click.value: 2,
+        models.EventType.input.value: 3,
+        models.EventType.submit.value: 4,
     }
     submit_priority = priority[models.EventType.submit.value]
     best_priority = 0
 
     for event in _load_ordered_events(source_event_ids, session_id, tenant_id, db):
+        attrs = _merge_step_attrs(attrs, getattr(event, "attrs", None))
+
         if css_selector is None:
             selector = getattr(event, "target_selector", None)
             if selector:
@@ -157,13 +193,17 @@ def _resolve_step_metadata(
             raw_url = getattr(event, "url", None)
             if isinstance(raw_url, str) and raw_url.strip():
                 expected_url = raw_url.strip()
+            elif isinstance(attrs.get("page_url"), str) and attrs["page_url"].strip():
+                expected_url = str(attrs["page_url"]).strip()
 
         event_type = getattr(event, "type", None)
         current_priority = priority.get(event_type, 0)
 
         if current_priority > best_priority:
-            best_priority = current_priority
-            expected_action = event_type
+            mapped_action = _walkthrough_expected_action(event_type)
+            if mapped_action is not None:
+                best_priority = current_priority
+                expected_action = mapped_action
 
         # Once all metadata is available and we've already found the
         # highest-priority action (submit), no later event can improve
@@ -187,6 +227,7 @@ def _resolve_step_metadata(
         screenshot_highlight,
         expected_action,
         expected_url,
+        attrs,
     )
 
 
@@ -196,12 +237,12 @@ def resolve_step_screenshot_url(
     session_id: UUID,
     tenant_id: UUID,
 ) -> str | None:
-    _, _, _, screenshot_url, *_ = _resolve_step_metadata(
+    screenshot_url = _resolve_step_metadata(
         source_event_ids,
         session_id,
         tenant_id,
         db,
-    )
+    )[3]
     return screenshot_url
 
 
@@ -270,6 +311,7 @@ def build_walkthrough_payload(sop: models.Sop, db: DBSession) -> WalkthroughPayl
             screenshot_highlight,
             expected_action,
             expected_url,
+            step_attrs,
         ) = _resolve_step_metadata(
             source_event_ids,
             sop.session_id,
@@ -309,6 +351,7 @@ def build_walkthrough_payload(sop: models.Sop, db: DBSession) -> WalkthroughPayl
                 anchor_mode=anchor_mode,
                 expected_action=expected_action,
                 expected_url=expected_url,
+                attrs=step_attrs,
             )
         )
 

@@ -156,6 +156,41 @@ def test_create_session_rejects_unknown_event_type():
     assert response.status_code == 422
 
 
+def test_create_session_accepts_desktop_event_types():
+    payload = valid_session_payload()
+    payload["events"] = [
+        {
+            "type": "click",
+            "target_label": "Submit",
+            "timestamp_ms": 1781613000000,
+            "attrs": {
+                "layer": "desktop",
+                "coordinate_space": "screen",
+                "raw_coordinates": {"x": 120, "y": 240},
+            },
+        },
+        {
+            "type": "keydown",
+            "timestamp_ms": 1781613000500,
+            "attrs": {"keycode": 30, "layer": "desktop"},
+        },
+        {
+            "type": "input",
+            "value": "hello",
+            "timestamp_ms": 1781613001000,
+        },
+        {
+            "type": "clipboard_paste",
+            "value": "pasted",
+            "timestamp_ms": 1781613001500,
+        },
+    ]
+
+    response = client.post("/api/v1/sessions", json=payload)
+
+    assert response.status_code == 201
+
+
 def test_create_session_rejects_non_positive_timestamp():
     payload = valid_session_payload()
     payload["events"][0]["timestamp_ms"] = 0
@@ -1200,6 +1235,7 @@ def test_get_sop_walkthrough_returns_payload_for_single_step():
             "anchor_mode": "element",
             "expected_action": None,
             "expected_url": "https://example.com/login",
+            "attrs": {"xpath": "/html/body/button[1]"},
         }
     finally:
         app.dependency_overrides[get_db] = override_get_db

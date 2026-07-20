@@ -9,13 +9,21 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
-# Allowed event types for ingestion
+# Allowed event types for ingestion (browser extension + desktop recorder).
 class EventType(str, Enum):
     click = "click"
     navigation = "navigation"
     input = "input"
     submit = "submit"
     tab_switch = "tab_switch"
+    keydown = "keydown"
+    clipboard_copy = "clipboard_copy"
+    clipboard_paste = "clipboard_paste"
+    file_select = "file_select"
+    file_open = "file_open"
+    file_save = "file_save"
+    file_upload = "file_upload"
+    file_download = "file_download"
 
 
 class JobStatus(str, Enum):

@@ -4,18 +4,35 @@ import {
   recordWindowSkip,
 } from '@h09a/desktop-storage';
 import activeWindow from 'active-win';
-import { uIOhook } from 'uiohook-napi';
+import { clipboard, screen } from 'electron';
+import { uIOhook, UiohookKey } from 'uiohook-napi';
 import { DesktopSessionStore, type CompletedLocalSession } from './desktop-session-store';
+import { captureDisplayRegionPng } from './walkthrough/screen-capture';
+import type { ScreenRect } from './walkthrough/types';
 
 export type RecorderState = 'idle' | 'recording' | 'paused' | 'error';
 
 interface ForegroundContext {
   foreground_app: string;
   window_title: string | null;
+  url: string | null;
+  bounds: ScreenRect | null;
   active_win_error?: string;
 }
 
+interface TypingBuffer {
+  chars: string;
+  startedAtMs: number;
+  lastAtMs: number;
+  target_label: string | null;
+  url: string | null;
+  foreground_app: string;
+  window_title: string | null;
+}
+
 const SKIP_LOG_THROTTLE_MS = 2_000;
+const TYPING_IDLE_FLUSH_MS = 900;
+const MAX_INPUT_VALUE_CHARS = 10_000;
 
 export class RecordingService {
   private state: RecorderState = 'idle';
@@ -24,6 +41,9 @@ export class RecordingService {
   private sensitivePatterns: string[];
   private lastSkipLogKey: string | null = null;
   private lastSkipLogAtMs = 0;
+  private typingBuffer: TypingBuffer | null = null;
+  private typingFlushTimer: ReturnType<typeof setTimeout> | null = null;
+  private pendingCaptureJobs = new Set<Promise<void>>();
 
   constructor(
     private readonly sessionStore: DesktopSessionStore,
@@ -54,6 +74,7 @@ export class RecordingService {
 
     try {
       this.eventCount = 0;
+      this.typingBuffer = null;
       const sessionId = this.sessionStore.startSession();
       this.state = 'recording';
       uIOhook.start();
@@ -77,6 +98,7 @@ export class RecordingService {
   pause(): void {
     if (this.state !== 'recording') return;
 
+    this.flushTypingBuffer();
     this.state = 'paused';
   }
 
@@ -86,14 +108,20 @@ export class RecordingService {
     this.state = 'recording';
   }
 
-  stop(): CompletedLocalSession | null {
+  async stop(): Promise<CompletedLocalSession | null> {
     if (this.state === 'idle') return null;
     let completedSession: CompletedLocalSession | null = null;
 
     try {
+      this.flushTypingBuffer();
       uIOhook.stop();
     } finally {
       try {
+        if (this.pendingCaptureJobs.size > 0) {
+          await Promise.allSettled([...this.pendingCaptureJobs]);
+          this.pendingCaptureJobs.clear();
+        }
+
         if (this.sessionStore.hasActiveSession()) {
           completedSession = this.sessionStore.completeSession();
 
@@ -129,14 +157,43 @@ export class RecordingService {
 
       if (this.shouldSuppressCapture(foregroundContext)) return;
 
-      this.recordEvent({
-        event_type: 'CLICK',
-        timestamp: Date.now(),
-        x: event.x,
-        y: event.y,
+      this.flushTypingBuffer();
+
+      const clickTimestamp = Date.now();
+      const screenshotId = this.sessionStore.allocateScreenshotId();
+      const baseAttrs = this.buildCommonAttrs(foregroundContext, {
         button: event.button,
-        platform: process.platform,
-        ...foregroundContext,
+        coordinate_space: 'screen',
+      });
+
+      // Persist the click immediately so seq/order stays correct. Capture the
+      // PNG asynchronously into the pre-allocated screenshot id; assembly drops
+      // the reference if the file never lands before stop.
+      this.persistEvent({
+        category: 'mouse',
+        type: 'click',
+        timestamp_ms: clickTimestamp,
+        raw_x: event.x,
+        raw_y: event.y,
+        target_label: this.labelFromContext(foregroundContext),
+        url: foregroundContext.url,
+        screenshot_id: screenshotId,
+        attrs: baseAttrs,
+      });
+
+      if (!screenshotId) {
+        return;
+      }
+
+      const job = this.captureClickWithScreenshot(
+        event.x,
+        event.y,
+        foregroundContext,
+        screenshotId,
+      );
+      this.pendingCaptureJobs.add(job);
+      void job.finally(() => {
+        this.pendingCaptureJobs.delete(job);
       });
     });
 
@@ -147,16 +204,102 @@ export class RecordingService {
 
       if (this.shouldSuppressCapture(foregroundContext)) return;
 
-      this.recordEvent({
-        event_type: 'KEYDOWN',
-        timestamp: Date.now(),
-        keycode: event.keycode,
-        platform: process.platform,
-        ...foregroundContext,
+      const keycode = event.keycode;
+      // uiohook-napi typings omit keychar; runtime still provides a code point on many platforms.
+      const keycharRaw = (event as { keychar?: unknown }).keychar;
+      const keychar = typeof keycharRaw === 'number' ? keycharRaw : 0;
+      const ctrlOrMeta = Boolean(event.ctrlKey || event.metaKey);
+
+      this.persistEvent({
+        category: 'keyboard',
+        type: 'keydown',
+        timestamp_ms: Date.now(),
+        raw_x: null,
+        raw_y: null,
+        target_label: this.labelFromContext(foregroundContext),
+        url: foregroundContext.url,
+        attrs: this.buildCommonAttrs(foregroundContext, {
+          keycode,
+          keychar: keychar || null,
+          altKey: Boolean(event.altKey),
+          ctrlKey: Boolean(event.ctrlKey),
+          metaKey: Boolean(event.metaKey),
+          shiftKey: Boolean(event.shiftKey),
+        }),
       });
+
+      if (ctrlOrMeta && !event.altKey && keycode === UiohookKey.C) {
+        this.persistClipboardEvent('clipboard_copy', foregroundContext);
+        this.flushTypingBuffer();
+        return;
+      }
+
+      if (ctrlOrMeta && !event.altKey && keycode === UiohookKey.V) {
+        this.persistClipboardEvent('clipboard_paste', foregroundContext);
+        this.flushTypingBuffer();
+        return;
+      }
+
+      if (ctrlOrMeta || event.altKey) {
+        this.flushTypingBuffer();
+        return;
+      }
+
+      if (keycode === UiohookKey.Backspace) {
+        if (this.typingBuffer && this.typingBuffer.chars.length > 0) {
+          this.typingBuffer.chars = this.typingBuffer.chars.slice(0, -1);
+          this.typingBuffer.lastAtMs = Date.now();
+          this.scheduleTypingFlush();
+        }
+        return;
+      }
+
+      if (
+        keycode === UiohookKey.Enter ||
+        keycode === UiohookKey.Tab ||
+        keycode === UiohookKey.Escape
+      ) {
+        this.flushTypingBuffer();
+        return;
+      }
+
+      const printable = this.printableFromKeychar(keychar);
+      if (printable) {
+        this.appendTyping(printable, foregroundContext);
+      }
     });
 
     this.hooksRegistered = true;
+  }
+
+  private async captureClickWithScreenshot(
+    x: number,
+    y: number,
+    context: ForegroundContext,
+    screenshotId: string,
+  ): Promise<void> {
+    try {
+      const display = screen.getDisplayNearestPoint({ x, y });
+      const crop = context.bounds
+        ? {
+            x: context.bounds.x,
+            y: context.bounds.y,
+            width: context.bounds.width,
+            height: context.bounds.height,
+          }
+        : null;
+      const captured = await captureDisplayRegionPng(display.bounds, crop);
+      if (!captured) {
+        return;
+      }
+      this.sessionStore.saveScreenshotPng(Buffer.from(captured.base64, 'base64'), {
+        id: screenshotId,
+        width: captured.width,
+        height: captured.height,
+      });
+    } catch (error) {
+      console.warn('[desktop] click screenshot capture failed:', error);
+    }
   }
 
   private shouldSuppressCapture(context: ForegroundContext): boolean {
@@ -198,46 +341,171 @@ export class RecordingService {
     );
   }
 
-  private recordEvent(event: Record<string, unknown>): void {
+  private persistEvent(event: {
+    category: string;
+    type: string;
+    timestamp_ms: number;
+    raw_x: number | null;
+    raw_y: number | null;
+    value?: string | null;
+    target_label?: string | null;
+    url?: string | null;
+    screenshot_id?: string | null;
+    attrs: Record<string, unknown>;
+  }): boolean {
     try {
-      const isClick = event.event_type === 'CLICK';
-      const attrs: Record<string, unknown> = {
-        platform: event.platform,
-        foreground_app: event.foreground_app,
-        window_title: event.window_title,
-      };
-
-      if (isClick) {
-        attrs.button = event.button;
-      } else {
-        attrs.keycode = event.keycode;
-      }
-
-      if (event.active_win_error) {
-        attrs.active_win_error = event.active_win_error;
-      }
-
-      const saved = this.sessionStore.saveCapturedEvent({
-        category: isClick ? 'mouse' : 'keyboard',
-        type: isClick ? 'click' : 'keydown',
-        timestamp_ms: event.timestamp as number,
-        raw_x: isClick ? (event.x as number) : null,
-        raw_y: isClick ? (event.y as number) : null,
-        attrs,
-      });
-
+      const saved = this.sessionStore.saveCapturedEvent(event);
       if (!saved) {
-        return;
+        return false;
       }
-
       this.eventCount += 1;
       console.log(
-        `[desktop] captured ${isClick ? 'click' : 'keydown'} app=${String(event.foreground_app)}`,
+        `[desktop] captured ${event.type} app=${String(event.attrs.foreground_app ?? '')}`,
       );
+      return true;
     } catch (error) {
       this.state = 'error';
       console.error('[desktop] Failed to persist captured event:', error);
+      return false;
     }
+  }
+
+  private persistClipboardEvent(
+    type: 'clipboard_copy' | 'clipboard_paste',
+    context: ForegroundContext,
+  ): void {
+    let text = '';
+    try {
+      text = clipboard.readText() || '';
+    } catch (error) {
+      console.warn('[desktop] clipboard read failed:', error);
+    }
+
+    this.persistEvent({
+      category: 'clipboard',
+      type,
+      timestamp_ms: Date.now(),
+      raw_x: null,
+      raw_y: null,
+      value: text.slice(0, MAX_INPUT_VALUE_CHARS) || null,
+      target_label: this.labelFromContext(context),
+      url: context.url,
+      attrs: this.buildCommonAttrs(context, {
+        clipboard_length: text.length,
+      }),
+    });
+  }
+
+  private appendTyping(char: string, context: ForegroundContext): void {
+    const now = Date.now();
+    if (!this.typingBuffer) {
+      this.typingBuffer = {
+        chars: char,
+        startedAtMs: now,
+        lastAtMs: now,
+        target_label: this.labelFromContext(context),
+        url: context.url,
+        foreground_app: context.foreground_app,
+        window_title: context.window_title,
+      };
+    } else {
+      this.typingBuffer.chars = `${this.typingBuffer.chars}${char}`.slice(0, MAX_INPUT_VALUE_CHARS);
+      this.typingBuffer.lastAtMs = now;
+    }
+    this.scheduleTypingFlush();
+  }
+
+  private scheduleTypingFlush(): void {
+    if (this.typingFlushTimer) {
+      clearTimeout(this.typingFlushTimer);
+    }
+    this.typingFlushTimer = setTimeout(() => {
+      this.flushTypingBuffer();
+    }, TYPING_IDLE_FLUSH_MS);
+  }
+
+  private flushTypingBuffer(): void {
+    if (this.typingFlushTimer) {
+      clearTimeout(this.typingFlushTimer);
+      this.typingFlushTimer = null;
+    }
+
+    const buffer = this.typingBuffer;
+    this.typingBuffer = null;
+    if (!buffer || !buffer.chars) {
+      return;
+    }
+
+    this.persistEvent({
+      category: 'keyboard',
+      type: 'input',
+      timestamp_ms: buffer.lastAtMs,
+      raw_x: null,
+      raw_y: null,
+      value: buffer.chars,
+      target_label: buffer.target_label,
+      url: buffer.url,
+      attrs: {
+        layer: 'desktop',
+        coordinate_space: 'screen',
+        foreground_app: buffer.foreground_app,
+        window_title: buffer.window_title,
+        platform: process.platform,
+        typing_started_at_ms: buffer.startedAtMs,
+      },
+    });
+  }
+
+  private printableFromKeychar(keychar: number): string | null {
+    if (!keychar || keychar < 32) {
+      return null;
+    }
+    // uiohook may report BMP code units; skip control/delete.
+    if (keychar === 127) {
+      return null;
+    }
+    try {
+      return String.fromCodePoint(keychar);
+    } catch {
+      return null;
+    }
+  }
+
+  private labelFromContext(context: ForegroundContext): string | null {
+    const title = context.window_title?.trim();
+    if (title) {
+      return title;
+    }
+    const app = context.foreground_app?.trim();
+    return app || null;
+  }
+
+  private buildCommonAttrs(
+    context: ForegroundContext,
+    extra: Record<string, unknown> = {},
+  ): Record<string, unknown> {
+    const attrs: Record<string, unknown> = {
+      platform: process.platform,
+      layer: 'desktop',
+      coordinate_space: 'screen',
+      foreground_app: context.foreground_app,
+      window_title: context.window_title,
+      ...extra,
+    };
+
+    if (context.url) {
+      attrs.page_url = context.url;
+    }
+
+    if (context.bounds) {
+      attrs.window_bounds = context.bounds;
+    }
+
+    if (context.active_win_error) {
+      attrs.active_win_error = context.active_win_error;
+    }
+
+    return attrs;
   }
 
   private getForegroundContext(): ForegroundContext {
@@ -251,12 +519,36 @@ export class RecordingService {
         return {
           foreground_app: 'unknown',
           window_title: null,
+          url: null,
+          bounds: null,
         };
       }
+
+      const bounds =
+        window.bounds &&
+        Number.isFinite(window.bounds.x) &&
+        Number.isFinite(window.bounds.y) &&
+        Number.isFinite(window.bounds.width) &&
+        Number.isFinite(window.bounds.height)
+          ? {
+              x: window.bounds.x,
+              y: window.bounds.y,
+              width: window.bounds.width,
+              height: window.bounds.height,
+            }
+          : null;
+
+      const url =
+        typeof (window as { url?: unknown }).url === 'string' &&
+        (window as { url: string }).url.trim()
+          ? (window as { url: string }).url.trim()
+          : null;
 
       return {
         foreground_app: window.owner.name || window.owner.path || 'unknown',
         window_title: window.title || null,
+        url,
+        bounds,
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -265,6 +557,8 @@ export class RecordingService {
       return {
         foreground_app: 'unknown',
         window_title: null,
+        url: null,
+        bounds: null,
         active_win_error: message,
       };
     }

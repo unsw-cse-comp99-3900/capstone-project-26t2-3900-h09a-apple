@@ -382,6 +382,17 @@ test('resolvePlaybackTarget never paints non-screen recorded hints', async () =>
     }),
     false,
   );
+
+  assert.equal(
+    shouldAttemptLiveResolve({
+      step_number: 4,
+      instruction: 'Click where you clicked before',
+      anchor_mode: 'none',
+      raw_coordinates: { x: 400, y: 300 },
+      attrs: { layer: 'desktop', coordinate_space: 'screen' },
+    }),
+    true,
+  );
 });
 
 test('full-display vision mapping uses contentBounds equal to display', () => {

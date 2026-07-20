@@ -40,6 +40,13 @@ declare module '@h09a/desktop-storage' {
   export interface StoredSessionRows {
     session: Record<string, unknown>;
     events: Array<Record<string, unknown>>;
+    screenshots?: Array<{
+      id: string;
+      data_base64: string;
+      content_type?: string;
+      width?: number | null;
+      height?: number | null;
+    }>;
   }
 
   export interface SaveEventResult {
@@ -70,6 +77,12 @@ declare module '@h09a/desktop-storage' {
     sessionId: string,
   ): StoredSessionRows | null;
   export function assembleSessionFromRows(rows: StoredSessionRows): Record<string, unknown>;
+  export function mapEventTypeForApi(type: unknown): string | null;
+  export function sanitizeSessionPayloadForApi(payload: Record<string, unknown>): {
+    payload: Record<string, unknown>;
+    droppedCount: number;
+  };
+  export const API_SESSION_EVENT_TYPES: Set<string>;
   export function deleteSession(db: LocalBufferDatabase, sessionId: string): number;
   export function maskValue(value: unknown, options?: { forceMask?: boolean }): unknown;
   export function applyCapturePolicy(event: LocalEventInput): {

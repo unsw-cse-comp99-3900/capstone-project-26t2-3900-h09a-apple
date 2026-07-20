@@ -33,13 +33,18 @@ function hasSelectorHint(step: WalkthroughStep): boolean {
  */
 export function shouldAttemptLiveResolve(step: WalkthroughStep): boolean {
   const mode = resolveAnchorMode(step);
+  const hasNeedle = Boolean(needleForStep(step)) || hasSelectorHint(step);
+  const hasDesktopCoords = hasScreenSpaceCoordinates(step);
+
   if (mode === 'element') {
     return true;
   }
   if (mode === 'screenshot') {
-    return Boolean(needleForStep(step)) || hasSelectorHint(step);
+    // Desktop has no DOM injection; still attempt a11y/OCR/vision or recorded coords.
+    return hasNeedle || hasDesktopCoords;
   }
-  return false;
+  // anchor_mode=none: instruction-only on web, but desktop may still have screen coords.
+  return hasNeedle || hasDesktopCoords;
 }
 
 export function clampHintRect(hint: ScreenRect, displayBounds: ScreenRect): ScreenRect {

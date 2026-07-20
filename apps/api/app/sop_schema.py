@@ -96,8 +96,10 @@ class WalkthroughStep(BaseModel):
     screenshot_highlight: ScreenshotHighlight | None = None
     # element: has css/xpath; screenshot: no selector but has image; none: instruction-only.
     anchor_mode: Literal["element", "screenshot", "none"] = "element"
-    expected_action: Literal["click", "input", "submit"] | None = None
+    expected_action: Literal["click", "input", "submit", "keydown"] | None = None
     expected_url: str | None = None
+    # Open bag from source events (desktop: raw_coordinates, layer, foreground_app, …).
+    attrs: dict[str, object] = Field(default_factory=dict)
 
 
 class WalkthroughPayload(BaseModel):

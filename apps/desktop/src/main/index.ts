@@ -320,13 +320,13 @@ if (!gotSingleInstanceLock) {
     }
   });
 
-  ipcMain.handle('recording:stop', () => {
+  ipcMain.handle('recording:stop', async () => {
     try {
       if (!recordingService) {
         throw new Error('The recording service is not ready');
       }
 
-      lastCompletedSession = recordingService.stop();
+      lastCompletedSession = await recordingService.stop();
       return getRecordingStatus();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -576,7 +576,7 @@ if (!gotSingleInstanceLock) {
   app.on('before-quit', () => {
     void walkthroughService?.dismiss();
     stopHandoffServer();
-    recordingService?.stop();
+    void recordingService?.stop();
     sessionStore?.close();
   });
 

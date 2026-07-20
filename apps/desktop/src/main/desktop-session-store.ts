@@ -11,7 +11,7 @@ import {
   type LocalBufferDatabase,
   type SessionAuditSummary,
 } from '@h09a/desktop-storage';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { rm } from 'node:fs/promises';
@@ -23,6 +23,9 @@ export interface DesktopEventInput {
   raw_x: number | null;
   raw_y: number | null;
   value?: string | null;
+  target_label?: string | null;
+  url?: string | null;
+  screenshot_id?: string | null;
   attrs: Record<string, unknown>;
 }
 
@@ -88,6 +91,50 @@ export class DesktopSessionStore {
     return this.activeSession?.id ?? null;
   }
 
+  getActiveSessionDirectory(): string | null {
+    return this.activeSession?.directory ?? null;
+  }
+
+  screenshotsDirectory(): string | null {
+    const session = this.activeSession;
+    return session ? join(session.directory, 'screenshots') : null;
+  }
+
+  /**
+   * Persist a PNG capture for the active session under `id` (or a new UUID).
+   * The same id is used as the event.screenshot_id reference.
+   */
+  saveScreenshotPng(
+    pngBuffer: Buffer,
+    meta?: { width?: number; height?: number; id?: string },
+  ): string | null {
+    const session = this.activeSession;
+    if (!session) {
+      return null;
+    }
+
+    const id = meta?.id ?? randomUUID();
+    const filePath = join(session.directory, 'screenshots', `${id}.png`);
+    writeFileSync(filePath, pngBuffer);
+
+    if (meta?.width != null || meta?.height != null) {
+      writeFileSync(
+        join(session.directory, 'screenshots', `${id}.meta.json`),
+        `${JSON.stringify({ width: meta.width ?? null, height: meta.height ?? null })}\n`,
+        'utf8',
+      );
+    }
+
+    return id;
+  }
+
+  allocateScreenshotId(): string | null {
+    if (!this.activeSession) {
+      return null;
+    }
+    return randomUUID();
+  }
+
   saveCapturedEvent(event: DesktopEventInput): boolean {
     const session = this.requireActiveSession();
 
@@ -101,10 +148,10 @@ export class DesktopSessionStore {
       type: event.type,
       timestamp_ms: event.timestamp_ms,
       target_selector: null,
-      target_label: null,
+      target_label: event.target_label ?? null,
       value: event.value ?? null,
-      url: null,
-      screenshot_id: null,
+      url: event.url ?? null,
+      screenshot_id: event.screenshot_id ?? null,
       is_identified: false,
       identification_source: 'unidentified' as const,
       raw_x: event.raw_x,
@@ -142,7 +189,12 @@ export class DesktopSessionStore {
       throw new Error(`Completed session ${session.id} could not be read from SQLite`);
     }
 
-    const payload = assembleSessionFromRows(rows);
+    const screenshots = this.loadScreenshotsForEvents(
+      session.directory,
+      rows.events as Array<{ screenshot_id?: string | null }>,
+    );
+
+    const payload = assembleSessionFromRows({ ...rows, screenshots });
     const artifactPath = join(session.directory, 'session.json');
     const auditSummary = getSessionAuditSummary(session.id);
     const auditSummaryPath = join(session.directory, 'capture-policy-audit.json');
@@ -190,6 +242,61 @@ export class DesktopSessionStore {
 
   close(): void {
     this.db.close();
+  }
+
+  private loadScreenshotsForEvents(
+    sessionDirectory: string,
+    events: Array<{ screenshot_id?: string | null }>,
+  ): Array<{
+    id: string;
+    data_base64: string;
+    content_type: 'image/png';
+    width: number | null;
+    height: number | null;
+  }> {
+    const ids = new Set(
+      events.map((event) => event.screenshot_id).filter((id): id is string => Boolean(id)),
+    );
+    const screenshots: Array<{
+      id: string;
+      data_base64: string;
+      content_type: 'image/png';
+      width: number | null;
+      height: number | null;
+    }> = [];
+
+    for (const id of ids) {
+      const pngPath = join(sessionDirectory, 'screenshots', `${id}.png`);
+      if (!existsSync(pngPath)) {
+        continue;
+      }
+
+      let width: number | null = null;
+      let height: number | null = null;
+      const metaPath = join(sessionDirectory, 'screenshots', `${id}.meta.json`);
+      if (existsSync(metaPath)) {
+        try {
+          const meta = JSON.parse(readFileSync(metaPath, 'utf8')) as {
+            width?: number | null;
+            height?: number | null;
+          };
+          width = typeof meta.width === 'number' ? meta.width : null;
+          height = typeof meta.height === 'number' ? meta.height : null;
+        } catch {
+          // Meta is optional; PNG alone is enough for API upload.
+        }
+      }
+
+      screenshots.push({
+        id,
+        data_base64: readFileSync(pngPath).toString('base64'),
+        content_type: 'image/png',
+        width,
+        height,
+      });
+    }
+
+    return screenshots;
   }
 
   private requireActiveSession(): ActiveSession {
