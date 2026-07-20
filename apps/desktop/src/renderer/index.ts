@@ -14,18 +14,33 @@ const reviewButton = requireElement<HTMLButtonElement>('review-session');
 const floatingOrbShell = requireElement<HTMLDivElement>('floating-orb-shell');
 const collapseButton = requireElement<HTMLButtonElement>('collapse-window');
 const closeButton = requireElement<HTMLButtonElement>('close-window');
+const statusPill = requireElement<HTMLDivElement>('status-pill');
 const statusLabel = requireElement<HTMLSpanElement>('status-label');
 const statusMessage = requireElement<HTMLParagraphElement>('status-message');
 const eventCount = requireElement<HTMLParagraphElement>('event-count');
 const sessionResult = requireElement<HTMLDivElement>('session-result');
 const sessionPath = requireElement<HTMLElement>('session-path');
 const platform = requireElement<HTMLSpanElement>('platform');
+const signInPanel = requireElement<HTMLDivElement>('signin-panel');
+const signInButton = requireElement<HTMLButtonElement>('signin-button');
+const recorderPanel = requireElement<HTMLDivElement>('recorder-panel');
+const logoutButton = requireElement<HTMLButtonElement>('logout-button');
+const consentOverlay = requireElement<HTMLDivElement>('consent-overlay');
+const consentAcceptButton = requireElement<HTMLButtonElement>('consent-accept');
+const consentDeclineButton = requireElement<HTMLButtonElement>('consent-decline');
+const reviewModal = requireElement<HTMLDivElement>('review-modal');
+const workflowText = requireElement<HTMLSpanElement>('review-workflow');
+const durationText = requireElement<HTMLSpanElement>('review-duration');
+const eventsText = requireElement<HTMLSpanElement>('review-events');
+const submitButton = requireElement<HTMLButtonElement>('submit-session-button');
+const cancelButton = requireElement<HTMLButtonElement>('cancel-review-button');
 
 let busy = false;
 let dragPointerId: number | null = null;
 let dragStart = { x: 0, y: 0 };
 let dragMoved = false;
 let suppressOrbClick = false;
+let authenticated = false;
 
 const DRAG_THRESHOLD_PX = 4;
 
@@ -44,6 +59,7 @@ function renderStatus(status: RecordingStatus): void {
   startButton.disabled = busy || status.state === 'recording';
   stopButton.disabled = busy || status.state === 'idle';
   reviewButton.disabled = busy || status.state !== 'idle' || !status.sessionPath;
+  logoutButton.disabled = busy || status.state === 'recording';
 
   if (status.error) {
     statusMessage.textContent = status.error;
@@ -79,16 +95,70 @@ async function runAction(action: () => Promise<RecordingStatus>): Promise<void> 
   }
 }
 
+async function refreshAuth(): Promise<void> {
+  const auth = await window.desktopAPI.getAuthStatus();
+
+  authenticated = auth.authenticated;
+
+  signInPanel.hidden = authenticated;
+  recorderPanel.hidden = !authenticated;
+  statusPill.hidden = !authenticated;
+  logoutButton.hidden = !authenticated;
+
+  if (!authenticated) {
+    hideConsent();
+  }
+}
+
+function showConsent(): void {
+  consentOverlay.hidden = false;
+}
+
+function hideConsent(): void {
+  consentOverlay.hidden = true;
+}
+
 startButton.addEventListener('click', () => {
-  void runAction(() => window.desktopAPI.startRecording());
+  void (async () => {
+    const consent = await window.desktopAPI.getConsentStatus();
+
+    if (!consent.accepted) {
+      showConsent();
+      return;
+    }
+
+    await runAction(() => window.desktopAPI.startRecording());
+  })();
 });
 
 stopButton.addEventListener('click', () => {
   void runAction(() => window.desktopAPI.stopRecording());
 });
 
-reviewButton.addEventListener('click', () => {
-  void runAction(() => window.desktopAPI.reviewSession());
+reviewButton.addEventListener('click', async () => {
+  const review = await window.desktopAPI.getReviewSession();
+
+  workflowText.textContent = review.workflowName;
+
+  durationText.textContent = `${review.durationSeconds}s`;
+
+  eventsText.textContent = String(review.eventCount);
+
+  reviewModal.hidden = false;
+});
+
+cancelButton.addEventListener('click', () => {
+  reviewModal.hidden = true;
+});
+
+submitButton.addEventListener('click', async () => {
+  try {
+    await window.desktopAPI.submitSession();
+    reviewModal.hidden = true;
+    alert('Session submitted successfully.');
+  } catch (error) {
+    alert(error instanceof Error ? error.message : String(error));
+  }
 });
 
 floatingOrbShell.addEventListener('pointerdown', (event) => {
@@ -150,12 +220,49 @@ closeButton.addEventListener('click', () => {
   void window.desktopAPI.closeWindow();
 });
 
+signInButton.addEventListener('click', async () => {
+  await window.desktopAPI.launchHandoff();
+
+  const timer = window.setInterval(async () => {
+    await refreshAuth();
+
+    if (authenticated) {
+      clearInterval(timer);
+    }
+  }, 1000);
+});
+
+logoutButton.addEventListener('click', () => {
+  void (async () => {
+    await window.desktopAPI.logout();
+    await refreshAuth();
+  })();
+});
+
+consentAcceptButton.addEventListener('click', () => {
+  void (async () => {
+    await window.desktopAPI.acceptConsent();
+
+    hideConsent();
+
+    await runAction(() => window.desktopAPI.startRecording());
+  })();
+});
+
+consentDeclineButton.addEventListener('click', () => {
+  hideConsent();
+});
+
 platform.textContent = window.desktopAPI.platform;
 
-void window.desktopAPI.getRecordingStatus().then(renderStatus);
+void (async () => {
+  await refreshAuth();
+  renderStatus(await window.desktopAPI.getRecordingStatus());
+})();
 
 window.setInterval(() => {
   if (!busy) {
+    void refreshAuth();
     void window.desktopAPI.getRecordingStatus().then(renderStatus);
   }
 }, 500);
