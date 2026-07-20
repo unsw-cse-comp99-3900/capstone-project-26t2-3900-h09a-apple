@@ -155,7 +155,7 @@ function pickWtEventFields(event) {
 
 /**
  * Normalize an assembled or hand-edited session payload for API ingestion.
- * Unknown event types fail loudly — they are never dropped silently.
+ * Unknown event types fail loudly; they are never dropped silently.
  */
 export function sanitizeSessionPayloadForApi(payload) {
   if (!payload || typeof payload !== 'object') {
