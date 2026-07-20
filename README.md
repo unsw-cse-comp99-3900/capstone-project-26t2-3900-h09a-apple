@@ -28,7 +28,7 @@ cp .env.example .env
 cp apps/web/.env.example apps/web/.env.local
 cp apps/api/.env.example apps/api/.env
 
-./scripts/install-githooks.sh   # optional: pre-commit CI checks + AI trailer block on commit
+./scripts/install-githooks.sh   # pre-commit CI checks + AI trailer block on commit
 ```
 
 Python dependencies:
@@ -204,7 +204,7 @@ Quit `psql` with `\q`.
 | `No module named 'anthropic'` (or similar) when running `pnpm dev` | Activate `apps/api/.venv` before `pnpm dev`.                                                                                                                    |
 | API returns **401** on session submit                              | Attach a Bearer token from `/api/v1/auth/login` (see auth note above).                                                                                          |
 | Port **3000** or **5432** already in use                           | Stop the conflicting process or container before starting dev services.                                                                                         |
-| `commit-policy` CI fails on your PR                                | Remove AI `Co-authored-by` trailers from commits; see [`docs/commit-policy.md`](docs/commit-policy.md).                                                         |
+| `commit-policy` CI fails on your PR                                | Forbid AI `Co-authored-by` trailers from commits; see [`docs/commit-policy.md`](docs/commit-policy.md).                                                         |
 
 ## Commit policy
 
