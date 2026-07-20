@@ -15,9 +15,10 @@ import {
   retractTimingsToStep,
   totalDurationSeconds,
 } from './step-timing.js';
-import { findTextRectInOcrWords } from './ocr-resolve.js';
+import { findTextRectInOcrWords, pickBestOcrMatch } from './ocr-resolve.js';
 import { intersectRects } from './foreground-window.js';
 import { formatVisionFailureLog, shouldApplyResolution } from './resolve-failure.js';
+import { needleForStep, resolveStepPageUrl } from './step-navigation.js';
 import { refineGridCell, resolvePlaybackTarget } from './target-resolve.js';
 import { parseVoiceCommand, voiceCommandToAction } from './voice-commands.js';
 
@@ -421,6 +422,77 @@ test('OCR text matcher maps image boxes onto window contentBounds', () => {
   assert.equal(rect.y, 100);
   assert.equal(rect.width, 110);
   assert.equal(rect.height, 20);
+});
+
+test('OCR matcher rejects loose substring hits that paint the wrong control', () => {
+  const windowBounds = { x: 0, y: 0, width: 1000, height: 800 };
+  const words = [
+    { text: 'Code', x0: 10, y0: 100, x1: 60, y1: 120 },
+    { text: 'scanning', x0: 65, y0: 100, x1: 140, y1: 120 },
+    { text: 'alerts', x0: 145, y0: 100, x1: 200, y1: 120 },
+  ];
+  const wrong = findTextRectInOcrWords(words, 'Code frequency', windowBounds, 1000, 800);
+  assert.equal(wrong, null);
+});
+
+test('OCR prefers standalone label over same words as heading prefix', () => {
+  const windowBounds = { x: 0, y: 0, width: 1200, height: 800 };
+  // Nav item alone on its line, then H1 "Code frequency over the history..."
+  const words = [
+    { text: 'Code', x0: 20, y0: 200, x1: 70, y1: 220 },
+    { text: 'frequency', x0: 75, y0: 200, x1: 160, y1: 220 },
+    { text: 'Code', x0: 280, y0: 40, x1: 420, y1: 80 },
+    { text: 'frequency', x0: 430, y0: 40, x1: 620, y1: 80 },
+    { text: 'over', x0: 630, y0: 40, x1: 700, y1: 80 },
+    { text: 'the', x0: 710, y0: 40, x1: 760, y1: 80 },
+    { text: 'history', x0: 770, y0: 40, x1: 900, y1: 80 },
+  ];
+  const rect = findTextRectInOcrWords(words, 'Code frequency', windowBounds, 1200, 800);
+  assert.ok(rect);
+  assert.ok(rect.y > 100, 'should pick the standalone nav line, not the heading line');
+
+  const best = pickBestOcrMatch([
+    { x: 280, y: 40, width: 340, height: 40, standalone: false },
+    { x: 20, y: 200, width: 140, height: 20, standalone: true },
+  ]);
+  assert.equal(best?.standalone, true);
+  assert.equal(best?.y, 200);
+});
+
+test('resolveStepPageUrl mirrors extension expected_url / instruction order', () => {
+  assert.equal(
+    resolveStepPageUrl({
+      step_number: 1,
+      instruction: 'Go somewhere',
+      expected_url: 'https://example.com/settings',
+    }),
+    'https://example.com/settings',
+  );
+  assert.equal(
+    resolveStepPageUrl({
+      step_number: 2,
+      instruction: 'Open https://example.com/docs/start now',
+    }),
+    'https://example.com/docs/start',
+  );
+  assert.equal(
+    resolveStepPageUrl({
+      step_number: 3,
+      instruction: "Click on the 'Insights' link",
+      attrs: { page_url: 'https://github.com/org/repo/pulse' },
+    }),
+    'https://github.com/org/repo/pulse',
+  );
+  // No inventing paths from button labels alone.
+  assert.equal(
+    resolveStepPageUrl({
+      step_number: 4,
+      instruction: "Click 'Code frequency'",
+      target_label: 'Code frequency',
+    }),
+    null,
+  );
+  assert.equal(needleForStep({ step_number: 1, instruction: "Open 'Insights'" }), 'Insights');
 });
 
 test('privacy crop uses window intersect, not full display', () => {

@@ -326,6 +326,10 @@ if (!gotSingleInstanceLock) {
     walkthroughService?.setTooltipHitTesting(Boolean(enabled));
   });
 
+  ipcMain.on('walkthrough:ui-nav-guard', () => {
+    walkthroughService?.armUiNavigationGuard();
+  });
+
   ipcMain.handle('consent:get-status', async () => {
     const tokens = await loadTokens();
 

@@ -8,6 +8,20 @@ body {
   pointer-events: none;
 }
 
+/* Panel is a real window: must receive Previous/Next clicks. */
+html[data-role='panel'],
+html[data-role='panel'] body {
+  pointer-events: auto;
+}
+
+html[data-role='panel'] .tooltip {
+  position: absolute;
+  inset: 12px;
+  width: auto;
+  max-width: none;
+  pointer-events: auto;
+}
+
 .backdrop {
   position: fixed;
   inset: 0;

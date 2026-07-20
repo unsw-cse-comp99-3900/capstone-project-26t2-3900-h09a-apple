@@ -132,6 +132,23 @@ def locate_walkthrough_element(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=str(exc),
         ) from exc
+    except Exception as exc:
+        # Bad/placeholder API keys surface as OpenAI AuthenticationError (401),
+        # not RuntimeError - map to 503 so the desktop client can log
+        # config_missing instead of a generic HTTP 500.
+        detail = str(exc)
+        lowered = detail.lower()
+        if (
+            "api key" in lowered
+            or "authentication" in lowered
+            or "unauthorized" in lowered
+            or "401" in lowered
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=detail,
+            ) from exc
+        raise
 
     return WalkthroughLocateResponse(
         x=result.x,

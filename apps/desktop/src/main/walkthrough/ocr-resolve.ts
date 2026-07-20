@@ -2,6 +2,7 @@ import type { ScreenRect, WalkthroughStep } from './types';
 import { getForegroundWindowBounds } from './foreground-window';
 import { captureDisplayRegionPng } from './screen-capture';
 import { mapViewportRectToScreen } from './coordinate-space';
+import { needleForStep } from './step-navigation';
 
 export interface OcrWordBox {
   text: string;
@@ -9,13 +10,6 @@ export interface OcrWordBox {
   y0: number;
   x1: number;
   y1: number;
-}
-
-function needleForStep(step: WalkthroughStep): string {
-  if (typeof step.target_label === 'string' && step.target_label.trim()) {
-    return step.target_label.trim();
-  }
-  return '';
 }
 
 function toImageRect(words: OcrWordBox[]): {
@@ -36,7 +30,58 @@ function toImageRect(words: OcrWordBox[]): {
   };
 }
 
-/** Pure matcher used by tests (no tesseract worker). */
+export interface OcrImageRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface OcrMatchCandidate extends OcrImageRect {
+  /** True when no more OCR tokens continue on the same visual line after the hit. */
+  standalone: boolean;
+}
+
+function sameLine(a: { y0: number; y1: number }, b: { y0: number; y1: number }): boolean {
+  const midA = (a.y0 + a.y1) / 2;
+  const midB = (b.y0 + b.y1) / 2;
+  const tol = Math.max(6, (a.y1 - a.y0) * 0.6);
+  return Math.abs(midA - midB) <= tol;
+}
+
+/**
+ * Prefer a standalone label (nav item) over the same words as a heading prefix
+ * ("Code frequency" vs "Code frequency over the history...").
+ * Area is only a tie-breaker, not "left sidebar means correct".
+ */
+export function pickBestOcrMatch(candidates: OcrMatchCandidate[]): OcrMatchCandidate | null {
+  if (candidates.length === 0) {
+    return null;
+  }
+  const ranked = [...candidates].sort((a, b) => {
+    if (a.standalone !== b.standalone) {
+      return a.standalone ? -1 : 1;
+    }
+    const areaA = a.width * a.height;
+    const areaB = b.width * b.height;
+    if (areaA !== areaB) {
+      return areaA - areaB;
+    }
+    return a.y - b.y;
+  });
+  return ranked[0] ?? null;
+}
+
+/** @deprecated use pickBestOcrMatch */
+export function pickBestOcrImageRect(candidates: OcrImageRect[]): OcrImageRect | null {
+  return pickBestOcrMatch(candidates.map((c) => ({ ...c, standalone: true })));
+}
+
+/**
+ * Pure matcher used by tests (no tesseract worker).
+ * Exact phrase only. When the phrase appears more than once, prefer a
+ * standalone line hit (control label) over a heading that continues afterward.
+ */
 export function findTextRectInOcrWords(
   words: OcrWordBox[],
   needle: string,
@@ -44,7 +89,7 @@ export function findTextRectInOcrWords(
   imageWidth: number,
   imageHeight: number,
 ): ScreenRect | null {
-  const target = needle.trim().toLowerCase();
+  const target = needle.trim().toLowerCase().replace(/\s+/g, ' ');
   if (!target || words.length === 0) {
     return null;
   }
@@ -59,22 +104,43 @@ export function findTextRectInOcrWords(
     }))
     .filter((word) => word.text.length > 0);
 
-  for (let i = 0; i < normalized.length; i += 1) {
-    for (let span = 1; span <= 6 && i + span <= normalized.length; span += 1) {
-      const slice = normalized.slice(i, i + span);
-      const combined = slice
-        .map((word) => word.text.toLowerCase())
-        .join(' ')
-        .replace(/\s+/g, ' ')
-        .trim();
+  const targetTokens = target.split(' ').filter(Boolean);
+  const candidates: OcrMatchCandidate[] = [];
 
-      if (combined === target || (target.length >= 3 && combined.includes(target))) {
-        return mapViewportRectToScreen(toImageRect(slice), contentBounds, imageWidth, imageHeight);
-      }
+  for (let i = 0; i < normalized.length; i += 1) {
+    const span = targetTokens.length;
+    if (i + span > normalized.length) {
+      break;
     }
+    const slice = normalized.slice(i, i + span);
+    const combined = slice
+      .map((word) => word.text.toLowerCase())
+      .join(' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    if (combined !== target) {
+      continue;
+    }
+
+    const last = slice[slice.length - 1];
+    const continuesOnLine = normalized.slice(i + span).some((word) => {
+      if (!sameLine(last, word)) {
+        return false;
+      }
+      // Token to the right of the match on the same line => heading/sentence.
+      return word.x0 >= last.x0;
+    });
+
+    const rect = toImageRect(slice);
+    candidates.push({ ...rect, standalone: !continuesOnLine });
   }
 
-  return null;
+  const best = pickBestOcrMatch(candidates);
+  if (!best) {
+    return null;
+  }
+  return mapViewportRectToScreen(best, contentBounds, imageWidth, imageHeight);
 }
 
 type RecognizeFn = (pngBase64: string) => Promise<OcrWordBox[]>;
@@ -86,10 +152,18 @@ async function getDefaultRecognize(): Promise<RecognizeFn> {
     return defaultRecognize;
   }
 
-  const tesseract = await import('tesseract.js');
+  const tesseractMod = (await import('tesseract.js')) as {
+    recognize?: typeof import('tesseract.js').recognize;
+    default?: { recognize?: typeof import('tesseract.js').recognize };
+  };
+  const recognize = tesseractMod.recognize ?? tesseractMod.default?.recognize ?? null;
+  if (!recognize) {
+    throw new Error('tesseract.recognize is not a function');
+  }
+
   defaultRecognize = async (pngBase64: string) => {
     const buffer = Buffer.from(pngBase64, 'base64');
-    const result = await tesseract.recognize(buffer, 'eng', {
+    const result = await recognize(buffer, 'eng', {
       logger: () => undefined,
     });
     const words = (result.data.words ?? []) as Array<{

@@ -1,5 +1,5 @@
-import { screen } from 'electron';
 import { authenticatedFetch, getCurrentAuth } from '../auth/auth-service';
+import { displayForBounds } from './active-display';
 import { mapViewportRectToScreen } from './coordinate-space';
 import { getForegroundWindowBounds } from './foreground-window';
 import {
@@ -11,17 +11,38 @@ import { captureDisplayRegionPng } from './screen-capture';
 import type { ScreenRect, WalkthroughStep } from './types';
 
 function describeStepForVision(step: WalkthroughStep): string {
+  let label = '';
   if (typeof step.target_label === 'string' && step.target_label.trim()) {
-    return step.target_label.trim();
+    label = step.target_label.trim();
+  } else if (typeof step.instruction === 'string' && step.instruction.trim()) {
+    label = step.instruction.trim().slice(0, 500);
   }
-  if (typeof step.instruction === 'string' && step.instruction.trim()) {
-    return step.instruction.trim().slice(0, 500);
+  if (!label) {
+    return '';
   }
-  return '';
+  // Disambiguate duplicate on-screen text: prefer the control to click.
+  return (
+    `${label}. Locate the interactive control (link, button, or menu item) ` +
+    `the user should activate. If the same text also appears as a large page ` +
+    `heading, choose the smaller interactive control, not the heading.`
+  );
 }
 
 function logVisionFailure(reason: VisionFailureReason, detail?: string): void {
   console.warn(`[walkthrough] ${formatVisionFailureLog(reason, detail)}`);
+}
+
+/** After a config/auth failure, skip further vision calls for this process. */
+let visionDisabledReason: VisionFailureReason | null = null;
+
+export function resetVisionSessionGate(): void {
+  visionDisabledReason = null;
+}
+
+function disableVisionForSession(reason: VisionFailureReason): void {
+  if (reason === 'not_authenticated' || reason === 'config_missing') {
+    visionDisabledReason = reason;
+  }
 }
 
 /**
@@ -48,6 +69,11 @@ export async function resolveVisionGridOnScreenDetailed(
     afterCapture?: () => void | Promise<void>;
   },
 ): Promise<VisionLocateOutcome> {
+  if (visionDisabledReason) {
+    logVisionFailure(visionDisabledReason, 'skipped for rest of session');
+    return { ok: false, reason: visionDisabledReason, detail: 'skipped for rest of session' };
+  }
+
   const description = describeStepForVision(step);
   if (!description) {
     logVisionFailure('no_description');
@@ -56,6 +82,7 @@ export async function resolveVisionGridOnScreenDetailed(
 
   if (!getCurrentAuth()) {
     logVisionFailure('not_authenticated');
+    disableVisionForSession('not_authenticated');
     return { ok: false, reason: 'not_authenticated' };
   }
 
@@ -100,11 +127,13 @@ export async function resolveVisionGridOnScreenDetailed(
 
     if (response.status === 401 || response.status === 403) {
       logVisionFailure('not_authenticated', `HTTP ${response.status}`);
+      disableVisionForSession('not_authenticated');
       return { ok: false, reason: 'not_authenticated', detail: `HTTP ${response.status}` };
     }
 
     if (response.status === 503) {
       logVisionFailure('config_missing', `HTTP ${response.status}`);
+      disableVisionForSession('config_missing');
       return { ok: false, reason: 'config_missing', detail: `HTTP ${response.status}` };
     }
 
@@ -164,7 +193,7 @@ export async function resolveVisionGridOnScreenDetailed(
   }
 }
 
-/** @deprecated kept for call-site clarity; scaleFactor reserved for future DPI tests */
-export function primaryScaleFactor(): number {
-  return screen.getPrimaryDisplay().scaleFactor || 1;
+/** Scale factor for the display that owns the given bounds. */
+export function displayScaleFactor(bounds: ScreenRect): number {
+  return displayForBounds(bounds).scaleFactor || 1;
 }

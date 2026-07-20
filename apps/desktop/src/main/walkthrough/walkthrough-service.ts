@@ -1,6 +1,7 @@
-import { clipboard, dialog, screen } from 'electron';
+import { clipboard, dialog, shell } from 'electron';
 import { writeFile } from 'node:fs/promises';
 import { resolveAccessibilityTarget } from './accessibility-resolve';
+import { getActiveDisplayBounds } from './active-display';
 import { WalkthroughAutoAdvance } from './auto-advance';
 import { postWalkthroughCompletion } from './completion-client';
 import { resolveOcrTarget } from './ocr-resolve';
@@ -22,7 +23,8 @@ import type {
   WalkthroughStep,
   WalkthroughUiState,
 } from './types';
-import { resolveVisionGridOnScreen } from './vision-locate-client';
+import { resolveStepPageUrl } from './step-navigation';
+import { resetVisionSessionGate, resolveVisionGridOnScreen } from './vision-locate-client';
 import { parseVoiceCommand, voiceCommandToAction } from './voice-commands';
 
 export class WalkthroughService {
@@ -42,6 +44,12 @@ export class WalkthroughService {
   private advanceArmed = true;
   /** Bumped on every step enter so stale async resolve results are discarded. */
   private resolveGeneration = 0;
+  /** Ignore global-hook auto-advance while UI Previous/Next/Finish is in flight. */
+  private ignoreAutoAdvanceUntil = 0;
+  /** Last URL opened for a step (re-open when Previous/Next changes target). */
+  private lastOpenedUrl: string | null = null;
+  /** Serialize Previous/Next so overlapping clicks cannot race stepIndex. */
+  private navInFlight = false;
 
   private readonly overlay = new WalkthroughOverlayWindow();
   private readonly autoAdvance = new WalkthroughAutoAdvance();
@@ -88,8 +96,12 @@ export class WalkthroughService {
     this.error = null;
     this.advanceArmed = true;
     this.resolveGeneration = 0;
+    this.ignoreAutoAdvanceUntil = 0;
+    this.lastOpenedUrl = null;
+    this.navInFlight = false;
+    resetVisionSessionGate();
 
-    const display = screen.getPrimaryDisplay().bounds;
+    const display = await getActiveDisplayBounds();
     this.overlay.coverDisplay(display);
     // Wait until walkthrough.html has loaded and can receive IPC, otherwise the
     // first walkthrough:state is dropped and the overlay stays blank/transparent.
@@ -105,25 +117,37 @@ export class WalkthroughService {
   }
 
   async previous(): Promise<WalkthroughUiState> {
-    if (this.status !== 'playing' || this.stepIndex <= 0 || !this.payload) {
+    if (this.status !== 'playing' || this.stepIndex <= 0 || !this.payload || this.navInFlight) {
       return this.publish();
     }
 
-    const destinationIndex = this.stepIndex - 1;
-    const destinationStep = this.payload.steps[destinationIndex];
-    const destinationStepNumber = destinationStep?.step_number ?? destinationIndex + 1;
+    this.navInFlight = true;
+    try {
+      const destinationIndex = this.stepIndex - 1;
+      const destinationStep = this.payload.steps[destinationIndex];
+      const destinationStepNumber = destinationStep?.step_number ?? destinationIndex + 1;
 
-    this.abandonCurrentStep();
-    this.stepTimings = retractTimingsToStep(this.stepTimings, destinationStepNumber);
-    this.frictionEvents = retractFrictionToStep(this.frictionEvents, destinationStepNumber);
-    this.stepIndex = destinationIndex;
-    this.advanceArmed = true;
-    await this.enterCurrentStep();
-    return this.publish();
+      this.abandonCurrentStep();
+      this.stepTimings = retractTimingsToStep(this.stepTimings, destinationStepNumber);
+      this.frictionEvents = retractFrictionToStep(this.frictionEvents, destinationStepNumber);
+      this.stepIndex = destinationIndex;
+      this.lastHighlight = null;
+      this.lastResolvedNote = null;
+      this.suppressAutoAdvance();
+      this.advanceArmed = false;
+      // Paint step copy immediately; resolve can take seconds.
+      this.publish();
+      console.info(`[walkthrough] Previous -> step ${this.stepIndex + 1}`);
+      await this.enterCurrentStep();
+      this.advanceArmed = true;
+      return this.publish();
+    } finally {
+      this.navInFlight = false;
+    }
   }
 
   async next(): Promise<WalkthroughUiState> {
-    if (this.status !== 'playing' || !this.payload) {
+    if (this.status !== 'playing' || !this.payload || this.navInFlight) {
       return this.publish();
     }
 
@@ -131,11 +155,24 @@ export class WalkthroughService {
       return this.finish();
     }
 
-    this.leaveCurrentStep();
-    this.stepIndex += 1;
-    this.advanceArmed = true;
-    await this.enterCurrentStep();
-    return this.publish();
+    this.navInFlight = true;
+    try {
+      // Tooltip Next is itself a global click; without this, auto-advance fires
+      // on the same click and skips an extra step (2 -> 4).
+      this.suppressAutoAdvance();
+      this.leaveCurrentStep();
+      this.stepIndex += 1;
+      this.lastHighlight = null;
+      this.lastResolvedNote = null;
+      this.advanceArmed = false;
+      this.publish();
+      console.info(`[walkthrough] Next -> step ${this.stepIndex + 1}`);
+      await this.enterCurrentStep();
+      this.advanceArmed = true;
+      return this.publish();
+    } finally {
+      this.navInFlight = false;
+    }
   }
 
   async finish(): Promise<WalkthroughUiState> {
@@ -240,15 +277,34 @@ export class WalkthroughService {
   }
 
   setTooltipHitTesting(enabled: boolean): void {
-    this.overlay.setClickThrough(!enabled);
+    void enabled;
+    // Panel window always receives clicks; spotlight stays click-through.
+  }
+
+  /** Called from preload before Previous/Next/Finish IPC (beats uIOhook race). */
+  armUiNavigationGuard(): void {
+    this.suppressAutoAdvance(2500);
+  }
+
+  private suppressAutoAdvance(ms = 800): void {
+    this.ignoreAutoAdvanceUntil = Date.now() + ms;
   }
 
   private async handleAutoAdvance(): Promise<void> {
-    if (this.status !== 'playing' || !this.advanceArmed) {
+    if (this.status !== 'playing' || !this.advanceArmed || this.navInFlight) {
       return;
     }
+    if (Date.now() < this.ignoreAutoAdvanceUntil) {
+      return;
+    }
+    // Only auto-advance on a real target action, not UI chrome.
+    this.suppressAutoAdvance();
     this.advanceArmed = false;
     await this.next();
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   private abandonCurrentStep(): void {
@@ -290,32 +346,50 @@ export class WalkthroughService {
 
     this.autoAdvance.setExpectedAction(step.expected_action ?? 'click');
 
-    const display = screen.getPrimaryDisplay().bounds;
+    // 1) Align the live page (URL), 2) place overlay on the active display,
+    // 3) wait briefly so navigation can settle, 4) re-identify target.
+    const openedUrl = this.maybeOpenInstructionUrl(step);
+    const display = await getActiveDisplayBounds();
     this.overlay.coverDisplay(display);
+    this.overlay.show();
 
-    const cloak = () => {
-      this.overlay.setCaptureCloak(true);
+    if (openedUrl) {
+      await this.sleep(900);
+    }
+    if (!shouldApplyResolution(generation, this.resolveGeneration)) {
+      return;
+    }
+
+    let cloaked = false;
+    const ensureCloak = () => {
+      if (!cloaked) {
+        cloaked = true;
+        this.overlay.setCaptureCloak(true);
+      }
     };
-    const uncloak = () => {
-      this.overlay.setCaptureCloak(false);
+    const clearCloak = () => {
+      if (cloaked) {
+        cloaked = false;
+        this.overlay.setCaptureCloak(false);
+      }
     };
 
-    const resolved = await resolvePlaybackTarget(step, display, {
-      resolveAccessibility: async (liveStep) => resolveAccessibilityTarget(liveStep),
-      resolveOcr: async (liveStep) => {
-        cloak();
-        try {
-          return await resolveOcrTarget(liveStep, display);
-        } finally {
-          uncloak();
-        }
-      },
-      resolveVisionGrid: async (liveStep) =>
-        resolveVisionGridOnScreen(liveStep, display, {
-          beforeCapture: cloak,
-          afterCapture: uncloak,
-        }),
-    });
+    let resolved;
+    try {
+      resolved = await resolvePlaybackTarget(step, display, {
+        resolveAccessibility: async (liveStep) => resolveAccessibilityTarget(liveStep),
+        resolveOcr: async (liveStep) => {
+          ensureCloak();
+          return resolveOcrTarget(liveStep, display);
+        },
+        resolveVisionGrid: async (liveStep) => {
+          ensureCloak();
+          return resolveVisionGridOnScreen(liveStep, display);
+        },
+      });
+    } finally {
+      clearCloak();
+    }
 
     if (!shouldApplyResolution(generation, this.resolveGeneration)) {
       console.info(
@@ -333,6 +407,12 @@ export class WalkthroughService {
         }
       : null;
     this.lastResolvedNote = resolved.fallbackNote;
+    console.info(
+      `[walkthrough] step ${this.stepIndex + 1} resolve source=${resolved.source}`,
+      resolved.rect
+        ? `rect=${Math.round(resolved.rect.x)},${Math.round(resolved.rect.y)} ${Math.round(resolved.rect.width)}x${Math.round(resolved.rect.height)}`
+        : 'no highlight',
+    );
 
     if (
       resolved.source === 'unidentified' &&
@@ -350,6 +430,23 @@ export class WalkthroughService {
       event_type: eventType,
       occurred_at: new Date().toISOString(),
     });
+  }
+
+  /**
+   * Open the step's recorded/declared page URL (same contract as the extension).
+   * Does not invent site-specific paths from button labels.
+   * @returns opened URL, or null if nothing new was opened
+   */
+  private maybeOpenInstructionUrl(step: WalkthroughStep): string | null {
+    const url = resolveStepPageUrl(step);
+    if (!url || url === this.lastOpenedUrl) {
+      return null;
+    }
+
+    this.lastOpenedUrl = url;
+    console.info('[walkthrough] opening step URL in default browser:', url);
+    void shell.openExternal(url);
+    return url;
   }
 
   private resetVisitBookkeeping(): void {

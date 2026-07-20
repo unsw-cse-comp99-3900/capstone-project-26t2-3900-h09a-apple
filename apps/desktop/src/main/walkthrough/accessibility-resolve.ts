@@ -1,21 +1,16 @@
 import { spawn } from 'node:child_process';
 import type { ScreenRect, WalkthroughStep } from './types';
-
-function describeNeedle(step: WalkthroughStep): string {
-  if (typeof step.target_label === 'string' && step.target_label.trim()) {
-    return step.target_label.trim();
-  }
-  return '';
-}
+import { needleForStep } from './step-navigation';
 
 /**
  * Windows UI Automation lookup by Name.
- * Returns screen-space bounds or null. Other platforms: not implemented yet.
+ * Prefers compact interactive controls (link/button/list item) over large text
+ * nodes that share the same name (e.g. sidebar "Code frequency" vs page H1).
  */
 export async function resolveAccessibilityTarget(
   step: WalkthroughStep,
 ): Promise<ScreenRect | null> {
-  const needle = describeNeedle(step);
+  const needle = needleForStep(step);
   if (!needle) {
     return null;
   }
@@ -37,7 +32,6 @@ export async function resolveAccessibilityTarget(
 }
 
 function lookupWindowsAutomationBounds(needle: string): Promise<ScreenRect | null> {
-  // Keep the script short: exact Name match under the desktop root.
   const script = `
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName UIAutomationClient
@@ -46,11 +40,39 @@ $needle = ${JSON.stringify(needle)}
 $root = [System.Windows.Automation.AutomationElement]::RootElement
 $cond = New-Object System.Windows.Automation.PropertyCondition(
   [System.Windows.Automation.AutomationElement]::NameProperty, $needle)
-$el = $root.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $cond)
-if (-not $el) { Write-Output 'null'; exit 0 }
-$r = $el.Current.BoundingRectangle
-if ($r.Width -le 0 -or $r.Height -le 0) { Write-Output 'null'; exit 0 }
-@{ x = [int]$r.X; y = [int]$r.Y; width = [int]$r.Width; height = [int]$r.Height } | ConvertTo-Json -Compress
+$found = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $cond)
+if (-not $found -or $found.Count -eq 0) { Write-Output 'null'; exit 0 }
+
+$interactive = @(
+  [System.Windows.Automation.ControlType]::Hyperlink,
+  [System.Windows.Automation.ControlType]::Button,
+  [System.Windows.Automation.ControlType]::ListItem,
+  [System.Windows.Automation.ControlType]::MenuItem,
+  [System.Windows.Automation.ControlType]::TabItem
+)
+
+$candidates = @()
+foreach ($el in $found) {
+  $r = $el.Current.BoundingRectangle
+  if ($r.Width -le 0 -or $r.Height -le 0) { continue }
+  $ct = $el.Current.ControlType
+  $isInteractive = $false
+  foreach ($t in $interactive) { if ($ct -eq $t) { $isInteractive = $true; break } }
+  $candidates += [pscustomobject]@{
+    x = [int]$r.X
+    y = [int]$r.Y
+    width = [int]$r.Width
+    height = [int]$r.Height
+    area = [int]($r.Width * $r.Height)
+    interactive = [bool]$isInteractive
+  }
+}
+if ($candidates.Count -eq 0) { Write-Output 'null'; exit 0 }
+
+$preferred = @($candidates | Where-Object { $_.interactive })
+if ($preferred.Count -eq 0) { $preferred = $candidates }
+$best = $preferred | Sort-Object area, x, y | Select-Object -First 1
+@{ x = $best.x; y = $best.y; width = $best.width; height = $best.height } | ConvertTo-Json -Compress
 `;
 
   return new Promise((resolve) => {
@@ -65,7 +87,7 @@ if ($r.Width -le 0 -or $r.Height -le 0) { Write-Output 'null'; exit 0 }
     const timer = setTimeout(() => {
       child.kill();
       resolve(null);
-    }, 2500);
+    }, 1500);
 
     child.stdout.on('data', (chunk) => {
       stdout += String(chunk);

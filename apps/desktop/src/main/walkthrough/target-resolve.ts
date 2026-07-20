@@ -4,7 +4,8 @@ import type { ResolvedTarget, ScreenRect, WalkthroughStep } from './types';
 
 export { hasScreenSpaceCoordinates, mapViewportRectToScreen } from './coordinate-space';
 
-const FALLBACK_NOTE = 'No live target for this step. Showing captured preview.';
+const FALLBACK_NOTE =
+  'No live target on the current screen. Bring the target app to the front (not the SOP page), then use Next/Previous to re-check. Showing captured preview.';
 
 export function clampHintRect(hint: ScreenRect, displayBounds: ScreenRect): ScreenRect {
   const width = Math.max(40, Math.min(hint.width || 160, displayBounds.width));

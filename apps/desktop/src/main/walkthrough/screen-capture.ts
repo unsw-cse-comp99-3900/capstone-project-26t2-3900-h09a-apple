@@ -1,5 +1,6 @@
-import { desktopCapturer, nativeImage, screen } from 'electron';
+import { desktopCapturer, nativeImage } from 'electron';
 import type { ScreenRect } from './types';
+import { displayForBounds } from './active-display';
 import { intersectRects } from './foreground-window';
 
 export interface CapturedPng {
@@ -11,14 +12,15 @@ export interface CapturedPng {
 }
 
 /**
- * Capture the primary display, optionally cropped to a screen-space window
- * rect (privacy: do not upload unrelated apps on the same monitor).
+ * Capture one display (matched from displayBounds), optionally cropped to a
+ * screen-space window rect (privacy: do not upload unrelated apps).
  */
 export async function captureDisplayRegionPng(
   displayBounds: ScreenRect,
   cropToScreenRect?: ScreenRect | null,
 ): Promise<CapturedPng | null> {
-  const scaleFactor = screen.getPrimaryDisplay().scaleFactor || 1;
+  const display = displayForBounds(displayBounds);
+  const scaleFactor = display.scaleFactor || 1;
   const thumbWidth = Math.max(1, Math.round(displayBounds.width * scaleFactor));
   const thumbHeight = Math.max(1, Math.round(displayBounds.height * scaleFactor));
 
@@ -27,9 +29,9 @@ export async function captureDisplayRegionPng(
     thumbnailSize: { width: thumbWidth, height: thumbHeight },
   });
 
-  const primaryId = String(screen.getPrimaryDisplay().id);
+  const targetId = String(display.id);
   const source =
-    sources.find((entry) => entry.display_id === primaryId) ??
+    sources.find((entry) => entry.display_id === targetId) ??
     sources.find((entry) => /screen|entire/i.test(entry.name)) ??
     sources[0];
 

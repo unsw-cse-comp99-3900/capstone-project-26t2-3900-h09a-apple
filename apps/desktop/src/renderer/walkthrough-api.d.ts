@@ -17,6 +17,7 @@ interface WalkthroughUiState {
 
 interface WalkthroughAPI {
   onState: (handler: (state: WalkthroughUiState) => void) => () => void;
+  onCaptureCloak: (handler: (cloaked: boolean) => void) => () => void;
   getState: () => Promise<WalkthroughUiState>;
   notifyReady: () => void;
   previous: () => Promise<WalkthroughUiState>;

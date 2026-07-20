@@ -2,107 +2,61 @@ import { BrowserWindow, screen } from 'electron';
 import { join } from 'node:path';
 import type { ScreenRect, WalkthroughUiState } from './types';
 
-const RENDERER_READY_CHANNEL = 'walkthrough:renderer-ready';
+const PANEL_WIDTH = 360;
+const PANEL_HEIGHT = 520;
 
+/**
+ * Two windows on purpose:
+ * - spotlight: full display, always click-through (user can click the real app)
+ * - panel: solid control card, NEVER click-through (Previous/Next always work)
+ */
 export class WalkthroughOverlayWindow {
-  private window: BrowserWindow | null = null;
+  private spotlight: BrowserWindow | null = null;
+  private panel: BrowserWindow | null = null;
   private readyPromise: Promise<void> = Promise.resolve();
   private resolveReady: (() => void) | null = null;
-  private rendererReady = false;
+  private panelReady = false;
+  private spotlightReady = false;
   private pendingState: WalkthroughUiState | null = null;
+  private displayBounds: ScreenRect | null = null;
 
   isOpen(): boolean {
-    return this.window !== null && !this.window.isDestroyed();
+    return (
+      (this.panel !== null && !this.panel.isDestroyed()) ||
+      (this.spotlight !== null && !this.spotlight.isDestroyed())
+    );
   }
 
-  ensure(): BrowserWindow {
-    if (this.window && !this.window.isDestroyed()) {
-      return this.window;
+  ensure(): void {
+    if (
+      this.panel &&
+      !this.panel.isDestroyed() &&
+      this.spotlight &&
+      !this.spotlight.isDestroyed()
+    ) {
+      return;
     }
 
-    this.rendererReady = false;
+    this.panelReady = false;
+    this.spotlightReady = false;
     this.readyPromise = new Promise((resolve) => {
       this.resolveReady = resolve;
     });
 
-    const display = screen.getPrimaryDisplay();
-    const { x, y, width, height } = display.bounds;
+    const display = screen.getPrimaryDisplay().bounds;
+    this.displayBounds = { ...display };
 
-    this.window = new BrowserWindow({
-      x,
-      y,
-      width,
-      height,
-      frame: false,
-      transparent: true,
-      resizable: false,
-      movable: false,
-      fullscreenable: false,
-      skipTaskbar: true,
-      alwaysOnTop: true,
-      hasShadow: false,
-      focusable: true,
-      show: false,
-      webPreferences: {
-        preload: join(__dirname, '../preload/walkthrough.js'),
-        contextIsolation: true,
-        nodeIntegration: false,
-        sandbox: true,
-      },
+    this.spotlight = this.createWindow({
+      role: 'spotlight',
+      bounds: display,
+      clickThrough: true,
     });
 
-    this.window.setAlwaysOnTop(true, 'screen-saver');
-    this.window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-    this.window.setIgnoreMouseEvents(true, { forward: true });
-
-    const markReady = () => {
-      if (this.rendererReady) {
-        return;
-      }
-      this.rendererReady = true;
-      this.resolveReady?.();
-      this.resolveReady = null;
-      if (this.pendingState) {
-        this.sendState(this.pendingState);
-      }
-    };
-
-    // Preferred signal: renderer has attached walkthrough:state listeners.
-    this.window.webContents.ipc.on(RENDERER_READY_CHANNEL, markReady);
-
-    this.window.webContents.on(
-      'did-fail-load',
-      (_event, errorCode, errorDescription, validatedURL) => {
-        console.error(
-          '[walkthrough] overlay failed to load:',
-          errorCode,
-          errorDescription,
-          validatedURL,
-        );
-        markReady();
-      },
-    );
-
-    // Fallback if the renderer never signals (e.g. script error).
-    this.window.webContents.once('did-finish-load', () => {
-      setTimeout(() => markReady(), 1500);
+    this.panel = this.createWindow({
+      role: 'panel',
+      bounds: panelBoundsForDisplay(display),
+      clickThrough: false,
     });
-
-    if (process.env.ELECTRON_RENDERER_URL) {
-      void this.window.loadURL(`${process.env.ELECTRON_RENDERER_URL}/walkthrough.html`);
-    } else {
-      void this.window.loadFile(join(__dirname, '../renderer/walkthrough.html'));
-    }
-
-    this.window.on('closed', () => {
-      this.window = null;
-      this.rendererReady = false;
-      this.resolveReady = null;
-      this.pendingState = null;
-      this.readyPromise = Promise.resolve();
-    });
-
-    return this.window;
   }
 
   async awaitReady(): Promise<void> {
@@ -111,66 +65,164 @@ export class WalkthroughOverlayWindow {
   }
 
   show(): void {
-    this.ensure().showInactive();
+    this.ensure();
+    this.spotlight?.showInactive();
+    this.panel?.show();
+    this.panel?.moveTop();
   }
 
   hide(): void {
-    if (this.window && !this.window.isDestroyed()) {
-      this.window.hide();
+    if (this.spotlight && !this.spotlight.isDestroyed()) {
+      this.spotlight.hide();
+    }
+    if (this.panel && !this.panel.isDestroyed()) {
+      this.panel.hide();
     }
   }
 
-  /**
-   * Briefly cloak the overlay for vision/OCR capture without destroying the
-   * BrowserWindow (less flicker than hide/show).
-   */
   setCaptureCloak(cloaked: boolean): void {
-    if (!this.window || this.window.isDestroyed()) {
-      return;
+    if (this.spotlight && !this.spotlight.isDestroyed()) {
+      this.spotlight.webContents.send('walkthrough:capture-cloak', cloaked);
     }
-    this.window.setOpacity(cloaked ? 0 : 1);
   }
 
   destroy(): void {
-    if (this.window && !this.window.isDestroyed()) {
-      this.window.destroy();
+    if (this.spotlight && !this.spotlight.isDestroyed()) {
+      this.spotlight.destroy();
     }
-    this.window = null;
-    this.rendererReady = false;
+    if (this.panel && !this.panel.isDestroyed()) {
+      this.panel.destroy();
+    }
+    this.spotlight = null;
+    this.panel = null;
+    this.panelReady = false;
+    this.spotlightReady = false;
     this.resolveReady = null;
     this.pendingState = null;
+    this.displayBounds = null;
     this.readyPromise = Promise.resolve();
   }
 
   coverDisplay(bounds: ScreenRect): void {
-    this.ensure().setBounds({
+    this.ensure();
+    this.displayBounds = { ...bounds };
+    this.spotlight?.setBounds({
       x: Math.round(bounds.x),
       y: Math.round(bounds.y),
       width: Math.round(bounds.width),
       height: Math.round(bounds.height),
     });
+    this.panel?.setBounds(panelBoundsForDisplay(bounds));
   }
 
+  /** Panel is never click-through; kept for API compatibility. */
   setClickThrough(enabled: boolean): void {
-    if (!this.window || this.window.isDestroyed()) {
-      return;
+    void enabled;
+    if (this.spotlight && !this.spotlight.isDestroyed()) {
+      this.spotlight.setIgnoreMouseEvents(true);
     }
-    this.window.setIgnoreMouseEvents(enabled, { forward: true });
   }
 
   pushState(state: WalkthroughUiState): void {
     this.pendingState = state;
     this.ensure();
-    if (!this.rendererReady) {
-      return;
+    if (this.panelReady && this.panel && !this.panel.isDestroyed()) {
+      this.panel.webContents.send('walkthrough:state', state);
     }
-    this.sendState(state);
+    if (this.spotlightReady && this.spotlight && !this.spotlight.isDestroyed()) {
+      this.spotlight.webContents.send('walkthrough:state', state);
+    }
   }
 
-  private sendState(state: WalkthroughUiState): void {
-    if (!this.window || this.window.isDestroyed()) {
-      return;
+  private createWindow(options: {
+    role: 'panel' | 'spotlight';
+    bounds: ScreenRect;
+    clickThrough: boolean;
+  }): BrowserWindow {
+    const win = new BrowserWindow({
+      x: Math.round(options.bounds.x),
+      y: Math.round(options.bounds.y),
+      width: Math.round(options.bounds.width),
+      height: Math.round(options.bounds.height),
+      frame: false,
+      transparent: true,
+      resizable: false,
+      movable: options.role === 'panel',
+      fullscreenable: false,
+      skipTaskbar: true,
+      alwaysOnTop: true,
+      hasShadow: false,
+      focusable: options.role === 'panel',
+      show: false,
+      webPreferences: {
+        preload: join(__dirname, '../preload/walkthrough.js'),
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: true,
+        additionalArguments: [`--walkthrough-role=${options.role}`],
+      },
+    });
+
+    win.setAlwaysOnTop(true, 'screen-saver');
+    win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    if (options.clickThrough) {
+      // No forward flag: clicks go to apps below. Panel handles all UI clicks.
+      win.setIgnoreMouseEvents(true);
     }
-    this.window.webContents.send('walkthrough:state', state);
+
+    const markReady = () => {
+      if (options.role === 'panel') {
+        this.panelReady = true;
+      } else {
+        this.spotlightReady = true;
+      }
+      if (this.panelReady && this.spotlightReady) {
+        this.resolveReady?.();
+        this.resolveReady = null;
+        if (this.pendingState) {
+          this.pushState(this.pendingState);
+        }
+      }
+    };
+
+    win.webContents.ipc.on('walkthrough:renderer-ready', markReady);
+    win.webContents.on('did-fail-load', (_e, code, desc, url) => {
+      console.error('[walkthrough] overlay failed to load:', options.role, code, desc, url);
+      markReady();
+    });
+    win.webContents.once('did-finish-load', () => {
+      setTimeout(() => markReady(), 1500);
+    });
+
+    if (process.env.ELECTRON_RENDERER_URL) {
+      void win.loadURL(
+        `${process.env.ELECTRON_RENDERER_URL}/walkthrough.html?role=${options.role}`,
+      );
+    } else {
+      void win.loadFile(join(__dirname, '../renderer/walkthrough.html'), {
+        query: { role: options.role },
+      });
+    }
+
+    win.on('closed', () => {
+      if (options.role === 'panel') {
+        this.panel = null;
+        this.panelReady = false;
+      } else {
+        this.spotlight = null;
+        this.spotlightReady = false;
+      }
+    });
+
+    return win;
   }
+}
+
+function panelBoundsForDisplay(display: ScreenRect): ScreenRect {
+  return {
+    x: display.x + Math.max(16, display.width - PANEL_WIDTH - 24),
+    y: display.y + Math.max(16, Math.round((display.height - PANEL_HEIGHT) / 2)),
+    width: PANEL_WIDTH,
+    height: PANEL_HEIGHT,
+  };
 }
