@@ -152,6 +152,7 @@ needs_prettier=0
 needs_web=0
 needs_api=0
 needs_extension=0
+needs_desktop=0
 needs_migration=0
 
 for path in "${changed_files[@]}"; do
@@ -169,6 +170,9 @@ for path in "${changed_files[@]}"; do
       ;;
     apps/extension/*)
       needs_extension=1
+      ;;
+    apps/desktop/*|packages/desktop-storage/*)
+      needs_desktop=1
       ;;
   esac
   case "$path" in
@@ -203,6 +207,17 @@ if [[ "$needs_extension" -eq 1 ]]; then
   pnpm --filter @h09a/extension test
   step "extension build"
   pnpm --filter @h09a/extension build
+fi
+
+if [[ "$needs_desktop" -eq 1 ]]; then
+  step "desktop lint"
+  pnpm --filter @h09a/desktop lint
+  step "desktop typecheck"
+  pnpm --filter @h09a/desktop typecheck
+  step "desktop-storage test"
+  pnpm --filter @h09a/desktop-storage test
+  step "desktop build"
+  pnpm --filter @h09a/desktop build
 fi
 
 if [[ "$needs_api" -eq 1 ]]; then
