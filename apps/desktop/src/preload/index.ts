@@ -25,6 +25,18 @@ contextBridge.exposeInMainWorld('desktopAPI', {
 
   startWalkthrough: (sopId: string) => ipcRenderer.invoke('walkthrough:start', sopId),
 
+  onNotice: (listener: (message: string) => void) => {
+    const handler = (_event: unknown, payload: { message?: string }) => {
+      if (typeof payload?.message === 'string' && payload.message.trim()) {
+        listener(payload.message);
+      }
+    };
+    ipcRenderer.on('desktop:notice', handler);
+    return () => {
+      ipcRenderer.removeListener('desktop:notice', handler);
+    };
+  },
+
   // Window
   setWindowMode: (mode: 'compact' | 'expanded') => ipcRenderer.invoke('window:set-mode', mode),
   beginWindowDrag: () => ipcRenderer.send('window:drag-start'),

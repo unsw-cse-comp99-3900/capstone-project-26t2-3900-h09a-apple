@@ -1,5 +1,6 @@
 import { authenticatedFetch } from '../auth/auth-service';
 import { mapWalkthroughStep, type ApiWalkthroughStep } from './payload-map';
+import { normalizeWalkthroughSopId } from './sop-id';
 import type { CoachingSections, WalkthroughPayload } from './types';
 
 interface ApiWalkthroughPayload {
@@ -13,10 +14,7 @@ interface ApiWalkthroughPayload {
 export { mapWalkthroughStep } from './payload-map';
 
 export async function fetchWalkthroughPayload(sopId: string): Promise<WalkthroughPayload> {
-  const trimmed = sopId.trim();
-  if (!trimmed) {
-    throw new Error('Missing SOP id');
-  }
+  const trimmed = normalizeWalkthroughSopId(sopId);
 
   const response = await authenticatedFetch(
     `/api/v1/sops/${encodeURIComponent(trimmed)}/walkthrough`,
@@ -27,7 +25,12 @@ export async function fetchWalkthroughPayload(sopId: string): Promise<Walkthroug
       throw new Error('Sign in to the desktop app before starting a walkthrough');
     }
     if (response.status === 404) {
-      throw new Error('Published SOP not found for this workspace');
+      throw new Error(
+        'Published SOP not found for this workspace. Approve and publish the SOP first.',
+      );
+    }
+    if (response.status === 422) {
+      throw new Error('SOP id must be a valid UUID');
     }
     throw new Error('Could not load walkthrough data');
   }

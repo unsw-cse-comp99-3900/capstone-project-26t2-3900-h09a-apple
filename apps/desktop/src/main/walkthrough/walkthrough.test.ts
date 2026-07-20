@@ -19,8 +19,33 @@ import { findTextRectInOcrWords, pickBestOcrMatch } from './ocr-resolve.js';
 import { intersectRects } from './foreground-window.js';
 import { formatVisionFailureLog, shouldApplyResolution } from './resolve-failure.js';
 import { needleForStep, resolveStepPageUrl } from './step-navigation.js';
-import { refineGridCell, resolvePlaybackTarget } from './target-resolve.js';
+import { parseWalkthroughProtocolSopId } from './protocol.js';
+import {
+  buildMissFallbackNote,
+  refineGridCell,
+  resolvePlaybackTarget,
+  shouldAttemptLiveResolve,
+} from './target-resolve.js';
 import { parseVoiceCommand, voiceCommandToAction } from './voice-commands.js';
+
+test('parseWalkthroughProtocolSopId reads worktrace walkthrough URLs', () => {
+  assert.equal(
+    parseWalkthroughProtocolSopId(
+      'worktrace://walkthrough?sopId=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    ),
+    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  );
+  assert.equal(
+    parseWalkthroughProtocolSopId(
+      'worktrace://walkthrough?id=bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    ),
+    'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+  );
+  // Reject non-UUID ids (API walkthrough route requires UUID).
+  assert.equal(parseWalkthroughProtocolSopId('worktrace://walkthrough?id=sop-42'), null);
+  assert.equal(parseWalkthroughProtocolSopId('worktrace://auth-callback?code=x'), null);
+  assert.equal(parseWalkthroughProtocolSopId('https://example.com/walkthrough?sopId=x'), null);
+});
 
 test('resolveAnchorMode mirrors extension element/screenshot/none rules', () => {
   assert.equal(
@@ -250,12 +275,52 @@ test('resolvePlaybackTarget runs a11y and OCR concurrently then vision', async (
   assert.equal(visionCalls, 1);
 });
 
+test('screenshot-mode steps with a UI label still attempt live resolve', async () => {
+  const display = { x: 0, y: 0, width: 1920, height: 1080 };
+  const step = {
+    step_number: 2,
+    instruction: 'Confirm Dependabot alerts are enabled.',
+    target_label: 'Dependabot',
+    anchor_mode: 'screenshot' as const,
+    screenshot_url: 'https://example/s.png',
+  };
+
+  assert.equal(shouldAttemptLiveResolve(step), true);
+
+  let ocrCalls = 0;
+  const resolved = await resolvePlaybackTarget(step, display, {
+    resolveAccessibility: async () => null,
+    resolveOcr: async () => {
+      ocrCalls += 1;
+      return { x: 120, y: 340, width: 160, height: 28 };
+    },
+    resolveVisionGrid: async () => null,
+  });
+
+  assert.equal(ocrCalls, 1);
+  assert.equal(resolved.source, 'ocr');
+  assert.equal(resolved.fallbackNote, null);
+  assert.ok(resolved.rect);
+});
+
+test('miss fallback suggests Previous after step 1', () => {
+  assert.match(buildMissFallbackNote({ step_number: 1, instruction: 'Start' }), /use Next/);
+  assert.doesNotMatch(
+    buildMissFallbackNote({ step_number: 1, instruction: 'Start' }),
+    /press Previous/,
+  );
+  assert.match(
+    buildMissFallbackNote({ step_number: 2, instruction: 'Next action' }),
+    /press Previous to go back/,
+  );
+});
+
 test('resolvePlaybackTarget never paints non-screen recorded hints', async () => {
   const display = { x: 100, y: 50, width: 1920, height: 1080 };
 
   const viaHighlight = await resolvePlaybackTarget(
     {
-      step_number: 1,
+      step_number: 2,
       instruction: 'Click New issue',
       target_label: 'New issue',
       screenshot_highlight: { x: 150, y: 80, width: 100, height: 40 },
@@ -264,7 +329,7 @@ test('resolvePlaybackTarget never paints non-screen recorded hints', async () =>
   );
   assert.equal(viaHighlight.source, 'unidentified');
   assert.equal(viaHighlight.rect, null);
-  assert.match(String(viaHighlight.fallbackNote), /No live target/);
+  assert.match(String(viaHighlight.fallbackNote), /press Previous to go back/);
 
   const missed = await resolvePlaybackTarget(
     { step_number: 1, instruction: 'Click Send', target_label: 'Send' },
@@ -272,6 +337,7 @@ test('resolvePlaybackTarget never paints non-screen recorded hints', async () =>
   );
   assert.equal(missed.source, 'unidentified');
   assert.equal(missed.rect, null);
+  assert.match(String(missed.fallbackNote), /use Next/);
 
   const browserRaw = await resolvePlaybackTarget(
     {
@@ -308,6 +374,14 @@ test('resolvePlaybackTarget never paints non-screen recorded hints', async () =>
   );
   assert.equal(screenshotOnly.source, 'unidentified');
   assert.equal(screenshotOnly.rect, null);
+  assert.equal(
+    shouldAttemptLiveResolve({
+      step_number: 3,
+      instruction: 'Read this',
+      screenshot_url: 'https://example/s.png',
+    }),
+    false,
+  );
 });
 
 test('full-display vision mapping uses contentBounds equal to display', () => {

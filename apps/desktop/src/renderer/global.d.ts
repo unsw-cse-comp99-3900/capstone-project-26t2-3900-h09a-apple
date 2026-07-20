@@ -18,6 +18,8 @@ interface SubmissionResult {
   success: boolean;
   sessionId?: string;
   jobId?: string;
+  generatingUrl?: string | null;
+  browserOpened?: boolean;
 }
 
 interface AuthStatus {
@@ -58,6 +60,7 @@ interface DesktopAPI {
 
   // Walkthrough
   startWalkthrough(sopId: string): Promise<unknown>;
+  onNotice(listener: (message: string) => void): () => void;
 
   // Window
   setWindowMode(mode: 'compact' | 'expanded'): Promise<'compact' | 'expanded'>;

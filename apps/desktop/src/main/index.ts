@@ -1,6 +1,6 @@
 import { DEFAULT_SENSITIVE_APP_PATTERNS, saveSensitiveAppConfig } from '@h09a/desktop-storage';
 import { existsSync } from 'node:fs';
-import { app, BrowserWindow, ipcMain, screen, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, screen, shell } from 'electron';
 import { join, resolve } from 'node:path';
 import { DesktopSessionStore } from './desktop-session-store';
 import { RecordingService, type RecorderState } from './recording-service';
@@ -11,8 +11,11 @@ import { startHandoffServer, stopHandoffServer } from './auth/handoff-server';
 import { hasCurrentConsent, saveConsent } from './consent/consent-store';
 import { postConsentAccept } from './consent/consent-service';
 import { getCurrentAuth, logout } from './auth/auth-service';
+import { WEB_APP_URL } from './config';
 import { submitSession } from './session/submission-service';
 import { fetchWalkthroughPayload } from './walkthrough/payload-client';
+import { parseWalkthroughProtocolSopId } from './walkthrough/protocol';
+import { normalizeWalkthroughSopId } from './walkthrough/sop-id';
 import { WalkthroughService } from './walkthrough/walkthrough-service';
 import { readFile } from 'node:fs/promises';
 import type { CompletedLocalSession } from './desktop-session-store';
@@ -22,6 +25,9 @@ let recordingService: RecordingService | undefined;
 let walkthroughService: WalkthroughService | undefined;
 let recorderWindow: BrowserWindow | undefined;
 let lastCompletedSession: CompletedLocalSession | null = null;
+let servicesReady = false;
+const pendingProtocolUrls: string[] = [];
+let walkthroughStartInFlight: Promise<void> | null = null;
 let windowDragState:
   | {
       startCursor: { x: number; y: number };
@@ -30,6 +36,7 @@ let windowDragState:
   | undefined;
 
 type WindowMode = 'compact' | 'expanded';
+type WalkthroughStartSource = 'http' | 'protocol' | 'ipc';
 
 const WINDOW_SIZES: Record<WindowMode, { width: number; height: number }> = {
   compact: { width: 88, height: 88 },
@@ -52,6 +59,147 @@ function getRecordingStatus(error: string | null = null): RecordingStatus {
     sessionPath: lastCompletedSession?.artifactPath ?? null,
     error,
   };
+}
+
+function notifyRenderer(message: string): void {
+  if (!recorderWindow || recorderWindow.isDestroyed()) {
+    return;
+  }
+  recorderWindow.webContents.send('desktop:notice', { message });
+  if (recorderWindow.isMinimized()) {
+    recorderWindow.restore();
+  }
+  recorderWindow.show();
+  recorderWindow.focus();
+}
+
+async function showWalkthroughError(message: string): Promise<void> {
+  console.error('[walkthrough]', message);
+  notifyRenderer(message);
+  try {
+    await dialog.showMessageBox({
+      type: 'error',
+      title: 'Walkthrough',
+      message: 'Could not start walkthrough',
+      detail: message,
+    });
+  } catch {
+    // dialog may fail before app is fully ready; renderer notice is enough
+  }
+}
+
+async function confirmProtocolWalkthrough(sopId: string): Promise<boolean> {
+  const result = await dialog.showMessageBox({
+    type: 'question',
+    buttons: ['Start walkthrough', 'Cancel'],
+    defaultId: 0,
+    cancelId: 1,
+    title: 'Start walkthrough?',
+    message: 'A page requested a WorkTrace walkthrough.',
+    detail: `SOP: ${sopId}\n\nOnly continue if you just clicked Start walkthrough in WorkTrace.`,
+  });
+  return result.response === 0;
+}
+
+async function startWalkthroughBySopId(
+  rawSopId: string,
+  source: WalkthroughStartSource,
+): Promise<void> {
+  const run = async (): Promise<void> => {
+    if (!walkthroughService) {
+      throw new Error('Walkthrough service is not ready');
+    }
+
+    if (recordingService?.getState() === 'recording') {
+      throw new Error('Stop recording before starting a walkthrough');
+    }
+
+    const auth = getCurrentAuth();
+    if (!auth) {
+      throw new Error('Sign in to the desktop app before starting a walkthrough');
+    }
+
+    if (!hasCurrentConsent(auth.userId)) {
+      throw new Error('Accept data capture consent in desktop before starting a walkthrough');
+    }
+
+    const sopId = normalizeWalkthroughSopId(rawSopId);
+
+    if (source === 'protocol') {
+      const confirmed = await confirmProtocolWalkthrough(sopId);
+      if (!confirmed) {
+        throw new Error('Walkthrough start cancelled');
+      }
+    }
+
+    if (walkthroughService.getUiState().status === 'playing') {
+      const replace = await dialog.showMessageBox({
+        type: 'question',
+        buttons: ['Replace current', 'Cancel'],
+        defaultId: 0,
+        cancelId: 1,
+        title: 'Walkthrough already running',
+        message: 'Replace the current walkthrough?',
+      });
+      if (replace.response !== 0) {
+        throw new Error('Walkthrough start cancelled');
+      }
+      await walkthroughService.dismiss();
+    }
+
+    const payload = await fetchWalkthroughPayload(sopId);
+    await walkthroughService.start(payload);
+    notifyRenderer(`Walkthrough started (${source}).`);
+  };
+
+  if (walkthroughStartInFlight) {
+    await walkthroughStartInFlight.catch(() => undefined);
+  }
+  walkthroughStartInFlight = run().finally(() => {
+    walkthroughStartInFlight = null;
+  });
+  await walkthroughStartInFlight;
+}
+
+/**
+ * Auth handoff (`worktrace://auth-callback`) or walkthrough launch
+ * (`worktrace://walkthrough?sopId=...`).
+ */
+async function dispatchProtocolUrl(url: string): Promise<void> {
+  if (!servicesReady) {
+    pendingProtocolUrls.push(url);
+    console.info('[protocol] queued until services are ready');
+    return;
+  }
+
+  try {
+    const handledAuth = await handleProtocolUrl(url);
+    if (handledAuth) {
+      notifyRenderer('Signed in via browser handoff.');
+      return;
+    }
+
+    const sopId = parseWalkthroughProtocolSopId(url);
+    if (!sopId) {
+      console.warn('[protocol] ignored unsupported worktrace URL:', url);
+      return;
+    }
+
+    console.info('[walkthrough] starting from protocol URL, sopId=', sopId);
+    await startWalkthroughBySopId(sopId, 'protocol');
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message !== 'Walkthrough start cancelled') {
+      await showWalkthroughError(message);
+    }
+  }
+}
+
+async function flushPendingProtocolUrls(): Promise<void> {
+  const queued = pendingProtocolUrls.splice(0, pendingProtocolUrls.length);
+  for (const url of queued) {
+    await dispatchProtocolUrl(url);
+  }
 }
 
 /**
@@ -95,9 +243,7 @@ if (!gotSingleInstanceLock) {
     console.log('protocolUrl:', protocolUrl);
 
     if (protocolUrl) {
-      void handleProtocolUrl(protocolUrl).catch((error) => {
-        console.error('Failed to handle protocol URL (second-instance):', error);
-      });
+      void dispatchProtocolUrl(protocolUrl);
     }
 
     if (recorderWindow) {
@@ -220,37 +366,57 @@ if (!gotSingleInstanceLock) {
       throw new Error('No completed recording session available');
     }
 
-    const result = await submitSession(lastCompletedSession.artifactPath);
+    const completed = lastCompletedSession;
+    const result = await submitSession(completed.artifactPath);
 
-    if (result.success && sessionStore) {
-      sessionStore.markSubmitted(lastCompletedSession.sessionId);
-      await sessionStore.deleteCompletedSession(
-        lastCompletedSession.sessionId,
-        lastCompletedSession.sessionDirectory,
-      );
+    if (!result.success || !result.sessionId) {
+      return {
+        ...result,
+        generatingUrl: null,
+        browserOpened: false,
+      };
+    }
 
+    const generatingUrl = new URL(
+      `/session/${result.sessionId}/generating`,
+      WEB_APP_URL,
+    ).toString();
+
+    // Open the Generate page before deleting the local artifact so a browser
+    // failure still leaves the user with a recoverable local session.
+    let browserOpened = false;
+    try {
+      console.info('[submit] opening SOP generation page:', generatingUrl);
+      await shell.openExternal(generatingUrl);
+      browserOpened = true;
+    } catch (error) {
+      console.error('[submit] failed to open Generate page:', error);
+    }
+
+    if (sessionStore) {
+      sessionStore.markSubmitted(completed.sessionId);
+      await sessionStore.deleteCompletedSession(completed.sessionId, completed.sessionDirectory);
       lastCompletedSession = null;
     }
 
-    return result;
+    return {
+      ...result,
+      generatingUrl,
+      browserOpened,
+    };
   });
 
   ipcMain.handle('walkthrough:start', async (_event, sopId: string) => {
-    if (!walkthroughService) {
-      throw new Error('Walkthrough service is not ready');
+    try {
+      await startWalkthroughBySopId(String(sopId ?? ''), 'ipc');
+      return walkthroughService?.getUiState();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message !== 'Walkthrough start cancelled') {
+        await showWalkthroughError(message);
+      }
+      throw error;
     }
-
-    if (recordingService?.getState() === 'recording') {
-      throw new Error('Stop recording before starting a walkthrough');
-    }
-
-    const auth = getCurrentAuth();
-    if (!auth) {
-      throw new Error('Desktop is not authenticated');
-    }
-
-    const payload = await fetchWalkthroughPayload(String(sopId ?? ''));
-    return walkthroughService.start(payload);
   });
 
   ipcMain.handle('walkthrough:previous', async () => {
@@ -402,14 +568,9 @@ if (!gotSingleInstanceLock) {
     windowDragState = undefined;
   });
 
-  app.on('open-url', async (event, url) => {
+  app.on('open-url', (event, url) => {
     event.preventDefault();
-
-    try {
-      await handleProtocolUrl(url);
-    } catch (error) {
-      console.error('Failed to handle protocol URL (open-url):', error);
-    }
+    void dispatchProtocolUrl(url);
   });
 
   app.on('before-quit', () => {
@@ -427,17 +588,6 @@ if (!gotSingleInstanceLock) {
 
   void app.whenReady().then(async () => {
     registerProtocolClient();
-    startHandoffServer();
-
-    const protocolUrl = process.argv.find((arg) => arg.startsWith('worktrace://'));
-
-    if (protocolUrl) {
-      try {
-        await handleProtocolUrl(protocolUrl);
-      } catch (error) {
-        console.error('Failed to handle startup protocol URL:', error);
-      }
-    }
 
     const userDataDirectory = app.getPath('userData');
     const sensitiveAppsConfigPath = join(userDataDirectory, 'sensitive-apps.json');
@@ -453,7 +603,21 @@ if (!gotSingleInstanceLock) {
     recordingService = new RecordingService(sessionStore, sensitiveAppsConfigPath);
     walkthroughService = new WalkthroughService();
 
+    startHandoffServer({
+      onStartWalkthrough: async (sopId) => {
+        await startWalkthroughBySopId(sopId, 'http');
+      },
+    });
+
     createWindow();
+    servicesReady = true;
+    await flushPendingProtocolUrls();
+
+    // Protocol cold-start must run after walkthroughService exists.
+    const protocolUrl = process.argv.find((arg) => arg.startsWith('worktrace://'));
+    if (protocolUrl) {
+      await dispatchProtocolUrl(protocolUrl);
+    }
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {

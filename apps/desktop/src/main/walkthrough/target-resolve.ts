@@ -1,11 +1,46 @@
 import { resolveAnchorMode } from './anchor-mode';
 import { hasScreenSpaceCoordinates } from './coordinate-space';
+import { needleForStep } from './step-navigation';
 import type { ResolvedTarget, ScreenRect, WalkthroughStep } from './types';
 
 export { hasScreenSpaceCoordinates, mapViewportRectToScreen } from './coordinate-space';
 
-const FALLBACK_NOTE =
-  'No live target on the current screen. Bring the target app to the front (not the SOP page), then use Next/Previous to re-check. Showing captured preview.';
+export function buildMissFallbackNote(step: WalkthroughStep): string {
+  if (step.step_number > 1) {
+    return (
+      'No live target on the current screen. If you advanced too far or opened the wrong page, ' +
+      'press Previous to go back, bring the target app to the front, then re-check. ' +
+      'Showing captured preview.'
+    );
+  }
+  return (
+    'No live target on the current screen. Bring the target app to the front (not the SOP page), ' +
+    'then use Next to re-check. Showing captured preview.'
+  );
+}
+
+function hasSelectorHint(step: WalkthroughStep): boolean {
+  return (
+    (typeof step.css_selector === 'string' && step.css_selector.trim().length > 0) ||
+    (typeof step.xpath === 'string' && step.xpath.trim().length > 0)
+  );
+}
+
+/**
+ * Backend "screenshot" means no DOM selector, not "skip re-identification".
+ * On desktop there is no content-script injection, so still attempt a11y/OCR/vision
+ * whenever the step has a UI needle or selector hint.
+ */
+export function shouldAttemptLiveResolve(step: WalkthroughStep): boolean {
+  const mode = resolveAnchorMode(step);
+  if (mode === 'element') {
+    return true;
+  }
+  if (mode === 'screenshot') {
+    return Boolean(needleForStep(step)) || hasSelectorHint(step);
+  }
+  return false;
+}
 
 export function clampHintRect(hint: ScreenRect, displayBounds: ScreenRect): ScreenRect {
   const width = Math.max(40, Math.min(hint.width || 160, displayBounds.width));
@@ -37,10 +72,10 @@ export async function resolvePlaybackTarget(
   displayBounds: ScreenRect,
   options?: PlaybackResolveOptions,
 ): Promise<ResolvedTarget> {
-  const mode = resolveAnchorMode(step);
+  const missNote = buildMissFallbackNote(step);
 
-  if (mode === 'none' || mode === 'screenshot') {
-    return { rect: null, source: 'unidentified', fallbackNote: FALLBACK_NOTE };
+  if (!shouldAttemptLiveResolve(step)) {
+    return { rect: null, source: 'unidentified', fallbackNote: missNote };
   }
 
   const accessibilityPromise = options?.resolveAccessibility
@@ -100,7 +135,7 @@ export async function resolvePlaybackTarget(
   return {
     rect: null,
     source: 'unidentified',
-    fallbackNote: FALLBACK_NOTE,
+    fallbackNote: missNote,
   };
 }
 

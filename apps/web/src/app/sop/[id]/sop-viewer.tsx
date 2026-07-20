@@ -234,7 +234,11 @@ export function SopViewer({ sop }: SopViewerProps) {
         </div>
         <div className={styles.heroActions}>
           <div className={styles.aiBadge}>AI generated</div>
-          <StartWalkthroughButton sopId={sop.id} />
+          {sop.status === 'published' ? (
+            <StartWalkthroughButton sopId={sop.id} />
+          ) : (
+            <p className={styles.heroCopy}>Publish this SOP before starting a walkthrough.</p>
+          )}
         </div>
       </section>
 
@@ -246,7 +250,8 @@ export function SopViewer({ sop }: SopViewerProps) {
             <h3>Pending review</h3>
             <p>
               Your SOP has been submitted successfully and is awaiting reviewer approval. It will
-              appear in the SOP Library once approved and published.
+              appear in the SOP Library once approved and published. Walkthrough starts only after
+              publish.
             </p>
           </div>
         </section>

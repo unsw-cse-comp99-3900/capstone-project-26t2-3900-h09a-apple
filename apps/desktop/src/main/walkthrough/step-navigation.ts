@@ -29,7 +29,12 @@ export function normalizeLaunchUrl(value: unknown): string | null {
   }
   const parseable = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
   try {
-    return new URL(parseable).toString();
+    const parsed = new URL(parseable);
+    // Refuse dangerous schemes (javascript:, file:, etc.) even if they sneak in.
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return null;
+    }
+    return parsed.toString();
   } catch {
     return null;
   }

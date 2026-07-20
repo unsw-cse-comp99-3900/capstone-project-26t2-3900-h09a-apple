@@ -156,11 +156,41 @@ cancelButton.addEventListener('click', () => {
 
 submitButton.addEventListener('click', async () => {
   try {
-    await window.desktopAPI.submitSession();
+    const result = await window.desktopAPI.submitSession();
     reviewModal.hidden = true;
-    alert('Session submitted successfully.');
+    renderStatus(await window.desktopAPI.getRecordingStatus());
+    if (!result.success) {
+      alert('Session submit did not complete.');
+      return;
+    }
+
+    if (result.browserOpened) {
+      statusMessage.textContent =
+        'Session submitted. Finish Generate/Publish in the browser, then Start walkthrough.';
+      alert(
+        'Session submitted. Your browser opened the Generate page. After the SOP is published, click Start walkthrough there (keep Desktop running and signed in).',
+      );
+      return;
+    }
+
+    const fallbackUrl = result.generatingUrl?.trim();
+    statusMessage.textContent = fallbackUrl
+      ? `Session submitted, but the browser did not open. Open: ${fallbackUrl}`
+      : 'Session submitted, but the Generate page could not be opened.';
+    alert(
+      fallbackUrl
+        ? `Session submitted, but the browser did not open automatically.\n\nOpen this URL manually:\n${fallbackUrl}`
+        : 'Session submitted, but the Generate page could not be opened automatically.',
+    );
   } catch (error) {
     alert(error instanceof Error ? error.message : String(error));
+  }
+});
+
+window.desktopAPI.onNotice((message) => {
+  statusMessage.textContent = message;
+  if (/could not|failed|sign in|consent|not found|cancelled/i.test(message)) {
+    walkthroughMessage.textContent = message;
   }
 });
 

@@ -99,8 +99,13 @@ html[data-role='panel'] .tooltip {
 
 .fallback-note {
   margin: 0 0 10px;
-  color: #cbd5e1;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgb(251 191 36 / 35%);
+  background: rgb(120 53 15 / 35%);
+  color: #fde68a;
   font-size: 12px;
+  line-height: 1.4;
 }
 
 .export-label {
