@@ -1155,6 +1155,7 @@ def test_get_sop_walkthrough_returns_payload_for_single_step():
         session_id=WALKTHROUGH_SESSION_ID,
         target_selector="#login-button",
         attrs={"xpath": "/html/body/button[1]"},
+        url="https://example.com/login",
         screenshot_id=UUID("22222222-2222-2222-2222-222222222222"),
         timestamp_ms=1_000,
     )
@@ -1198,7 +1199,7 @@ def test_get_sop_walkthrough_returns_payload_for_single_step():
             "screenshot_highlight": None,
             "anchor_mode": "element",
             "expected_action": None,
-            "expected_url": None,
+            "expected_url": "https://example.com/login",
         }
     finally:
         app.dependency_overrides[get_db] = override_get_db

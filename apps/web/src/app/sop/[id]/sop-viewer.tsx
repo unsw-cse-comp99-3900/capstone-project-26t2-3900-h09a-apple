@@ -3,6 +3,7 @@ import Image from 'next/image';
 import React from 'react';
 import styles from './sop-viewer.module.css';
 import { formatTimeEstimate } from '@/lib/time-estimate';
+import { StartWalkthroughButton } from './start-walkthrough-button';
 
 export type SopStepCardProps = {
   stepNumber: number;
@@ -231,7 +232,10 @@ export function SopViewer({ sop }: SopViewerProps) {
           <h1>{sop.title}</h1>
           <p className={styles.heroCopy}>{sop.summary}</p>
         </div>
-        <div className={styles.aiBadge}>AI generated</div>
+        <div className={styles.heroActions}>
+          <div className={styles.aiBadge}>AI generated</div>
+          <StartWalkthroughButton sopId={sop.id} />
+        </div>
       </section>
 
       {sop.status === 'draft' && (

@@ -20,3 +20,26 @@ test('background reports local session storage failures to the popup', () => {
   assert.match(backgroundSource, /SESSION_PAYLOAD_ERROR/);
   assert.match(backgroundSource, /Could not save captured session locally/);
 });
+
+test('background proxies vision locate through authenticated API and caches per step', () => {
+  assert.match(backgroundSource, /WALKTHROUGH_VISION_LOCATE/);
+  assert.match(backgroundSource, /\/api\/v1\/walkthroughs\/locate-element/);
+  assert.match(backgroundSource, /visionLocateCache/);
+  assert.match(backgroundSource, /authenticatedFetch/);
+});
+
+test('background starts walkthroughs from external web handoff using only sop id', () => {
+  assert.match(backgroundSource, /startWalkthroughFromSop/);
+  assert.match(backgroundSource, /authenticatedFetch/);
+  assert.match(
+    backgroundSource,
+    /\/api\/v1\/sops\/\$\{encodeURIComponent\(trimmedSopId\)\}\/walkthrough/,
+  );
+  assert.match(backgroundSource, /WALKTHROUGH_STORAGE_KEY/);
+  assert.match(backgroundSource, /WALKTHROUGH_PAYLOAD_KEY/);
+  assert.match(backgroundSource, /startWalkthroughFromSop,/);
+  assert.match(backgroundSource, /inferLaunchUrl/);
+  assert.match(backgroundSource, /waitForTabComplete/);
+  assert.match(backgroundSource, /syncWalkthroughToTab/);
+  assert.match(backgroundSource, /WALKTHROUGH_ENSURE_PAGE/);
+});

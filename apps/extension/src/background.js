@@ -7,21 +7,114 @@ import {
 import { authenticatedFetch, clearStoredAuthTokens, redeemHandoffCode } from './auth.js';
 import { clearDataCaptureConsent } from './consent.js';
 import { handleExternalAuthMessage } from './external-auth.js';
+import { buildVisionCacheKey } from './vision-locate.js';
+import {
+  WALKTHROUGH_PAYLOAD_KEY,
+  WALKTHROUGH_STORAGE_KEY,
+  startWalkthrough,
+} from './walkthrough-state.js';
+import {
+  ensureWalkthroughPage,
+  inferLaunchUrl,
+  syncWalkthroughToTab,
+  waitForTabComplete,
+} from './walkthrough-launch.js';
 
 const externalAuthHandlers = {
   redeemHandoffCode,
   clearStoredAuthTokens,
   deleteSessionPayload,
+  startWalkthroughFromSop,
 };
 
 let writeQueue = Promise.resolve();
 let lastScreenshotAt = 0;
 let lastScreenshot = null;
 
+/** @type {Map<string, { x: number, y: number, width: number, height: number }>} */
+const visionLocateCache = new Map();
+
 const SCREENSHOT_THROTTLE_MS = 500;
 const SCREENSHOT_FORMAT = 'jpeg';
 const SCREENSHOT_QUALITY = 50;
+const VISION_CAPTURE_QUALITY = 70;
 const RECORDED_EVENT_TYPES = new Set(['CLICK', 'NAVIGATION', 'INPUT']);
+
+async function locateElementViaVision(message, sender) {
+  const tabId = message.tabId ?? sender.tab?.id ?? null;
+  const cacheKey = buildVisionCacheKey({
+    sopId: message.sopId,
+    stepNumber: message.stepNumber,
+    tabId,
+    pageKey: message.pageKey,
+  });
+
+  if (visionLocateCache.has(cacheKey)) {
+    return {
+      ok: true,
+      cached: true,
+      rect: visionLocateCache.get(cacheKey),
+    };
+  }
+
+  if (!tabId) {
+    throw new Error('Missing tab id for vision locate');
+  }
+
+  const description = typeof message.description === 'string' ? message.description.trim() : '';
+  if (!description) {
+    throw new Error('Missing element description for vision locate');
+  }
+
+  const tab = await chrome.tabs.get(tabId);
+  if (!tab?.windowId) {
+    throw new Error('Walkthrough tab is not available for capture');
+  }
+
+  const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, {
+    format: SCREENSHOT_FORMAT,
+    quality: VISION_CAPTURE_QUALITY,
+  });
+
+  const response = await authenticatedFetch('/api/v1/walkthroughs/locate-element', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      image_base64: dataUrl,
+      content_type: 'image/jpeg',
+      description,
+      instruction: message.instruction ?? null,
+      viewport_width: message.viewportWidth,
+      viewport_height: message.viewportHeight,
+      step_number: message.stepNumber ?? null,
+    }),
+  });
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`Vision locate failed (${response.status}): ${detail.slice(0, 200)}`);
+  }
+
+  const body = await response.json();
+  const rect = {
+    x: Number(body.x),
+    y: Number(body.y),
+    width: Number(body.width),
+    height: Number(body.height),
+  };
+
+  visionLocateCache.set(cacheKey, rect);
+  return {
+    ok: true,
+    cached: false,
+    rect,
+    coarse_cell: body.coarse_cell,
+    fine_cell: body.fine_cell,
+    method: body.method,
+  };
+}
 
 function resetSessionBuffers() {
   lastScreenshotAt = 0;
@@ -38,6 +131,63 @@ function parseScreenshotDataUrl(dataUrl) {
   return {
     content_type: match[1],
     data_base64: match[2],
+  };
+}
+
+async function startWalkthroughFromSop(sopId) {
+  const trimmedSopId = typeof sopId === 'string' ? sopId.trim() : '';
+  if (!trimmedSopId) {
+    throw new Error('Missing SOP id');
+  }
+
+  const response = await authenticatedFetch(
+    `/api/v1/sops/${encodeURIComponent(trimmedSopId)}/walkthrough`,
+  );
+  if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error('Sign in to the WorkTrace extension before starting walkthroughs.');
+    }
+    if (response.status === 404) {
+      throw new Error('Published SOP not found for this workspace.');
+    }
+    if (response.status === 422) {
+      throw new Error('Walkthrough data is incomplete for this SOP.');
+    }
+    throw new Error('Could not load walkthrough data.');
+  }
+
+  const payload = await response.json();
+  if (!Array.isArray(payload?.steps) || payload.steps.length === 0) {
+    throw new Error('This SOP has no walkthrough steps.');
+  }
+
+  const launchUrl = inferLaunchUrl(payload);
+  if (!launchUrl) {
+    throw new Error(
+      'This walkthrough has no start page URL. Re-publish the SOP from a session that recorded page URLs.',
+    );
+  }
+
+  const tab = await chrome.tabs.create({ url: launchUrl, active: true });
+  const nextState = startWalkthrough(
+    { status: 'idle', sopId: null, stepIndex: 0, tabId: null },
+    trimmedSopId,
+    { tabId: tab?.id ?? null },
+  );
+
+  await chrome.storage?.session?.set({
+    [WALKTHROUGH_STORAGE_KEY]: nextState,
+    [WALKTHROUGH_PAYLOAD_KEY]: payload,
+  });
+
+  if (tab?.id != null) {
+    await waitForTabComplete(chrome.tabs, tab.id);
+    await syncWalkthroughToTab(chrome.tabs, tab.id);
+  }
+
+  return {
+    sopId: trimmedSopId,
+    tabId: tab?.id ?? null,
   };
 }
 
@@ -167,6 +317,46 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return false;
   }
 
+  if (message.type === 'WALKTHROUGH_VISION_LOCATE') {
+    locateElementViaVision(message, sender)
+      .then((result) => {
+        sendResponse(result);
+      })
+      .catch((error) => {
+        sendResponse({
+          ok: false,
+          error: error instanceof Error ? error.message : 'Vision locate failed',
+        });
+      });
+    return true;
+  }
+
+  if (message.type === 'WALKTHROUGH_ENSURE_PAGE') {
+    ensureWalkthroughPage(
+      chrome.tabs,
+      chrome.storage,
+      { stateKey: WALKTHROUGH_STORAGE_KEY },
+      message.url,
+      message.tabId ?? sender.tab?.id ?? null,
+    )
+      .then((tab) => {
+        sendResponse({ ok: true, tabId: tab?.id ?? null });
+      })
+      .catch((error) => {
+        sendResponse({
+          ok: false,
+          error: error instanceof Error ? error.message : 'Failed to open walkthrough page',
+        });
+      });
+    return true;
+  }
+
+  if (message.type === 'WALKTHROUGH_VISION_CACHE_CLEAR') {
+    visionLocateCache.clear();
+    sendResponse({ ok: true });
+    return false;
+  }
+
   if (message.type === 'WALKTHROUGH_STEP_ENTERED' || message.type === 'WALKTHROUGH_STEP_LEFT') {
     console.log('Walkthrough analytics hook:', message.type, message);
     sendResponse({ ok: true });
@@ -174,6 +364,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === 'WALKTHROUGH_FINISHED') {
+    visionLocateCache.clear();
     (async () => {
       try {
         const durationMs = (message.step_timings ?? []).reduce(

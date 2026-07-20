@@ -4,7 +4,8 @@
  *
  * Primary mode is LIVE overlay: resolve target on the page, anchor tooltip via
  * getBoundingClientRect. Screenshots are preview + fallback only (H09AAPPLE-28).
- * Full CSS → XPath → text+role → vision chain lands in H09AAPPLE-29.
+ * Resolution chain: CSS → XPath → label, then H09AAPPLE-53 vision grid locate
+ * on selector_miss (pixel overlay; manual Next). Full text+role is H09AAPPLE-29.
  */
 (() => {
   const STORAGE_STATE_KEY = 'walkthroughState';
@@ -55,6 +56,252 @@
   // Reset whenever the active step actually changes (see enterCurrentStep).
   /** @type {number | null} */
   let missFrictionStepIndex = null;
+
+  // H09AAPPLE-53: pixel rect from vision grid locate (no DOM handle).
+  /** @type {{ x: number, y: number, width: number, height: number } | null} */
+  let visionRect = null;
+  /** @type {number | null} */
+  let visionLocateStepIndex = null;
+  /** @type {number | null} */
+  let visionLocateFailedStepIndex = null;
+  let visionLocateInFlight = false;
+
+  function describeStepForVision(step) {
+    if (typeof step?.target_label === 'string' && step.target_label.trim()) {
+      return step.target_label.trim();
+    }
+    if (typeof step?.instruction === 'string' && step.instruction.trim()) {
+      return step.instruction.trim().slice(0, 500);
+    }
+    return '';
+  }
+
+  function resetVisionLocateLocal() {
+    visionRect = null;
+    visionLocateStepIndex = null;
+    visionLocateFailedStepIndex = null;
+    visionLocateInFlight = false;
+  }
+
+  function asAnchorRect(rect) {
+    if (!rect) {
+      return viewportCenterRect();
+    }
+    if (Number.isFinite(rect.left) && Number.isFinite(rect.top)) {
+      return rect;
+    }
+    const x = Number(rect.x) || 0;
+    const y = Number(rect.y) || 0;
+    const width = Number(rect.width) || 0;
+    const height = Number(rect.height) || 0;
+    return {
+      left: x,
+      top: y,
+      right: x + width,
+      bottom: y + height,
+      width,
+      height,
+    };
+  }
+
+  function applyPixelHighlight(highlightEl, rect) {
+    if (!highlightEl || !rect) {
+      return;
+    }
+    const anchor = asAnchorRect(rect);
+    highlightEl.hidden = false;
+    highlightEl.style.top = `${anchor.top}px`;
+    highlightEl.style.left = `${anchor.left}px`;
+    highlightEl.style.width = `${anchor.width}px`;
+    highlightEl.style.height = `${anchor.height}px`;
+  }
+
+  function requestVisionLocateIfNeeded(step, anchorMode) {
+    if (anchorMode !== 'element' || !activeState || !step) {
+      return;
+    }
+    if (visionLocateInFlight) {
+      return;
+    }
+    if (visionLocateStepIndex === activeState.stepIndex && visionRect) {
+      return;
+    }
+    if (visionLocateFailedStepIndex === activeState.stepIndex) {
+      return;
+    }
+
+    const description = describeStepForVision(step);
+    if (!description) {
+      visionLocateFailedStepIndex = activeState.stepIndex;
+      return;
+    }
+
+    const stepIndex = activeState.stepIndex;
+    visionLocateInFlight = true;
+
+    try {
+      chrome.runtime?.sendMessage?.(
+        {
+          type: 'WALKTHROUGH_VISION_LOCATE',
+          sopId: activeState.sopId,
+          stepNumber: step.step_number ?? stepIndex + 1,
+          tabId: activeState.tabId ?? myTabId ?? null,
+          pageKey: `${window.location.origin}${window.location.pathname}${window.location.search}`,
+          description,
+          instruction:
+            typeof step.instruction === 'string' ? step.instruction.slice(0, 2000) : null,
+          viewportWidth: window.innerWidth,
+          viewportHeight: window.innerHeight,
+        },
+        (response) => {
+          visionLocateInFlight = false;
+          if (!activeState || activeState.stepIndex !== stepIndex) {
+            return;
+          }
+          if (
+            response?.ok &&
+            response.rect &&
+            Number.isFinite(response.rect.x) &&
+            Number.isFinite(response.rect.y) &&
+            Number.isFinite(response.rect.width) &&
+            Number.isFinite(response.rect.height) &&
+            response.rect.width > 0 &&
+            response.rect.height > 0
+          ) {
+            visionLocateStepIndex = stepIndex;
+            visionRect = {
+              x: response.rect.x,
+              y: response.rect.y,
+              width: response.rect.width,
+              height: response.rect.height,
+            };
+          } else {
+            visionLocateFailedStepIndex = stepIndex;
+          }
+          // Re-render tooltip / pixel highlight without re-entering the step.
+          if (shadowRoot && activeState?.status === 'playing') {
+            reposition();
+          }
+        },
+      );
+    } catch {
+      visionLocateInFlight = false;
+      visionLocateFailedStepIndex = stepIndex;
+    }
+  }
+
+  // Keep in sync with walkthrough-url-resolve.js (classic content script cannot import ESM).
+  const ID_SEGMENT = /^(?:\d+|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
+  const CREATE_SEGMENTS = new Set(['new', 'create', 'add']);
+
+  function isIdSegment(segment) {
+    return typeof segment === 'string' && ID_SEGMENT.test(segment);
+  }
+
+  function generalizePathname(pathname) {
+    if (typeof pathname !== 'string' || !pathname) {
+      return '';
+    }
+    return pathname
+      .split('/')
+      .map((segment) => (isIdSegment(segment) ? '{id}' : segment))
+      .join('/');
+  }
+
+  function isDynamicPathname(pathname) {
+    if (typeof pathname !== 'string' || !pathname) {
+      return false;
+    }
+    return pathname.split('/').some((segment) => isIdSegment(segment));
+  }
+
+  function resolvedUrlKey(origin, pathname) {
+    return `${origin}${generalizePathname(pathname)}`;
+  }
+
+  function pathsAreSameResourceShape(leftPath, rightPath) {
+    const left = String(leftPath || '').split('/');
+    const right = String(rightPath || '').split('/');
+    if (left.length !== right.length) {
+      return false;
+    }
+    for (let i = 0; i < left.length; i += 1) {
+      if (left[i] === right[i]) {
+        continue;
+      }
+      const leftFlexible = CREATE_SEGMENTS.has(left[i]) || isIdSegment(left[i]);
+      const rightFlexible = CREATE_SEGMENTS.has(right[i]) || isIdSegment(right[i]);
+      if (leftFlexible && rightFlexible) {
+        continue;
+      }
+      return false;
+    }
+    return true;
+  }
+
+  function learnFromStepTransition(resolvedUrls, recordedStepUrl, liveUrl) {
+    const base = resolvedUrls && typeof resolvedUrls === 'object' ? { ...resolvedUrls } : {};
+    try {
+      const live = new URL(liveUrl);
+      if (!isDynamicPathname(live.pathname)) {
+        return base;
+      }
+      if (typeof recordedStepUrl === 'string' && recordedStepUrl.trim()) {
+        const recorded = new URL(recordedStepUrl, liveUrl);
+        if (
+          recorded.origin === live.origin &&
+          recorded.pathname !== live.pathname &&
+          pathsAreSameResourceShape(recorded.pathname, live.pathname)
+        ) {
+          const key = resolvedUrlKey(live.origin, live.pathname);
+          base[key] = `${live.origin}${live.pathname}${live.search}`;
+        }
+      }
+      return base;
+    } catch {
+      return base;
+    }
+  }
+
+  function resolvePlaybackTargetUrl(recordedUrl, resolvedUrls, liveUrlFallback) {
+    if (typeof recordedUrl !== 'string' || !recordedUrl.trim()) {
+      return { url: null, mode: 'none' };
+    }
+    const trimmed = recordedUrl.trim();
+    const map = resolvedUrls && typeof resolvedUrls === 'object' ? resolvedUrls : {};
+    try {
+      const recorded = new URL(trimmed, liveUrlFallback || undefined);
+      const key = resolvedUrlKey(recorded.origin, recorded.pathname);
+      if (typeof map[key] === 'string' && map[key]) {
+        return { url: map[key], mode: 'resolved' };
+      }
+      if (typeof liveUrlFallback === 'string' && liveUrlFallback.trim()) {
+        const live = new URL(liveUrlFallback);
+        if (
+          live.origin === recorded.origin &&
+          generalizePathname(live.pathname) === generalizePathname(recorded.pathname) &&
+          isDynamicPathname(recorded.pathname)
+        ) {
+          return {
+            url: `${live.origin}${live.pathname}${live.search}`,
+            mode: 'live',
+          };
+        }
+      }
+      if (isDynamicPathname(recorded.pathname)) {
+        return { url: null, mode: 'unresolved_dynamic' };
+      }
+      return { url: trimmed, mode: 'recorded' };
+    } catch {
+      return { url: trimmed, mode: 'recorded' };
+    }
+  }
+
+  function getResolvedUrls() {
+    return activeState?.resolvedUrls && typeof activeState.resolvedUrls === 'object'
+      ? activeState.resolvedUrls
+      : {};
+  }
 
   function getSteps() {
     return Array.isArray(activePayload?.steps) ? activePayload.steps : [];
@@ -563,13 +810,27 @@
   }
 
   function isWrongPage(step) {
-    if (typeof step?.expected_url !== 'string' || !step.expected_url) {
+    const recorded = stepPageUrl(step);
+    if (!recorded) {
       return false;
     }
 
     try {
       const current = new URL(window.location.href);
-      const expected = new URL(step.expected_url);
+      const expected = new URL(recorded, window.location.href);
+      const resolved = resolvePlaybackTargetUrl(recorded, getResolvedUrls(), window.location.href);
+
+      if (resolved.mode === 'resolved' || resolved.mode === 'live') {
+        const target = new URL(resolved.url);
+        return current.origin !== target.origin || current.pathname !== target.pathname;
+      }
+
+      if (resolved.mode === 'unresolved_dynamic') {
+        return (
+          current.origin !== expected.origin ||
+          generalizePathname(current.pathname) !== generalizePathname(expected.pathname)
+        );
+      }
 
       return current.origin !== expected.origin || current.pathname !== expected.pathname;
     } catch {
@@ -646,44 +907,64 @@
       applyHighlight(resolved.element);
       attachStepListener(step, resolved.element);
 
-      // Legacy overlay highlight kept temporarily but no longer used.
+      // DOM outline is primary; hide pixel overlay when a real element exists.
       highlight.hidden = true;
 
       fallbackNote.hidden = true;
       fallbackNote.textContent = '';
 
       placeTooltip(tooltip, rect);
+      tooltip.dataset.anchorMode = 'element';
     } else {
       recordSelectorMissOnce(step, anchorMode);
 
       removeHighlight();
       detachStepListener();
 
-      highlight.hidden = true;
+      const hasVisionRect =
+        visionRect &&
+        visionLocateStepIndex === activeState.stepIndex &&
+        visionRect.width > 0 &&
+        visionRect.height > 0;
 
-      placeTooltip(tooltip, viewportCenterRect());
-
-      if (showPreview) {
+      if (hasVisionRect) {
+        applyPixelHighlight(highlight, visionRect);
+        placeTooltip(tooltip, asAnchorRect(visionRect));
         fallbackNote.hidden = false;
         fallbackNote.textContent =
-          anchorMode === 'screenshot'
-            ? 'No on-page target for this step. Showing captured preview.'
-            : 'Target element not found on this page. Showing captured preview.';
+          'Target located visually (DOM unavailable). Use Next to continue.';
+        tooltip.dataset.anchorMode = 'vision';
       } else {
-        fallbackNote.hidden = false;
-        fallbackNote.textContent = 'No on-page target available for this step.';
+        highlight.hidden = true;
+        placeTooltip(tooltip, viewportCenterRect());
+
+        if (showPreview) {
+          fallbackNote.hidden = false;
+          fallbackNote.textContent =
+            anchorMode === 'screenshot'
+              ? 'No on-page target for this step. Showing captured preview.'
+              : 'Target element not found on this page. Showing captured preview.';
+        } else {
+          fallbackNote.hidden = false;
+          fallbackNote.textContent = 'No on-page target available for this step.';
+        }
+
+        tooltip.dataset.anchorMode = showPreview ? 'screenshot' : 'none';
+        requestVisionLocateIfNeeded(step, anchorMode);
       }
     }
 
-    if (showPreview) {
+    if (showPreview && tooltip.dataset.anchorMode !== 'vision') {
       preview.hidden = false;
       preview.src = step.screenshot_url;
+    } else if (showPreview && tooltip.dataset.anchorMode === 'vision') {
+      // Prefer live vision highlight; keep screenshot available but collapsed.
+      preview.hidden = true;
+      preview.removeAttribute('src');
     } else {
       preview.hidden = true;
       preview.removeAttribute('src');
     }
-
-    tooltip.dataset.anchorMode = resolved.element ? 'element' : showPreview ? 'screenshot' : 'none';
   }
 
   function enterCurrentStep() {
@@ -701,6 +982,7 @@
 
     // New step visit: allow a fresh selector_miss/wrong_page recording for it.
     missFrictionStepIndex = null;
+    resetVisionLocateLocal();
 
     const stepNumber = step.step_number ?? activeState.stepIndex + 1;
     lastEnteredStepIndex = activeState.stepIndex;
@@ -846,6 +1128,58 @@
     chrome.storage?.session?.set({ [STORAGE_STATE_KEY]: nextState });
   }
 
+  function stepPageUrl(step) {
+    if (typeof step?.expected_url === 'string' && step.expected_url.trim()) {
+      return step.expected_url.trim();
+    }
+    if (typeof step?.page_url === 'string' && step.page_url.trim()) {
+      return step.page_url.trim();
+    }
+    return null;
+  }
+
+  function needsNavigation(targetUrl) {
+    if (!targetUrl) {
+      return false;
+    }
+
+    try {
+      const current = new URL(window.location.href);
+      const target = new URL(targetUrl, window.location.href);
+      return (
+        current.origin !== target.origin ||
+        current.pathname !== target.pathname ||
+        current.search !== target.search
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  function requestStepPage(targetUrl) {
+    try {
+      chrome.runtime?.sendMessage?.({
+        type: 'WALKTHROUGH_ENSURE_PAGE',
+        url: targetUrl,
+        tabId: activeState?.tabId ?? myTabId ?? null,
+      });
+    } catch {
+      // Background may be unavailable; overlay stays on the current page.
+    }
+  }
+
+  function navigateForStep(step, resolvedUrls, liveUrl) {
+    const recorded = stepPageUrl(step);
+    const resolved = resolvePlaybackTargetUrl(recorded, resolvedUrls, liveUrl);
+    if (!resolved.url) {
+      return resolved;
+    }
+    if (needsNavigation(resolved.url)) {
+      requestStepPage(resolved.url);
+    }
+    return resolved;
+  }
+
   function handlePrevious() {
     if (!activeState || activeState.stepIndex <= 0) {
       return;
@@ -854,6 +1188,9 @@
     const destinationIndex = activeState.stepIndex - 1;
     const destinationStep = getSteps()[destinationIndex];
     const destinationStepNumber = destinationStep?.step_number ?? destinationIndex + 1;
+    const liveUrl = window.location.href;
+    const leavingRecorded = stepPageUrl(getCurrentStep());
+    const resolvedUrls = learnFromStepTransition(getResolvedUrls(), leavingRecorded, liveUrl);
 
     // Retreat: discard the step being left (e.g. 8) and reopen the destination
     // (e.g. 7) so completion keeps one timing row per step on the final path.
@@ -865,7 +1202,10 @@
     persistState({
       ...activeState,
       stepIndex: destinationIndex,
+      resolvedUrls,
     });
+
+    navigateForStep(destinationStep, resolvedUrls, liveUrl);
   }
 
   function handleNext() {
@@ -874,14 +1214,22 @@
       return;
     }
 
+    const nextIndex = activeState.stepIndex + 1;
+    const liveUrl = window.location.href;
+    const leavingRecorded = stepPageUrl(getCurrentStep());
+    const resolvedUrls = learnFromStepTransition(getResolvedUrls(), leavingRecorded, liveUrl);
+
     leaveCurrentStep();
     detachStepListener();
     removeHighlight();
 
     persistState({
       ...activeState,
-      stepIndex: activeState.stepIndex + 1,
+      stepIndex: nextIndex,
+      resolvedUrls,
     });
+
+    navigateForStep(steps[nextIndex], resolvedUrls, liveUrl);
   }
 
   function handleFinish() {
@@ -1000,6 +1348,18 @@
     });
   }
 
+  if (chrome.runtime?.onMessage) {
+    chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+      if (message?.type !== 'WALKTHROUGH_SYNC') {
+        return false;
+      }
+
+      readAndSync();
+      sendResponse({ ok: true });
+      return false;
+    });
+  }
+
   resolveMyTabId(() => {
     readAndSync();
   });
@@ -1016,5 +1376,8 @@
       step_number: currentVisitStepNumber,
       entered_at: currentVisitEnteredAt,
     }),
+    learnFromStepTransition,
+    resolvePlaybackTargetUrl,
+    generalizePathname,
   };
 })();

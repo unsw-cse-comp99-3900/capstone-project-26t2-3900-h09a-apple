@@ -3,7 +3,12 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { JSDOM } from 'jsdom';
 
-function loadRuntime({ walkthroughState = null, walkthroughPayload = null, tabId = 1 } = {}) {
+function loadRuntime({
+  walkthroughState = null,
+  walkthroughPayload = null,
+  tabId = 1,
+  url = 'https://example.com/app',
+} = {}) {
   const dom = new JSDOM(
     `
     <!DOCTYPE html>
@@ -14,7 +19,7 @@ function loadRuntime({ walkthroughState = null, walkthroughPayload = null, tabId
       </body>
     </html>
     `,
-    { url: 'https://example.com/app', runScripts: 'dangerously', pretendToBeVisual: true },
+    { url, runScripts: 'dangerously', pretendToBeVisual: true },
   );
 
   const window = dom.window;
@@ -112,6 +117,41 @@ test('resolveTarget prefers css_selector then xpath then fallback', async () => 
   );
   assert.equal(api.resolveAnchorMode({ instruction: 'Go' }), 'none');
   assert.equal(api.resolveAnchorMode({ anchor_mode: 'none', css_selector: '#x' }), 'none');
+});
+
+test('selector miss on element step requests vision locate once', async () => {
+  const payload = {
+    steps: [
+      {
+        step_number: 1,
+        instruction: 'Click Close issue',
+        target_label: 'Close issue',
+        css_selector: '#missing-close-btn',
+        anchor_mode: 'element',
+      },
+    ],
+  };
+
+  const { document, flush, sentMessages } = loadRuntime({
+    walkthroughState: { status: 'playing', sopId: 'sop-1', stepIndex: 0, tabId: 1 },
+    walkthroughPayload: payload,
+    tabId: 1,
+  });
+  await flush();
+
+  const locateCalls = sentMessages.filter((m) => m.type === 'WALKTHROUGH_VISION_LOCATE');
+  assert.equal(locateCalls.length, 1);
+  assert.equal(locateCalls[0].description, 'Close issue');
+  assert.equal(locateCalls[0].sopId, 'sop-1');
+  assert.equal(locateCalls[0].stepNumber, 1);
+
+  // Mutation-driven reposition must not spam another locate while in flight / failed.
+  document.body.appendChild(document.createElement('div'));
+  await flush();
+  const locateAfter = sentMessages.filter((m) => m.type === 'WALKTHROUGH_VISION_LOCATE');
+  assert.equal(locateAfter.length, 1);
+
+  assert.ok(document.getElementById('worktrace-walkthrough-host'));
 });
 
 test('screenshot anchor mode shows preview without element highlight', async () => {
@@ -263,6 +303,188 @@ test('next and previous update step index and re-enter without duplicate open vi
   const enteredAfterForward = sentMessages.filter((m) => m.type === 'WALKTHROUGH_STEP_ENTERED');
   assert.equal(enteredAfterForward.length, 4);
   assert.equal(enteredAfterForward[3].step_number, 2);
+});
+
+test('next requests page navigation when the next step has a different expected_url', async () => {
+  const payload = {
+    steps: [
+      {
+        step_number: 1,
+        instruction: 'One',
+        css_selector: '#save-btn',
+        expected_url: 'https://example.com/app',
+      },
+      {
+        step_number: 2,
+        instruction: 'Two',
+        css_selector: '#name-field',
+        expected_url: 'https://other.example.com/next',
+      },
+    ],
+  };
+
+  const { document, flush, sentMessages, sessionValues } = loadRuntime({
+    walkthroughState: {
+      status: 'playing',
+      sopId: 'sop-1',
+      stepIndex: 0,
+      tabId: 1,
+      resolvedUrls: {},
+    },
+    walkthroughPayload: payload,
+    tabId: 1,
+  });
+  await flush();
+
+  document
+    .getElementById('worktrace-walkthrough-host')
+    .shadowRoot.querySelector('[data-action="next"]')
+    .click();
+  await flush();
+
+  assert.equal(sessionValues().walkthroughState.stepIndex, 1);
+  const ensurePage = sentMessages.filter((m) => m.type === 'WALKTHROUGH_ENSURE_PAGE');
+  assert.equal(ensurePage.length, 1);
+  assert.equal(ensurePage[0].url, 'https://other.example.com/next');
+  assert.equal(ensurePage[0].tabId, 1);
+});
+
+test('next learns create->issue URL and navigates to live issue not stale recording', async () => {
+  const payload = {
+    steps: [
+      {
+        step_number: 1,
+        instruction: 'Create issue',
+        css_selector: '#save-btn',
+        expected_url: 'https://github.com/acme/app/issues/new',
+      },
+      {
+        step_number: 2,
+        instruction: 'Close issue',
+        css_selector: '#name-field',
+        expected_url: 'https://github.com/acme/app/issues/65',
+      },
+    ],
+  };
+
+  const { document, flush, sentMessages, sessionValues } = loadRuntime({
+    walkthroughState: {
+      status: 'playing',
+      sopId: 'sop-1',
+      stepIndex: 0,
+      tabId: 1,
+      resolvedUrls: {},
+    },
+    walkthroughPayload: payload,
+    tabId: 1,
+    // After Create, the browser already landed on the newly created issue.
+    url: 'https://github.com/acme/app/issues/70',
+  });
+  await flush();
+
+  document
+    .getElementById('worktrace-walkthrough-host')
+    .shadowRoot.querySelector('[data-action="next"]')
+    .click();
+  await flush();
+
+  const state = sessionValues().walkthroughState;
+  assert.equal(state.stepIndex, 1);
+  assert.equal(
+    state.resolvedUrls['https://github.com/acme/app/issues/{id}'],
+    'https://github.com/acme/app/issues/70',
+  );
+
+  const ensurePage = sentMessages.filter((m) => m.type === 'WALKTHROUGH_ENSURE_PAGE');
+  // Already on /issues/70, so no navigation back to stale /issues/65.
+  assert.equal(ensurePage.length, 0);
+});
+
+test('next navigates to learned live issue URL instead of stale recording', async () => {
+  const payload = {
+    steps: [
+      {
+        step_number: 1,
+        instruction: 'Prepare',
+        css_selector: '#save-btn',
+        expected_url: 'https://github.com/acme/app/settings',
+      },
+      {
+        step_number: 2,
+        instruction: 'Close issue',
+        css_selector: '#name-field',
+        expected_url: 'https://github.com/acme/app/issues/65',
+      },
+    ],
+  };
+
+  const { document, flush, sentMessages } = loadRuntime({
+    walkthroughState: {
+      status: 'playing',
+      sopId: 'sop-1',
+      stepIndex: 0,
+      tabId: 1,
+      resolvedUrls: {
+        'https://github.com/acme/app/issues/{id}': 'https://github.com/acme/app/issues/70',
+      },
+    },
+    walkthroughPayload: payload,
+    tabId: 1,
+    url: 'https://github.com/acme/app/settings',
+  });
+  await flush();
+
+  document
+    .getElementById('worktrace-walkthrough-host')
+    .shadowRoot.querySelector('[data-action="next"]')
+    .click();
+  await flush();
+
+  const ensurePage = sentMessages.filter((m) => m.type === 'WALKTHROUGH_ENSURE_PAGE');
+  assert.equal(ensurePage.length, 1);
+  assert.equal(ensurePage[0].url, 'https://github.com/acme/app/issues/70');
+});
+
+test('next does not jump to stale dynamic URL when create was skipped', async () => {
+  const payload = {
+    steps: [
+      {
+        step_number: 1,
+        instruction: 'Create issue',
+        css_selector: '#save-btn',
+        expected_url: 'https://github.com/acme/app/issues/new',
+      },
+      {
+        step_number: 2,
+        instruction: 'Close issue',
+        css_selector: '#name-field',
+        expected_url: 'https://github.com/acme/app/issues/65',
+      },
+    ],
+  };
+
+  const { document, flush, sentMessages } = loadRuntime({
+    walkthroughState: {
+      status: 'playing',
+      sopId: 'sop-1',
+      stepIndex: 0,
+      tabId: 1,
+      resolvedUrls: {},
+    },
+    walkthroughPayload: payload,
+    tabId: 1,
+    url: 'https://github.com/acme/app/issues/new',
+  });
+  await flush();
+
+  document
+    .getElementById('worktrace-walkthrough-host')
+    .shadowRoot.querySelector('[data-action="next"]')
+    .click();
+  await flush();
+
+  const ensurePage = sentMessages.filter((m) => m.type === 'WALKTHROUGH_ENSURE_PAGE');
+  assert.equal(ensurePage.length, 0);
 });
 
 test('finish clears session walkthrough state and tears down overlay', async () => {
