@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>WorkTrace - Pricing</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Manrope:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="atmosphere" aria-hidden="true"></div>
+
+    <header class="top">
+      <p class="brand">WorkTrace</p>
+      <p class="top-note">Early access pricing</p>
+    </header>
+
+    <main>
+      <section class="hero">
+        <h1>Capture real work. Ship SOPs people actually follow.</h1>
+        <p class="lead">
+          Start free in the browser, then upgrade when you need desktop capture, more published
+          SOPs, or a shared team library.
+        </p>
+      </section>
+
+      <section class="pricing" aria-label="Pricing plans">
+        <article class="plan" data-tier="free">
+          <p class="plan-name">Free</p>
+          <p class="plan-price"><span>$0</span></p>
+          <p class="plan-blurb">Try the core loop alone in the browser.</p>
+          <ul>
+            <li>1 seat</li>
+            <li>Browser extension capture only</li>
+            <li>Up to 3 published SOPs</li>
+            <li>No shared library or review queue</li>
+          </ul>
+          <button type="button" class="cta" data-cta="free" data-action="choose_free">
+            Start with Free
+          </button>
+        </article>
+
+        <article class="plan" data-tier="solo">
+          <p class="plan-name">Solo</p>
+          <p class="plan-price"><span>$19</span> / seat / mo</p>
+          <p class="plan-blurb">One operator with desktop + browser capture.</p>
+          <ul>
+            <li>Desktop + browser capture</li>
+            <li>Personal SOP library</li>
+            <li>Guided walkthrough playback</li>
+          </ul>
+          <button type="button" class="cta" data-cta="solo" data-action="subscribe">
+            Subscribe to Solo
+          </button>
+        </article>
+
+        <article class="plan plan-featured" data-tier="team">
+          <p class="plan-badge">Most teams start here</p>
+          <p class="plan-name">Team</p>
+          <p class="plan-price"><span>$12</span> / seat / mo</p>
+          <p class="plan-meta">Min 5 seats · from $60 / mo</p>
+          <p class="plan-blurb">Shared library and review before publish.</p>
+          <ul>
+            <li>Everything in Solo</li>
+            <li>Shared library + roles</li>
+            <li>Review before publish</li>
+          </ul>
+          <button type="button" class="cta cta-primary" data-cta="team" data-action="subscribe">
+            Subscribe to Team
+          </button>
+        </article>
+
+        <article class="plan" data-tier="business">
+          <p class="plan-name">Business</p>
+          <p class="plan-price plan-price-text"><span>Contact us</span></p>
+          <p class="plan-meta">Early access pricing</p>
+          <p class="plan-blurb">Multi-team orgs that need priority help.</p>
+          <ul>
+            <li>Everything in Team</li>
+            <li>Org-wide library</li>
+            <li>Priority onboarding help</li>
+          </ul>
+          <button type="button" class="cta" data-cta="business" data-action="contact">
+            Contact us
+          </button>
+        </article>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <p>
+        This browser:
+        <span id="count-free">0</span> Free · <span id="count-solo">0</span> Solo ·
+        <span id="count-team">0</span> Team · <span id="count-business">0</span> Contact us
+      </p>
+      <p class="footer-actions">
+        <button type="button" id="export-log" class="linkish">Export click log (CSV)</button>
+        <button type="button" id="clear-log" class="linkish">Clear local log</button>
+      </p>
+      <p class="fineprint">
+        Experiment id H09AAPPLE-54. No payment is processed on this page. Subscribe uses Solo+Team
+        only; Contact us is separate. Report conversion against known share reach (manual), not page
+        analytics.
+      </p>
+    </footer>
+
+    <script src="./click-log.js"></script>
+    <script src="./pricing.js"></script>
+  </body>
+</html>
