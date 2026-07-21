@@ -255,13 +255,16 @@ one row per SOP step, not a single whole-SOP embedding column on `sops`.
 **Extension:** migration `0008_sop_step_embedding` runs `CREATE EXTENSION IF NOT EXISTS vector`.
 **Revision (status + embed job columns):** `0011_sop_embed_status` (after `0010_auth_token_tables`).
 
-**Write contract (H09AAPPLE-35):** on publish (and `POST /api/v1/sops/{id}/embed`),
-enqueue a `codification_jobs` row with `job_type=embed`, set
-`sops.embedding_status=pending`, then BackgroundTasks embeds each step with
-`text-embedding-3-small` (input title, newline, instruction). Replace prior
-rows for that SOP; store `step.order` in `step_number`. Retries use the same
-`1s / 2s / 4s` backoff as H09AAPPLE-24. `embedding_status` becomes `complete`
-when every step succeeds, else `failed`.
+**Write contract (H09AAPPLE-35 / hardened in H09AAPPLE-36):** on publish (and
+`POST /api/v1/sops/{id}/embed`), enqueue a `codification_jobs` row with
+`job_type=embed`, set `sops.embedding_status=pending`, then BackgroundTasks
+embeds each step with `text-embedding-3-small` (input title, newline,
+instruction). All step vectors are computed first; only on full success are
+prior rows replaced and `embedding_status` set to `complete`. A mid-run failure
+leaves any previously complete set untouched and never persists a partial
+replacement. Retries use the same `1s / 2s / 4s` backoff as H09AAPPLE-24.
+Downstream clustering (H09AAPPLE-36/-37) must only consume SOPs with
+`embedding_status=complete`.
 
 **IVFFlat query note (H09AAPPLE-36/-37):** with `lists = 10`, cosine `ORDER BY
 embedding <=> query` via a freshly built IVFFlat index can return **zero rows** when
@@ -269,6 +272,49 @@ the table has very little data at index-build time (seqscan still finds them; pg
 emits a low-recall warning). Use a seqscan fallback or defer index-backed similarity
 search until enough rows exist. Rebuilding the index after bulk deletes changes this
 behaviour; prefer `row_count < lists` checks in application code.
+
+## Table: `workflow_clusters` (H09AAPPLE-36)
+
+One row per cluster from a workflow variance run. Session vectors are mean-pooled
+from `sop_step_embedding` for published SOPs with `embedding_status=complete`.
+KMeans tries `k in {2,3,4}` (only `k < n_sessions`) and keeps the best silhouette.
+
+| Column                      | Type         | Null | Default             | Notes                                               |
+| --------------------------- | ------------ | ---- | ------------------- | --------------------------------------------------- |
+| `id`                        | uuid         | no   | `gen_random_uuid()` | PK                                                  |
+| `tenant_id`                 | uuid         | no   | -                   | tenant scope                                        |
+| `workflow_name`             | varchar(200) | no   | -                   | matches `sessions.workflow_name` (API path id)      |
+| `run_id`                    | uuid         | no   | -                   | shared by all clusters from one POST                |
+| `cluster_id`                | int          | no   | -                   | `0 .. chosen_k-1`                                   |
+| `chosen_k`                  | int          | no   | -                   | selected k (`2..4`)                                 |
+| `chosen_silhouette`         | numeric      | no   | -                   | silhouette for `chosen_k`                           |
+| `candidate_silhouettes`     | jsonb        | no   | `{}`                | map of candidate k to silhouette score              |
+| `centroid_vector`           | vector(1536) | no   | -                   | cluster centroid                                    |
+| `member_session_ids`        | jsonb        | no   | `[]`                | session UUID strings in this cluster                |
+| `high_variance_session_ids` | jsonb        | no   | `[]`                | members with cosine distance `> 0.25` from centroid |
+| `created_at`                | timestamptz  | no   | `now()`             | run time                                            |
+
+**Constraints:** `uq_workflow_clusters_run_cluster UNIQUE(run_id, cluster_id)`.
+**Revision:** `0012_workflow_clustering`.
+
+## Table: `workflow_step_variance` (H09AAPPLE-36)
+
+Per-step mean pairwise cosine distance across sessions of the same workflow.
+
+| Column              | Type         | Null | Default             | Notes                                  |
+| ------------------- | ------------ | ---- | ------------------- | -------------------------------------- |
+| `id`                | uuid         | no   | `gen_random_uuid()` | PK                                     |
+| `tenant_id`         | uuid         | no   | -                   | tenant scope                           |
+| `workflow_name`     | varchar(200) | no   | -                   | matches `sessions.workflow_name`       |
+| `run_id`            | uuid         | no   | -                   | clustering run that wrote this row     |
+| `step_number`       | int          | no   | -                   | `>= 1`                                 |
+| `semantic_variance` | numeric      | no   | -                   | mean pairwise cosine distance (`>= 0`) |
+| `updated_at`        | timestamptz  | no   | `now()`             | last write                             |
+
+**Constraints:** `uq_workflow_step_variance_tenant_workflow_step UNIQUE(tenant_id, workflow_name, step_number)`.
+**API:** `POST /api/v1/workflows/{workflow_id}/cluster` where `{workflow_id}` is the
+URL-encoded `workflow_name`. Requires `MANAGER` or higher. Returns `422` when fewer
+than 3 eligible sessions exist.
 
 ### `steps` JSONB shape
 

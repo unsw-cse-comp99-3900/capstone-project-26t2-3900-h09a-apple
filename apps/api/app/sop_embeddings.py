@@ -163,23 +163,14 @@ def _process_embed_job(
         db.commit()
         return
 
-    db.query(models.SopStepEmbedding).filter(models.SopStepEmbedding.sop_id == sop.id).delete(
-        synchronize_session=False
-    )
-    db.commit()
-
+    # Embed every step before mutating stored rows so a mid-run failure cannot
+    # wipe a previously complete set or leave a partial replacement.
+    embedded_steps: list[tuple[int, list[float]]] = []
     try:
         for step_number, title, instruction in steps:
             text = build_step_embed_text(title, instruction)
             result = _embed_with_retries(db, sop=sop, client=client, text=text)
-            db.add(
-                models.SopStepEmbedding(
-                    sop_id=sop.id,
-                    step_number=step_number,
-                    embedding=result.vector,
-                )
-            )
-            db.commit()
+            embedded_steps.append((step_number, result.vector))
     except Exception:
         sop.embedding_status = models.EmbeddingStatus.failed.value
         job.status = models.CodificationJobStatus.failed.value
@@ -187,15 +178,26 @@ def _process_embed_job(
         db.commit()
         return
 
-    row_count = (
-        db.query(models.SopStepEmbedding).filter(models.SopStepEmbedding.sop_id == sop.id).count()
-    )
-    if row_count != len(steps):
+    if len(embedded_steps) != len(steps):
         sop.embedding_status = models.EmbeddingStatus.failed.value
         job.status = models.CodificationJobStatus.failed.value
-    else:
-        sop.embedding_status = models.EmbeddingStatus.complete.value
-        job.status = models.CodificationJobStatus.completed.value
+        job.updated_at = datetime.now(UTC)
+        db.commit()
+        return
+
+    db.query(models.SopStepEmbedding).filter(models.SopStepEmbedding.sop_id == sop.id).delete(
+        synchronize_session=False
+    )
+    for step_number, vector in embedded_steps:
+        db.add(
+            models.SopStepEmbedding(
+                sop_id=sop.id,
+                step_number=step_number,
+                embedding=vector,
+            )
+        )
+    sop.embedding_status = models.EmbeddingStatus.complete.value
+    job.status = models.CodificationJobStatus.completed.value
     job.updated_at = datetime.now(UTC)
     db.commit()
 

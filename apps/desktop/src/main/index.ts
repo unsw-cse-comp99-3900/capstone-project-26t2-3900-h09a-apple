@@ -1,3 +1,5 @@
+import { DEFAULT_SENSITIVE_APP_PATTERNS, saveSensitiveAppConfig } from '@h09a/desktop-storage';
+import { existsSync } from 'node:fs';
 import { app, BrowserWindow, ipcMain, screen, shell } from 'electron';
 import { join, resolve } from 'node:path';
 import { DesktopSessionStore } from './desktop-session-store';
@@ -218,6 +220,7 @@ if (!gotSingleInstanceLock) {
     const result = await submitSession(lastCompletedSession.artifactPath);
 
     if (result.success && sessionStore) {
+      sessionStore.markSubmitted(lastCompletedSession.sessionId);
       await sessionStore.deleteCompletedSession(
         lastCompletedSession.sessionId,
         lastCompletedSession.sessionDirectory,
@@ -313,6 +316,14 @@ if (!gotSingleInstanceLock) {
 
   app.on('before-quit', () => {
     stopHandoffServer();
+    recordingService?.stop();
+    sessionStore?.close();
+  });
+
+  app.on('window-all-closed', () => {
+    if (process.platform !== 'darwin') {
+      app.quit();
+    }
   });
 
   void app.whenReady().then(async () => {
@@ -330,11 +341,17 @@ if (!gotSingleInstanceLock) {
     }
 
     const userDataDirectory = app.getPath('userData');
+    const sensitiveAppsConfigPath = join(userDataDirectory, 'sensitive-apps.json');
+
+    if (!existsSync(sensitiveAppsConfigPath)) {
+      saveSensitiveAppConfig(sensitiveAppsConfigPath, DEFAULT_SENSITIVE_APP_PATTERNS);
+    }
+
     sessionStore = new DesktopSessionStore(
       join(userDataDirectory, 'worktrace.sqlite'),
       join(userDataDirectory, 'sessions'),
     );
-    recordingService = new RecordingService(sessionStore);
+    recordingService = new RecordingService(sessionStore, sensitiveAppsConfigPath);
 
     createWindow();
 
