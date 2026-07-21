@@ -81,3 +81,5 @@ class WalkthroughLocateResponse(BaseModel):
     coarse_cell: str
     fine_cell: str
     method: str = "vision_grid_2stage"
+    # One coaching sentence from Clicky POINT spoken text (optional).
+    coaching_hint: str | None = None

@@ -1,4 +1,6 @@
 import type { ScreenRect, WalkthroughStep } from './types';
+import { isUntrustedCaptureApp, resolveCaptureCrop } from './capture-crop';
+import { findWindowBoundsByAppName } from './find-app-window';
 import { getForegroundWindowBounds } from './foreground-window';
 import { captureDisplayRegionPng } from './screen-capture';
 import { mapViewportRectToScreen } from './coordinate-space';
@@ -143,9 +145,15 @@ export function findTextRectInOcrWords(
   return mapViewportRectToScreen(best, contentBounds, imageWidth, imageHeight);
 }
 
-type RecognizeFn = (pngBase64: string) => Promise<OcrWordBox[]>;
+export type RecognizeFn = (pngBase64: string) => Promise<OcrWordBox[]>;
 
 let defaultRecognize: RecognizeFn | null = null;
+
+/** Shared local OCR (tesseract.js) for callers outside playback (e.g. record-time labels). */
+export async function recognizePngWords(pngBase64: string): Promise<OcrWordBox[]> {
+  const recognize = await getDefaultRecognize();
+  return recognize(pngBase64);
+}
 
 async function getDefaultRecognize(): Promise<RecognizeFn> {
   if (defaultRecognize) {
@@ -203,16 +211,34 @@ export async function resolveOcrTarget(
   const getWindow = options?.getWindowBounds ?? getForegroundWindowBounds;
   const captureRegion = options?.captureRegion ?? captureDisplayRegionPng;
   const foreground = await getWindow();
-  const crop = foreground?.bounds ?? null;
-
+  const recordedApp =
+    typeof step.attrs?.foreground_app === 'string' ? step.attrs.foreground_app.trim() : '';
+  const needTargetLookup =
+    recordedApp.length > 0 && (!foreground?.appName || isUntrustedCaptureApp(foreground.appName));
+  const targetApp = needTargetLookup ? await findWindowBoundsByAppName(recordedApp) : null;
+  const cropDecision = resolveCaptureCrop(displayBounds, {
+    liveAppName: foreground?.appName,
+    liveBounds: foreground?.bounds ?? null,
+    step,
+    targetAppName: targetApp?.appName ?? (recordedApp || null),
+    targetAppBounds: targetApp?.bounds ?? null,
+  });
+  const crop = cropDecision.crop;
   if (!crop) {
-    console.warn('[walkthrough] ocr failed: no foreground window bounds');
-    return null;
+    console.info(`[walkthrough] ocr: ${cropDecision.reason}`);
   }
 
-  const capture = await captureRegion(displayBounds, crop);
+  let capture = crop ? await captureRegion(displayBounds, crop) : null;
   if (!capture) {
-    console.warn('[walkthrough] ocr failed: window capture unavailable');
+    if (crop) {
+      console.warn('[walkthrough] ocr: window crop unavailable; retrying full display capture');
+    } else {
+      console.warn('[walkthrough] ocr: no trusted window bounds; capturing active display');
+    }
+    capture = await captureRegion(displayBounds, null);
+  }
+  if (!capture) {
+    console.warn('[walkthrough] ocr failed: screen capture unavailable');
     return null;
   }
 

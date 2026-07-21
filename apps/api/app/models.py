@@ -71,6 +71,10 @@ class EventType(str, enum.Enum):
     file_save = "file_save"
     file_upload = "file_upload"
     file_download = "file_download"
+    # Desktop context (foreground / scroll / a11y focus), not DOM navigation.
+    window_change = "window_change"
+    scroll = "scroll"
+    focus_change = "focus_change"
 
 
 class SopStatus(str, enum.Enum):

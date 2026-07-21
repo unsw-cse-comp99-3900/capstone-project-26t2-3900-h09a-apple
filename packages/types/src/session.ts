@@ -30,7 +30,10 @@ export type EventType =
   | 'file_open'
   | 'file_save'
   | 'file_upload'
-  | 'file_download';
+  | 'file_download'
+  | 'window_change'
+  | 'scroll'
+  | 'focus_change';
 
 export type SopStatus = 'draft' | 'needs_review' | 'approved' | 'published';
 

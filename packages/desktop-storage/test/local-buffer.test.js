@@ -263,6 +263,9 @@ test('assembly keeps keydown and maps TEXT_INPUT to input for API schema', () =>
   assert.equal(mapEventTypeForApi('keydown'), 'keydown');
   assert.equal(mapEventTypeForApi('TEXT_INPUT'), 'input');
   assert.equal(mapEventTypeForApi('CLIPBOARD_COPY'), 'clipboard_copy');
+  assert.equal(mapEventTypeForApi('WINDOW_CHANGE'), 'window_change');
+  assert.equal(mapEventTypeForApi('scroll'), 'scroll');
+  assert.equal(mapEventTypeForApi('FOCUS_CHANGE'), 'focus_change');
 
   db.close();
 });

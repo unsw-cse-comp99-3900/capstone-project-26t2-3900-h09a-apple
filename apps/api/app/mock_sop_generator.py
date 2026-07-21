@@ -33,6 +33,46 @@ class MockSopGenerator(SopGenerator):
         label = getattr(event, "target_label", None) or getattr(event, "target_selector", None)
         if isinstance(label, str) and label.strip():
             return label.strip()
+
+        attrs = self._event_attrs(event)
+        for key in ("uia_labeled_by", "uia_help_text"):
+            value = attrs.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+
+        automation_id = attrs.get("uia_automation_id")
+        if isinstance(automation_id, str) and automation_id.strip():
+            # Keep readable ids; skip GUID-like noise.
+            aid = automation_id.strip()
+            if len(aid) <= 48 and any(ch.isalpha() for ch in aid):
+                return aid
+
+        candidates = attrs.get("uia_name_candidates")
+        if isinstance(candidates, list):
+            for entry in candidates:
+                if isinstance(entry, str) and entry.strip():
+                    return entry.strip()
+
+        return None
+
+    def _control_role(self, event):
+        attrs = self._event_attrs(event)
+        raw = attrs.get("uia_control_type")
+        if not isinstance(raw, str) or not raw.strip():
+            return None
+        lower = raw.lower()
+        if "button" in lower:
+            return "button"
+        if "hyperlink" in lower or "link" in lower:
+            return "link"
+        if "menuitem" in lower:
+            return "menu item"
+        if "tab" in lower:
+            return "tab"
+        if "edit" in lower:
+            return "text field"
+        if "listitem" in lower:
+            return "list item"
         return None
 
     def _humanize_type(self, event_type):
@@ -64,6 +104,16 @@ class MockSopGenerator(SopGenerator):
             return f"Submit {label}" if label else "Submit the form"
         if event_type == EventType.tab_switch.value:
             return "Switch tabs"
+        if event_type == EventType.window_change.value:
+            attrs = self._event_attrs(event)
+            to_app = attrs.get("to_app") or attrs.get("foreground_app")
+            if isinstance(to_app, str) and to_app.strip():
+                return f"Switch to {to_app.strip()}"
+            return "Switch application window"
+        if event_type == EventType.scroll.value:
+            return "Scroll in the application"
+        if event_type == EventType.focus_change.value:
+            return f"Focus {label}" if label else "Move keyboard focus"
 
         return self._humanize_type(event_type)
 
@@ -94,17 +144,40 @@ class MockSopGenerator(SopGenerator):
             destination = page_title or cleaned_url or "the page"
             return f"Open {destination}."
         if event_type == EventType.click.value:
-            target = label or "the highlighted control"
-            return f"Click {target}."
+            if label:
+                role = self._control_role(event)
+                if role and role not in label.lower():
+                    return f"Click the '{label}' {role}."
+                return f"Click '{label}'."
+            attrs = self._event_attrs(event)
+            app = attrs.get("foreground_app")
+            role = self._control_role(event)
+            if isinstance(app, str) and app.strip() and role:
+                return (
+                    f"Click the highlighted {role} in the {app.strip()} window."
+                )
+            if isinstance(app, str) and app.strip():
+                return (
+                    f"Click the highlighted control in the {app.strip()} window."
+                )
+            if role:
+                return f"Click the highlighted {role}."
+            return "Click the highlighted control."
         if event_type == EventType.input.value:
-            target = label or "the field"
-            return f"Enter the required information in the {target} field."
+            if label:
+                return f"Type in the '{label}' field."
+            return "Type in the highlighted text field."
         if event_type == EventType.keydown.value:
-            target = label or "the focused field"
-            keycode = self._event_attrs(event).get("keycode")
-            if keycode is not None:
-                return f"Press the required key in {target} (keycode {keycode})."
-            return f"Use the keyboard in {target}."
+            if label and label.lower() not in {"the focused field", "focused field"}:
+                return f"Type in the '{label}' field using the keyboard."
+            attrs = self._event_attrs(event)
+            app = attrs.get("foreground_app")
+            if isinstance(app, str) and app.strip():
+                return (
+                    f"Click the text field in the {app.strip()} window and type, "
+                    f"then continue."
+                )
+            return "Click the text field and type with the keyboard."
         if event_type == EventType.clipboard_copy.value:
             return "Copy the required content to the clipboard."
         if event_type == EventType.clipboard_paste.value:
@@ -126,6 +199,24 @@ class MockSopGenerator(SopGenerator):
         if event_type == EventType.tab_switch.value:
             target = page_title or cleaned_url or "the next tab"
             return f"Switch to {target}."
+        if event_type == EventType.window_change.value:
+            attrs = self._event_attrs(event)
+            to_app = attrs.get("to_app") or attrs.get("foreground_app")
+            to_title = attrs.get("to_title") or attrs.get("window_title")
+            if isinstance(to_app, str) and to_app.strip():
+                app = to_app.strip()
+                if isinstance(to_title, str) and to_title.strip() and to_title.strip() != app:
+                    return f"Bring the '{to_title.strip()}' window of {app} to the front."
+                return f"Switch to the {app} application."
+            return "Switch to the target application window."
+        if event_type == EventType.scroll.value:
+            attrs = self._event_attrs(event)
+            app = attrs.get("foreground_app")
+            where = app.strip() if isinstance(app, str) and app.strip() else "the application"
+            return f"Scroll within {where} to reveal the next control."
+        if event_type == EventType.focus_change.value:
+            target = label or "the next control"
+            return f"Move focus to {target}."
 
         action = self._humanize_type(event_type).lower() or "continue"
         target = f" on {label}" if label else ""

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -7,6 +8,7 @@ from sqlalchemy.orm import Session as DBSession
 
 from app import models
 from app.auth.deps import filter_by_tenant, require_role
+from app.clicky_point import locate_element_clicky_point
 from app.database import get_db
 from app.models import User, UserRole
 from app.vision_locate_service import (
@@ -102,25 +104,46 @@ def locate_walkthrough_element(
     payload: WalkthroughLocateRequest,
     current_user: Annotated[User, Depends(require_role(UserRole.employee))],
 ) -> WalkthroughLocateResponse:
-    """Locate a described element via two-stage vision grid (H09AAPPLE-53).
+    """Locate a UI control from a screenshot.
 
-    API keys stay on the server. The extension only sends a viewport screenshot
-    and receives viewport-space pixel bounds.
+    Primary path ports Clicky [POINT:x,y:label] (one vision call).
+    Two-stage grid fallback is OFF by default — it doubles latency per step.
+    Set WALKTHROUGH_VISION_GRID_FALLBACK=1 to re-enable.
     """
     _ = current_user  # auth + tenant gate only; no cross-tenant image store
 
     description = payload.description.strip()
-    if payload.instruction and payload.instruction.strip():
-        description = f"{description}. Context: {payload.instruction.strip()}"
+    instruction = payload.instruction.strip() if payload.instruction else None
+    grid_description = description
+    if instruction:
+        grid_description = f"{description}. Context: {instruction}"
+    grid_fallback = os.getenv("WALKTHROUGH_VISION_GRID_FALLBACK", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
 
     try:
         image_bytes = decode_image_payload(payload.image_base64, payload.content_type)
-        result = locate_element_two_stage(
-            image_bytes,
-            description=description,
-            viewport_width=payload.viewport_width,
-            viewport_height=payload.viewport_height,
-        )
+        try:
+            result = locate_element_clicky_point(
+                image_bytes,
+                description=description,
+                instruction=instruction,
+                viewport_width=payload.viewport_width,
+                viewport_height=payload.viewport_height,
+            )
+        except VisionLocateError:
+            if not grid_fallback:
+                raise
+            # Optional second LLM round-trip (slow).
+            result = locate_element_two_stage(
+                image_bytes,
+                description=grid_description,
+                viewport_width=payload.viewport_width,
+                viewport_height=payload.viewport_height,
+            )
     except VisionLocateError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -162,4 +185,5 @@ def locate_walkthrough_element(
         coarse_cell=result.coarse_cell,
         fine_cell=result.fine_cell,
         method=result.method,
+        coaching_hint=result.coaching_hint,
     )

@@ -63,7 +63,7 @@ def test_generate_single_step():
     assert len(result.steps) == 1
     assert result.steps[0].title == "Example Login"
     assert result.steps[0].instruction == (
-        "Open Example Login.\n" "Enter the required information in the username field."
+        "Open Example Login.\n" "Type in the 'username' field."
     )
     assert result.steps[0].branch is None
     assert isinstance(result, SopPayload)
@@ -90,7 +90,7 @@ def test_generate_title_falls_back_to_action_not_raw_url():
 
     assert result.steps[0].title == "Click Save changes"
     assert result.steps[0].title != "https://example.com/settings?very=long"
-    assert result.steps[0].instruction == "Click Save changes."
+    assert result.steps[0].instruction == "Click 'Save changes'."
 
 
 def test_navigation_title_falls_back_to_clean_url_without_query():
@@ -211,3 +211,90 @@ def test_generate_without_navigation():
 
     assert len(result.steps) == 1
     assert result.steps[0].title == "Click save"
+
+
+def test_window_change_and_focus_instructions():
+    session = SimpleNamespace(
+        workflow_name="Desktop",
+        events=[
+            SimpleNamespace(
+                id=1,
+                seq=0,
+                type="window_change",
+                url=None,
+                target_label=None,
+                target_selector=None,
+                attrs={"to_app": "Claude", "to_title": "Claude", "foreground_app": "Claude"},
+            ),
+            SimpleNamespace(
+                id=2,
+                seq=1,
+                type="focus_change",
+                url=None,
+                target_label="Create project",
+                target_selector=None,
+                attrs={"to_name": "Create project", "foreground_app": "Claude"},
+            ),
+            SimpleNamespace(
+                id=3,
+                seq=2,
+                type="scroll",
+                url=None,
+                target_label=None,
+                target_selector=None,
+                attrs={"foreground_app": "Claude", "delta_y": 3},
+            ),
+        ],
+    )
+
+    result = MockSopGenerator().generate(session)
+
+    assert any("Switch to" in step.instruction and "Claude" in step.instruction for step in result.steps)
+    assert any("Create project" in step.instruction for step in result.steps)
+    assert any("Scroll within Claude" in step.instruction for step in result.steps)
+
+
+def test_click_without_label_includes_foreground_app():
+    session = SimpleNamespace(
+        workflow_name="Desktop",
+        events=[
+            SimpleNamespace(
+                id=1,
+                seq=0,
+                type="click",
+                url=None,
+                target_label=None,
+                target_selector=None,
+                attrs={"foreground_app": "Claude"},
+            ),
+        ],
+    )
+
+    result = MockSopGenerator().generate(session)
+    assert result.steps[0].instruction == (
+        "Click the highlighted control in the Claude window."
+    )
+
+
+def test_click_uses_uia_help_text_and_role():
+    session = SimpleNamespace(
+        workflow_name="Desktop",
+        events=[
+            SimpleNamespace(
+                id=1,
+                seq=0,
+                type="click",
+                url=None,
+                target_label=None,
+                target_selector=None,
+                attrs={
+                    "foreground_app": "Claude",
+                    "uia_help_text": "New chat",
+                    "uia_control_type": "ControlType.Button",
+                },
+            ),
+        ],
+    )
+
+    result = MockSopGenerator().generate(session)
+    assert result.steps[0].instruction == "Click the 'New chat' button."

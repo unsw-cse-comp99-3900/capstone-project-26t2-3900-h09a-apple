@@ -11,6 +11,14 @@ import { postWalkthroughCompletion } from './completion-client';
 import { readForegroundBrowserUrl } from './foreground-url';
 import { resolveOcrTarget } from './ocr-resolve';
 import { WalkthroughOverlayWindow } from './overlay-window';
+import {
+  buildStepContext,
+  highlightStyleForSource,
+  isPaintableResolveSource,
+  pointInRect,
+  shouldAutoOpenStepUrl,
+  windowBoundsFromStep,
+} from './playback-honesty';
 import { formatAgentPromptDocument, hasCompleteCoachingSections } from './prompt-export';
 import { shouldApplyResolution } from './resolve-failure';
 import {
@@ -20,8 +28,11 @@ import {
   totalDurationSeconds,
 } from './step-timing';
 import { resolvePlaybackTarget } from './target-resolve';
+import { resolveTaskbarAppIcon } from './taskbar-resolve';
 import type {
   FrictionEvent,
+  HighlightStyle,
+  ScreenRect,
   StepTiming,
   WalkthroughPayload,
   WalkthroughStatus,
@@ -30,7 +41,7 @@ import type {
 } from './types';
 import { resolveStepPageUrl } from './step-navigation';
 import { learnFromStepTransition, resolvePlaybackTargetUrl } from './walkthrough-url-resolve';
-import { resetVisionSessionGate, resolveVisionGridOnScreen } from './vision-locate-client';
+import { resetVisionSessionGate, resolveVisionGridOnScreenDetailed } from './vision-locate-client';
 import { parseVoiceCommand, voiceCommandToAction } from './voice-commands';
 
 export class WalkthroughService {
@@ -44,7 +55,10 @@ export class WalkthroughService {
   private stepTimings: StepTiming[] = [];
   private frictionEvents: FrictionEvent[] = [];
   private lastResolvedNote: string | null = null;
+  private lastLiveTargetLabel: string | null = null;
   private lastHighlight: WalkthroughUiState['highlight'] = null;
+  private lastHighlightStyle: HighlightStyle | null = null;
+  private lastDisplaySize: { width: number; height: number } | null = null;
   private exportPreview: string | null = null;
   private error: string | null = null;
   private advanceArmed = true;
@@ -60,6 +74,10 @@ export class WalkthroughService {
   private resolvedUrls: Record<string, string> = {};
   /** Note when we refuse to reopen a stale recorded dynamic URL. */
   private urlNavNote: string | null = null;
+  /** Screen-space rect trusted for click-gated auto-advance (null = Next only). */
+  private lastGateRect: ScreenRect | null = null;
+  /** Manual Open page target after dynamic-URL resolution. */
+  private manualOpenUrl: string | null = null;
 
   private readonly overlay = new WalkthroughOverlayWindow();
   private readonly autoAdvance = new WalkthroughAutoAdvance();
@@ -75,6 +93,7 @@ export class WalkthroughService {
     const noteParts = [this.lastResolvedNote, this.urlNavNote].filter((part): part is string =>
       Boolean(part && part.trim()),
     );
+    const recordedUrl = step ? resolveStepPageUrl(step) : null;
 
     return {
       status: this.status,
@@ -86,9 +105,23 @@ export class WalkthroughService {
       screenshotUrl: step?.screenshot_url ?? null,
       fallbackNote: noteParts.length > 0 ? noteParts.join(' ') : null,
       highlight: this.lastHighlight,
+      highlightStyle: this.lastHighlight ? this.lastHighlightStyle : null,
+      displaySize: this.lastDisplaySize,
       previousDisabled: this.stepIndex <= 0 || this.navInFlight,
       isLastStep: steps.length > 0 && this.stepIndex >= steps.length - 1,
       navBusy: this.navInFlight,
+      platformBanner: this.status === 'playing' ? accessibilityDegradeNote() : null,
+      stepContext:
+        this.status === 'playing' || this.status === 'finished'
+          ? (() => {
+              const ctx = buildStepContext(step, recordedUrl);
+              if (this.lastLiveTargetLabel) {
+                return { ...ctx, targetLabel: this.lastLiveTargetLabel };
+              }
+              return ctx;
+            })()
+          : null,
+      openPageUrl: this.status === 'playing' ? this.manualOpenUrl : null,
       exportAvailable,
       exportPreview: this.exportPreview,
       error: this.error,
@@ -115,6 +148,8 @@ export class WalkthroughService {
     this.navInFlight = false;
     this.resolvedUrls = {};
     this.urlNavNote = null;
+    this.lastGateRect = null;
+    this.manualOpenUrl = null;
     resetVisionSessionGate();
 
     if (!isAccessibilityResolveSupported()) {
@@ -125,14 +160,15 @@ export class WalkthroughService {
     }
 
     const display = await getActiveDisplayBounds();
+    this.lastDisplaySize = { width: display.width, height: display.height };
     this.overlay.coverDisplay(display);
     // Wait until walkthrough.html has loaded and can receive IPC, otherwise the
     // first walkthrough:state is dropped and the overlay stays blank/transparent.
     await this.overlay.awaitReady();
     this.overlay.show();
 
-    this.autoAdvance.start(() => {
-      void this.handleAutoAdvance();
+    this.autoAdvance.start((event) => {
+      void this.handleAutoAdvance(event);
     });
 
     await this.enterCurrentStep();
@@ -157,8 +193,12 @@ export class WalkthroughService {
       this.frictionEvents = retractFrictionToStep(this.frictionEvents, destinationStepNumber);
       this.stepIndex = destinationIndex;
       this.lastHighlight = null;
+      this.lastHighlightStyle = null;
       this.lastResolvedNote = null;
+      this.lastLiveTargetLabel = null;
       this.urlNavNote = null;
+      this.lastGateRect = null;
+      this.manualOpenUrl = null;
       this.suppressAutoAdvance();
       this.advanceArmed = false;
       // Paint step copy immediately; resolve can take seconds.
@@ -192,8 +232,12 @@ export class WalkthroughService {
       this.leaveCurrentStep();
       this.stepIndex += 1;
       this.lastHighlight = null;
+      this.lastHighlightStyle = null;
       this.lastResolvedNote = null;
+      this.lastLiveTargetLabel = null;
       this.urlNavNote = null;
+      this.lastGateRect = null;
+      this.manualOpenUrl = null;
       this.advanceArmed = false;
       this.publish();
       console.info(`[walkthrough] Next -> step ${this.stepIndex + 1}`);
@@ -204,6 +248,48 @@ export class WalkthroughService {
       this.navInFlight = false;
       this.publish();
     }
+  }
+
+  /** Re-run live resolve on the current step (bring target app forward first). */
+  async recheck(): Promise<WalkthroughUiState> {
+    if (this.status !== 'playing' || !this.payload || this.navInFlight) {
+      return this.publish();
+    }
+
+    this.navInFlight = true;
+    this.publish();
+    try {
+      this.suppressAutoAdvance();
+      this.advanceArmed = false;
+      this.lastHighlight = null;
+      this.lastHighlightStyle = null;
+      this.lastGateRect = null;
+      this.lastResolvedNote = null;
+      this.lastLiveTargetLabel = null;
+      this.publish();
+      console.info(`[walkthrough] Re-check step ${this.stepIndex + 1}`);
+      await this.enterCurrentStep();
+      this.advanceArmed = true;
+      return this.publish();
+    } finally {
+      this.navInFlight = false;
+      this.publish();
+    }
+  }
+
+  /** Manual open of the resolved step URL (never invents paths). */
+  async openPage(): Promise<WalkthroughUiState> {
+    if (this.status !== 'playing' || !this.manualOpenUrl) {
+      return this.publish();
+    }
+    if (this.manualOpenUrl === this.lastOpenedUrl) {
+      console.info('[walkthrough] Open page skipped; URL already opened:', this.manualOpenUrl);
+      return this.publish();
+    }
+    this.lastOpenedUrl = this.manualOpenUrl;
+    console.info('[walkthrough] Open page (manual):', this.manualOpenUrl);
+    void shell.openExternal(this.manualOpenUrl);
+    return this.publish();
   }
 
   async finish(): Promise<WalkthroughUiState> {
@@ -239,6 +325,8 @@ export class WalkthroughService {
 
     this.status = 'finished';
     this.lastHighlight = null;
+    this.lastHighlightStyle = null;
+    this.lastGateRect = null;
     return this.publish();
   }
 
@@ -321,14 +409,36 @@ export class WalkthroughService {
     this.ignoreAutoAdvanceUntil = Date.now() + ms;
   }
 
-  private async handleAutoAdvance(): Promise<void> {
+  private async handleAutoAdvance(
+    event: { reason: 'click'; x: number; y: number } | { reason: 'keydown' },
+  ): Promise<void> {
     if (this.status !== 'playing' || !this.advanceArmed || this.navInFlight) {
       return;
     }
     if (Date.now() < this.ignoreAutoAdvanceUntil) {
       return;
     }
-    // Only auto-advance on a real target action, not UI chrome.
+
+    if (event.reason === 'keydown') {
+      // No trustworthy focused-field signal on desktop; require explicit Next.
+      console.info('[walkthrough] ignoring global keydown auto-advance; press Next after typing');
+      return;
+    }
+
+    if (!this.lastGateRect) {
+      console.info(
+        '[walkthrough] ignoring click auto-advance; no highlight/window gate (press Next)',
+      );
+      return;
+    }
+
+    if (!pointInRect(event.x, event.y, this.lastGateRect)) {
+      console.info(
+        `[walkthrough] ignoring click outside advance gate (${Math.round(event.x)},${Math.round(event.y)})`,
+      );
+      return;
+    }
+
     this.suppressAutoAdvance();
     this.advanceArmed = false;
     await this.next();
@@ -381,6 +491,7 @@ export class WalkthroughService {
     // 3) wait briefly so navigation can settle, 4) re-identify target.
     const openedUrl = this.maybeOpenInstructionUrl(step);
     const display = await getActiveDisplayBounds();
+    this.lastDisplaySize = { width: display.width, height: display.height };
     this.overlay.coverDisplay(display);
     this.overlay.show();
 
@@ -411,13 +522,22 @@ export class WalkthroughService {
         a11yAvailable: isAccessibilityResolveSupported(),
         a11yDegradeNote: accessibilityDegradeNote(),
         resolveAccessibility: async (liveStep) => resolveAccessibilityTarget(liveStep),
+        resolveTaskbarIcon: async (appName) => resolveTaskbarAppIcon(appName),
         resolveOcr: async (liveStep) => {
           ensureCloak();
           return resolveOcrTarget(liveStep, display);
         },
         resolveVisionGrid: async (liveStep) => {
           ensureCloak();
-          return resolveVisionGridOnScreen(liveStep, display);
+          const outcome = await resolveVisionGridOnScreenDetailed(liveStep, display);
+          if (!outcome.ok) {
+            return null;
+          }
+          return {
+            rect: outcome.rect,
+            coachingHint: outcome.coachingHint ?? null,
+            liveTargetLabel: outcome.liveTargetLabel ?? null,
+          };
         },
       });
     } finally {
@@ -431,24 +551,48 @@ export class WalkthroughService {
       return;
     }
 
-    this.lastHighlight = resolved.rect
+    this.lastLiveTargetLabel = resolved.liveTargetLabel?.trim() || null;
+
+    const paintable = isPaintableResolveSource(resolved.source) && resolved.rect;
+    this.lastHighlightStyle = paintable ? highlightStyleForSource(resolved.source) : null;
+    this.lastHighlight = paintable
       ? {
-          x: resolved.rect.x - display.x,
-          y: resolved.rect.y - display.y,
-          width: resolved.rect.width,
-          height: resolved.rect.height,
+          x: resolved.rect!.x - display.x,
+          y: resolved.rect!.y - display.y,
+          width: resolved.rect!.width,
+          height: resolved.rect!.height,
         }
       : null;
-    this.lastResolvedNote = resolved.fallbackNote;
+
+    // Advance gate: painted rect, else recorded window bounds (click-in-app).
+    const windowGate = windowBoundsFromStep(step);
+    this.lastGateRect = paintable ? { ...resolved.rect! } : windowGate ? { ...windowGate } : null;
+
+    let note = resolved.fallbackNote;
+    if (resolved.coachingHint?.trim()) {
+      note = [resolved.coachingHint.trim(), note]
+        .filter((part): part is string => Boolean(part && part.trim()))
+        .join(' ');
+    }
+    if (!paintable && !windowGate) {
+      note = [note, 'No live target on this step. Complete the action, then press Next.']
+        .filter((part): part is string => Boolean(part && part.trim()))
+        .join(' ');
+    }
+    this.lastResolvedNote = note;
     console.info(
       `[walkthrough] step ${this.stepIndex + 1} resolve source=${resolved.source}`,
-      resolved.rect
-        ? `rect=${Math.round(resolved.rect.x)},${Math.round(resolved.rect.y)} ${Math.round(resolved.rect.width)}x${Math.round(resolved.rect.height)}`
-        : 'no highlight',
+      paintable
+        ? `rect=${Math.round(resolved.rect!.x)},${Math.round(resolved.rect!.y)} ${Math.round(resolved.rect!.width)}x${Math.round(resolved.rect!.height)} style=${this.lastHighlightStyle}`
+        : windowGate
+          ? 'no spotlight; advance gated to recorded window_bounds'
+          : 'no spotlight (untrusted or miss)',
     );
 
     if (
-      resolved.source === 'unidentified' &&
+      (resolved.source === 'unidentified' ||
+        resolved.source === 'recorded_hint' ||
+        resolved.source === 'recorded_approximate') &&
       this.missFrictionStepIndex !== this.stepIndex &&
       hasTargetHint(step)
     ) {
@@ -488,14 +632,15 @@ export class WalkthroughService {
   }
 
   /**
-   * Open the step page URL using extension-style dynamic resource resolution.
-   * Never reopens a stale recorded id when the create flow produced a new resource.
-   * @returns opened URL, or null if nothing new was opened
+   * Resolve the step URL for manual Open page; auto-open only on step 0 when safe.
+   * Never reopens stale dynamic ids. Does not invent site-specific paths.
    */
   private maybeOpenInstructionUrl(step: WalkthroughStep): string | null {
     const recorded = resolveStepPageUrl(step);
     const live = readForegroundBrowserUrl();
     const { url, mode } = resolvePlaybackTargetUrl(recorded, this.resolvedUrls, live);
+
+    this.manualOpenUrl = url && (mode === 'recorded' || mode === 'resolved') ? url : null;
 
     if (mode === 'unresolved_dynamic') {
       console.info(
@@ -504,25 +649,37 @@ export class WalkthroughService {
       );
       this.urlNavNote =
         'This step recorded a dynamic resource URL. Stay on the page you just created in the browser; ' +
-        'desktop will not reopen the old recorded id.';
+        'desktop will not reopen the old recorded id. Use Open page only after the correct tab is ready.';
       return null;
     }
 
     if (mode === 'live') {
-      // Already on a matching live resource; do not bounce to the recorded id.
       this.lastOpenedUrl = url;
       this.urlNavNote = null;
       console.info('[walkthrough] using live matching resource URL (no reopen):', url);
       return null;
     }
 
-    if (!url || url === this.lastOpenedUrl) {
+    if (
+      !shouldAutoOpenStepUrl({ mode, url, stepIndex: this.stepIndex }) ||
+      !url ||
+      url === this.lastOpenedUrl
+    ) {
+      if (this.stepIndex > 0 && url && (mode === 'recorded' || mode === 'resolved')) {
+        console.info(
+          `[walkthrough] not auto-opening step ${this.stepIndex + 1} URL (${mode}); use Open page if needed:`,
+          url,
+        );
+        this.urlNavNote =
+          this.urlNavNote ??
+          'Page URL is available via Open page. Later steps do not auto-jump the browser.';
+      }
       return null;
     }
 
     this.lastOpenedUrl = url;
     this.urlNavNote = null;
-    console.info(`[walkthrough] opening step URL (${mode}) in default browser:`, url);
+    console.info(`[walkthrough] auto-opening start URL (${mode}):`, url);
     void shell.openExternal(url);
     return url;
   }

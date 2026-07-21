@@ -7,8 +7,21 @@ import activeWindow from 'active-win';
 import { clipboard, screen } from 'electron';
 import { uIOhook, UiohookKey } from 'uiohook-napi';
 import { DesktopSessionStore, type CompletedLocalSession } from './desktop-session-store';
+import {
+  EventCollector,
+  VisionDiffEventSource,
+  type NormalizedDesktopEvent,
+} from './recording/event-collector';
+import { lookupUiaFocusedElement } from './recording/uia-focus';
+import { lookupUiaLabelAtPoint } from './recording/uia-at-point';
+import { ocrLabelAtPoint } from './recording/ocr-at-point';
+import { pickControlLabel } from './recording/control-label';
 import { captureDisplayRegionPng } from './walkthrough/screen-capture';
 import type { ScreenRect } from './walkthrough/types';
+
+/** Record-time OCR fallback for clicks UIA cannot name (set to '0' to disable). */
+const RECORD_OCR_LABEL =
+  process.env.RECORD_OCR_LABEL !== '0' && process.env.RECORD_OCR_LABEL !== 'false';
 
 export type RecorderState = 'idle' | 'recording' | 'paused' | 'error';
 
@@ -33,6 +46,20 @@ interface TypingBuffer {
 const SKIP_LOG_THROTTLE_MS = 2_000;
 const TYPING_IDLE_FLUSH_MS = 900;
 const MAX_INPUT_VALUE_CHARS = 10_000;
+const WINDOW_POLL_MS = 400;
+const FOCUS_POLL_MS = 1200;
+
+/** Types accepted by API session ingest (pointer_sample stays local-only / dropped). */
+const PERSISTABLE_TYPES = new Set([
+  'click',
+  'keydown',
+  'input',
+  'clipboard_copy',
+  'clipboard_paste',
+  'window_change',
+  'scroll',
+  'focus_change',
+]);
 
 export class RecordingService {
   private state: RecorderState = 'idle';
@@ -44,6 +71,14 @@ export class RecordingService {
   private typingBuffer: TypingBuffer | null = null;
   private typingFlushTimer: ReturnType<typeof setTimeout> | null = null;
   private pendingCaptureJobs = new Set<Promise<void>>();
+  /** Serialize record-time OCR so a burst of unnamed clicks cannot thrash CPU. */
+  private ocrLabelInFlight = false;
+  private readonly collector: EventCollector;
+  private readonly visionDiffSource = new VisionDiffEventSource();
+  private windowPollTimer: ReturnType<typeof setInterval> | null = null;
+  private focusPollTimer: ReturnType<typeof setInterval> | null = null;
+  private lastWindowApp: string | null = null;
+  private lastWindowTitle: string | null = null;
 
   constructor(
     private readonly sessionStore: DesktopSessionStore,
@@ -51,6 +86,9 @@ export class RecordingService {
   ) {
     const loaded = loadSensitiveAppConfig(sensitiveAppsConfigPath);
     this.sensitivePatterns = loaded.patterns;
+    this.collector = new EventCollector((event) => {
+      this.persistNormalized(event);
+    });
   }
 
   reloadSensitiveAppConfig(configPath?: string): void {
@@ -75,9 +113,15 @@ export class RecordingService {
     try {
       this.eventCount = 0;
       this.typingBuffer = null;
+      this.collector.reset();
+      this.lastWindowApp = null;
+      this.lastWindowTitle = null;
       const sessionId = this.sessionStore.startSession();
       this.state = 'recording';
       uIOhook.start();
+      this.startContextPollers();
+      // Vision diff source reserved; start() is a no-op until wired.
+      this.visionDiffSource.start();
       console.log(`[desktop] Global recording started (session ${sessionId})`);
     } catch (error) {
       this.state = 'error';
@@ -99,6 +143,8 @@ export class RecordingService {
     if (this.state !== 'recording') return;
 
     this.flushTypingBuffer();
+    this.collector.flush();
+    this.stopContextPollers();
     this.state = 'paused';
   }
 
@@ -106,6 +152,7 @@ export class RecordingService {
     if (this.state !== 'paused') return;
 
     this.state = 'recording';
+    this.startContextPollers();
   }
 
   async stop(): Promise<CompletedLocalSession | null> {
@@ -114,6 +161,9 @@ export class RecordingService {
 
     try {
       this.flushTypingBuffer();
+      this.collector.flush();
+      this.stopContextPollers();
+      this.visionDiffSource.stop();
       uIOhook.stop();
     } finally {
       try {
@@ -161,39 +211,138 @@ export class RecordingService {
 
       const clickTimestamp = Date.now();
       const screenshotId = this.sessionStore.allocateScreenshotId();
-      const baseAttrs = this.buildCommonAttrs(foregroundContext, {
-        button: event.button,
-        coordinate_space: 'screen',
-      });
+      const clickX = event.x;
+      const clickY = event.y;
+      const button = event.button;
 
-      // Persist the click immediately so seq/order stays correct. Capture the
-      // PNG asynchronously into the pre-allocated screenshot id; assembly drops
-      // the reference if the file never lands before stop.
-      this.persistEvent({
-        category: 'mouse',
-        type: 'click',
-        timestamp_ms: clickTimestamp,
-        raw_x: event.x,
-        raw_y: event.y,
-        target_label: this.labelFromContext(foregroundContext),
-        url: foregroundContext.url,
-        screenshot_id: screenshotId,
-        attrs: baseAttrs,
-      });
+      // Resolve control Name at the click point before persisting so seq stays
+      // ordered and target_label is never the window/app chrome.
+      const job = (async () => {
+        const hit = await lookupUiaLabelAtPoint(clickX, clickY, {
+          foregroundApp: foregroundContext.foreground_app,
+          windowTitle: foregroundContext.window_title,
+        });
+        const baseAttrs = this.buildCommonAttrs(foregroundContext, {
+          button,
+          coordinate_space: 'screen',
+          ...(hit?.controlType ? { uia_control_type: hit.controlType } : {}),
+          ...(hit?.helpText ? { uia_help_text: hit.helpText } : {}),
+          ...(hit?.labeledBy ? { uia_labeled_by: hit.labeledBy } : {}),
+          ...(hit?.automationId ? { uia_automation_id: hit.automationId } : {}),
+          ...(hit?.bounds ? { uia_bounds: hit.bounds } : {}),
+          ...(hit?.alternateLabels?.length ? { uia_name_candidates: hit.alternateLabels } : {}),
+        });
 
-      if (!screenshotId) {
-        return;
-      }
+        let targetLabel = hit?.name ?? null;
+        let identificationSource: 'accessibility_api' | 'ocr' | 'unidentified' = hit?.name
+          ? 'accessibility_api'
+          : 'unidentified';
 
-      const job = this.captureClickWithScreenshot(
-        event.x,
-        event.y,
-        foregroundContext,
-        screenshotId,
-      );
+        // UIA gave no Name (common for Claude / Electron): read the on-screen
+        // text at the click so text controls stop landing as "unidentified".
+        if (!targetLabel && RECORD_OCR_LABEL && !this.ocrLabelInFlight) {
+          this.ocrLabelInFlight = true;
+          try {
+            const display = screen.getDisplayNearestPoint({ x: clickX, y: clickY });
+            const ocrText = await ocrLabelAtPoint(clickX, clickY, display.bounds);
+            const picked = pickControlLabel(
+              ocrText,
+              foregroundContext.foreground_app,
+              foregroundContext.window_title,
+            );
+            if (picked) {
+              targetLabel = picked;
+              identificationSource = 'ocr';
+              baseAttrs.ocr_label = picked;
+            }
+          } catch (error) {
+            console.warn(
+              '[desktop] click ocr fallback failed:',
+              error instanceof Error ? error.message : String(error),
+            );
+          } finally {
+            this.ocrLabelInFlight = false;
+          }
+        }
+
+        this.collector.emitImmediate({
+          category: 'mouse',
+          type: 'click',
+          timestamp_ms: clickTimestamp,
+          raw_x: clickX,
+          raw_y: clickY,
+          target_label: targetLabel,
+          url: foregroundContext.url,
+          screenshot_id: screenshotId,
+          is_identified: Boolean(targetLabel),
+          identification_source: identificationSource,
+          attrs: baseAttrs,
+        });
+
+        void this.sampleFocusChange(foregroundContext);
+
+        if (!screenshotId) {
+          return;
+        }
+
+        await this.captureClickWithScreenshot(clickX, clickY, foregroundContext, screenshotId);
+      })();
+
       this.pendingCaptureJobs.add(job);
       void job.finally(() => {
         this.pendingCaptureJobs.delete(job);
+      });
+    });
+
+    uIOhook.on('wheel', (event) => {
+      if (this.state !== 'recording') return;
+
+      const foregroundContext = this.getForegroundContext();
+      if (this.shouldSuppressCapture(foregroundContext)) return;
+
+      const rotation = Number((event as { rotation?: number }).rotation ?? 0) || 0;
+      const amount = Number((event as { amount?: number }).amount ?? 1) || 1;
+      const direction = Number((event as { direction?: number }).direction ?? 3);
+      // uiohook: direction 3 ≈ vertical, 4 ≈ horizontal (libuiohook conventions).
+      const deltaY = direction === 4 ? 0 : rotation * amount;
+      const deltaX = direction === 4 ? rotation * amount : 0;
+
+      this.collector.emitScroll({
+        category: 'mouse',
+        type: 'scroll',
+        timestamp_ms: Date.now(),
+        raw_x: Number(event.x) || null,
+        raw_y: Number(event.y) || null,
+        target_label: null,
+        url: foregroundContext.url,
+        is_identified: false,
+        identification_source: 'unidentified',
+        attrs: this.buildCommonAttrs(foregroundContext, {
+          delta_x: deltaX,
+          delta_y: deltaY,
+          wheel_direction: direction,
+        }),
+      });
+    });
+
+    uIOhook.on('mousemove', (event) => {
+      if (this.state !== 'recording') return;
+      if (!this.collector.getConfig().enablePointerSample) return;
+
+      const foregroundContext = this.getForegroundContext();
+      if (this.shouldSuppressCapture(foregroundContext)) return;
+
+      this.collector.emitPointerSample({
+        category: 'mouse',
+        type: 'pointer_sample',
+        timestamp_ms: Date.now(),
+        raw_x: Number(event.x) || null,
+        raw_y: Number(event.y) || null,
+        target_label: null,
+        url: foregroundContext.url,
+        is_identified: false,
+        identification_source: 'unidentified',
+        attrs: this.buildCommonAttrs(foregroundContext),
       });
     });
 
@@ -210,14 +359,17 @@ export class RecordingService {
       const keychar = typeof keycharRaw === 'number' ? keycharRaw : 0;
       const ctrlOrMeta = Boolean(event.ctrlKey || event.metaKey);
 
-      this.persistEvent({
+      this.collector.emitImmediate({
         category: 'keyboard',
         type: 'keydown',
         timestamp_ms: Date.now(),
         raw_x: null,
         raw_y: null,
-        target_label: this.labelFromContext(foregroundContext),
+        // Key events have no control-at-point; never invent app/window as label.
+        target_label: null,
         url: foregroundContext.url,
+        is_identified: false,
+        identification_source: 'unidentified',
         attrs: this.buildCommonAttrs(foregroundContext, {
           keycode,
           keychar: keychar || null,
@@ -341,20 +493,27 @@ export class RecordingService {
     );
   }
 
-  private persistEvent(event: {
-    category: string;
-    type: string;
-    timestamp_ms: number;
-    raw_x: number | null;
-    raw_y: number | null;
-    value?: string | null;
-    target_label?: string | null;
-    url?: string | null;
-    screenshot_id?: string | null;
-    attrs: Record<string, unknown>;
-  }): boolean {
+  private persistNormalized(event: NormalizedDesktopEvent): boolean {
+    if (!PERSISTABLE_TYPES.has(event.type)) {
+      // pointer_sample and other reserved local types are not API-ingestible yet.
+      return false;
+    }
+
     try {
-      const saved = this.sessionStore.saveCapturedEvent(event);
+      const saved = this.sessionStore.saveCapturedEvent({
+        category: event.category,
+        type: event.type,
+        timestamp_ms: event.timestamp_ms,
+        raw_x: event.raw_x,
+        raw_y: event.raw_y,
+        value: event.value,
+        target_label: event.target_label,
+        url: event.url,
+        screenshot_id: event.screenshot_id,
+        is_identified: event.is_identified,
+        identification_source: event.identification_source,
+        attrs: event.attrs,
+      });
       if (!saved) {
         return false;
       }
@@ -381,15 +540,17 @@ export class RecordingService {
       console.warn('[desktop] clipboard read failed:', error);
     }
 
-    this.persistEvent({
+    this.collector.emitImmediate({
       category: 'clipboard',
       type,
       timestamp_ms: Date.now(),
       raw_x: null,
       raw_y: null,
       value: text.slice(0, MAX_INPUT_VALUE_CHARS) || null,
-      target_label: this.labelFromContext(context),
+      target_label: null,
       url: context.url,
+      is_identified: false,
+      identification_source: 'unidentified',
       attrs: this.buildCommonAttrs(context, {
         clipboard_length: text.length,
       }),
@@ -403,7 +564,7 @@ export class RecordingService {
         chars: char,
         startedAtMs: now,
         lastAtMs: now,
-        target_label: this.labelFromContext(context),
+        target_label: null,
         url: context.url,
         foreground_app: context.foreground_app,
         window_title: context.window_title,
@@ -436,7 +597,7 @@ export class RecordingService {
       return;
     }
 
-    this.persistEvent({
+    this.collector.emitImmediate({
       category: 'keyboard',
       type: 'input',
       timestamp_ms: buffer.lastAtMs,
@@ -445,6 +606,8 @@ export class RecordingService {
       value: buffer.chars,
       target_label: buffer.target_label,
       url: buffer.url,
+      is_identified: false,
+      identification_source: 'unidentified',
       attrs: {
         layer: 'desktop',
         coordinate_space: 'screen',
@@ -454,6 +617,116 @@ export class RecordingService {
         typing_started_at_ms: buffer.startedAtMs,
       },
     });
+  }
+
+  private startContextPollers(): void {
+    this.stopContextPollers();
+    this.pollWindowChange();
+    this.windowPollTimer = setInterval(() => {
+      if (this.state === 'recording') {
+        this.pollWindowChange();
+      }
+    }, WINDOW_POLL_MS);
+
+    if (process.platform === 'win32' && this.collector.getConfig().enableFocusChange) {
+      this.focusPollTimer = setInterval(() => {
+        if (this.state === 'recording') {
+          void this.sampleFocusChange(this.getForegroundContext());
+        }
+      }, FOCUS_POLL_MS);
+    } else if (process.platform !== 'win32') {
+      console.info(`[desktop] focus_change unavailable on ${process.platform}; Windows UIA only`);
+    }
+  }
+
+  private stopContextPollers(): void {
+    if (this.windowPollTimer) {
+      clearInterval(this.windowPollTimer);
+      this.windowPollTimer = null;
+    }
+    if (this.focusPollTimer) {
+      clearInterval(this.focusPollTimer);
+      this.focusPollTimer = null;
+    }
+  }
+
+  private pollWindowChange(): void {
+    const context = this.getForegroundContext();
+    if (this.shouldSuppressCapture(context)) {
+      return;
+    }
+
+    const app = context.foreground_app;
+    const title = context.window_title;
+    if (this.lastWindowApp === null && this.lastWindowTitle === null) {
+      this.lastWindowApp = app;
+      this.lastWindowTitle = title;
+      return;
+    }
+
+    if (app === this.lastWindowApp && title === this.lastWindowTitle) {
+      return;
+    }
+
+    const fromApp = this.lastWindowApp;
+    const fromTitle = this.lastWindowTitle;
+    this.lastWindowApp = app;
+    this.lastWindowTitle = title;
+
+    this.collector.emitWindowChange({
+      category: 'system',
+      type: 'window_change',
+      timestamp_ms: Date.now(),
+      raw_x: null,
+      raw_y: null,
+      target_label: null,
+      url: context.url,
+      is_identified: false,
+      identification_source: 'unidentified',
+      attrs: this.buildCommonAttrs(context, {
+        from_app: fromApp,
+        from_title: fromTitle,
+        to_app: app,
+        to_title: title,
+      }),
+    });
+  }
+
+  private async sampleFocusChange(context: ForegroundContext): Promise<void> {
+    if (!this.collector.getConfig().enableFocusChange || process.platform !== 'win32') {
+      return;
+    }
+    if (this.shouldSuppressCapture(context)) {
+      return;
+    }
+
+    try {
+      const hit = await lookupUiaFocusedElement();
+      if (!hit?.name) {
+        return;
+      }
+      const label = pickControlLabel(hit.name, context.foreground_app, context.window_title);
+      if (!label) {
+        return;
+      }
+      this.collector.emitFocusChange({
+        category: 'a11y',
+        type: 'focus_change',
+        timestamp_ms: Date.now(),
+        raw_x: null,
+        raw_y: null,
+        target_label: label,
+        url: context.url,
+        is_identified: true,
+        identification_source: 'accessibility_api',
+        attrs: this.buildCommonAttrs(context, {
+          to_name: label,
+          uia_control_type: hit.controlType,
+        }),
+      });
+    } catch (error) {
+      console.warn('[desktop] focus_change sample failed:', error);
+    }
   }
 
   private printableFromKeychar(keychar: number): string | null {
@@ -469,15 +742,6 @@ export class RecordingService {
     } catch {
       return null;
     }
-  }
-
-  private labelFromContext(context: ForegroundContext): string | null {
-    const title = context.window_title?.trim();
-    if (title) {
-      return title;
-    }
-    const app = context.foreground_app?.trim();
-    return app || null;
   }
 
   private buildCommonAttrs(

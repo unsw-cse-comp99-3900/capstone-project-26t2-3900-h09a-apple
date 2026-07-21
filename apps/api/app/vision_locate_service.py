@@ -49,6 +49,8 @@ class VisionLocateResult:
     coarse_cell: str
     fine_cell: str
     method: str = "vision_grid_2stage"
+    # Clicky spoken line (sentence before [POINT:...]); unused by grid path.
+    coaching_hint: str | None = None
 
 
 CellPicker = Callable[[bytes, str, int, int], GridCell]

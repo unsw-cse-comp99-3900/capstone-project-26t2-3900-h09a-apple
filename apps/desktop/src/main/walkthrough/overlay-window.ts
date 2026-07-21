@@ -80,9 +80,27 @@ export class WalkthroughOverlayWindow {
     }
   }
 
+  /**
+   * Hide overlay chrome for screen capture. CSS cloak alone is not enough on
+   * Windows: always-on-top transparent windows still make desktopCapturer fail
+   * or return empty/useless frames.
+   */
   setCaptureCloak(cloaked: boolean): void {
     if (this.spotlight && !this.spotlight.isDestroyed()) {
       this.spotlight.webContents.send('walkthrough:capture-cloak', cloaked);
+      if (cloaked) {
+        this.spotlight.hide();
+      } else {
+        this.spotlight.showInactive();
+      }
+    }
+    if (this.panel && !this.panel.isDestroyed()) {
+      if (cloaked) {
+        this.panel.hide();
+      } else {
+        this.panel.show();
+        this.panel.moveTop();
+      }
     }
   }
 

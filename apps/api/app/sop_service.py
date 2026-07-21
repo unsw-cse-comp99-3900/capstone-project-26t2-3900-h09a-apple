@@ -118,6 +118,8 @@ def _walkthrough_expected_action(
         return "submit"
     if event_type == models.EventType.keydown.value:
         return "keydown"
+    # Context events (window_change / scroll / focus_change) do not force a
+    # click/input auto-advance gate; walkthrough uses Next / approximate.
     return None
 
 

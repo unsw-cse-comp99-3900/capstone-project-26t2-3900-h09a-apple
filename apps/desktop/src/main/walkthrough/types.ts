@@ -53,10 +53,32 @@ export interface StepTiming {
   duration_ms: number;
 }
 
+export type ResolveSource =
+  | 'accessibility_api'
+  | 'ocr'
+  | 'vision_model'
+  | 'recorded_approximate'
+  | 'recorded_hint'
+  | 'unidentified';
+
 export interface ResolvedTarget {
   rect: ScreenRect | null;
-  source: 'accessibility_api' | 'ocr' | 'vision_model' | 'recorded_hint' | 'unidentified';
+  source: ResolveSource;
   fallbackNote: string | null;
+  /** One-line Clicky coach sentence from vision (optional). */
+  coachingHint?: string | null;
+  /** Live-resolved control name (vision label / needle), not recorded metadata. */
+  liveTargetLabel?: string | null;
+}
+
+/** Spotlight styling: live match vs honest approximate recorded position. */
+export type HighlightStyle = 'live' | 'approximate';
+
+export interface WalkthroughStepContext {
+  app: string | null;
+  windowTitle: string | null;
+  targetLabel: string | null;
+  recordedUrl: string | null;
 }
 
 export interface WalkthroughUiState {
@@ -69,10 +91,23 @@ export interface WalkthroughUiState {
   screenshotUrl: string | null;
   fallbackNote: string | null;
   highlight: ScreenRect | null;
+  /** How the spotlight should look; null when no highlight. */
+  highlightStyle: HighlightStyle | null;
+  /**
+   * Spotlight window DIP size (same as coverDisplay bounds). Renderer compares
+   * to innerWidth to correct Windows transparent-window DPI skew.
+   */
+  displaySize?: { width: number; height: number } | null;
   previousDisabled: boolean;
   isLastStep: boolean;
   /** True while Previous/Next is waiting on openExternal / resolve (navInFlight). */
   navBusy: boolean;
+  /** Persistent platform capability note (e.g. Mac OCR+vision-only). */
+  platformBanner: string | null;
+  /** Recorded step context only; null fields mean unknown (not invented). */
+  stepContext: WalkthroughStepContext | null;
+  /** Navigable URL for manual Open page (after dynamic-URL resolution). */
+  openPageUrl: string | null;
   exportAvailable: boolean;
   exportPreview: string | null;
   error: string | null;

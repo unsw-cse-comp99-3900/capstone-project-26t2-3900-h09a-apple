@@ -433,6 +433,20 @@ if (!gotSingleInstanceLock) {
     return walkthroughService.next();
   });
 
+  ipcMain.handle('walkthrough:open-page', async () => {
+    if (!walkthroughService) {
+      throw new Error('Walkthrough service is not ready');
+    }
+    return walkthroughService.openPage();
+  });
+
+  ipcMain.handle('walkthrough:recheck', async () => {
+    if (!walkthroughService) {
+      throw new Error('Walkthrough service is not ready');
+    }
+    return walkthroughService.recheck();
+  });
+
   ipcMain.handle('walkthrough:finish', async () => {
     if (!walkthroughService) {
       throw new Error('Walkthrough service is not ready');
@@ -457,9 +471,13 @@ if (!gotSingleInstanceLock) {
         screenshotUrl: null,
         fallbackNote: null,
         highlight: null,
+        highlightStyle: null,
         previousDisabled: true,
         isLastStep: false,
         navBusy: false,
+        platformBanner: null,
+        stepContext: null,
+        openPageUrl: null,
         exportAvailable: false,
         exportPreview: null,
         error: null,

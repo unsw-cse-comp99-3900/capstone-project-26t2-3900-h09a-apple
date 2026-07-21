@@ -24,6 +24,9 @@ class EventType(str, Enum):
     file_save = "file_save"
     file_upload = "file_upload"
     file_download = "file_download"
+    window_change = "window_change"
+    scroll = "scroll"
+    focus_change = "focus_change"
 
 
 class JobStatus(str, Enum):

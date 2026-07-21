@@ -22,6 +22,8 @@ contextBridge.exposeInMainWorld('walkthroughAPI', {
   previous: () => withNavGuard(() => ipcRenderer.invoke('walkthrough:previous')),
   next: () => withNavGuard(() => ipcRenderer.invoke('walkthrough:next')),
   finish: () => withNavGuard(() => ipcRenderer.invoke('walkthrough:finish')),
+  openPage: () => ipcRenderer.invoke('walkthrough:open-page'),
+  recheck: () => withNavGuard(() => ipcRenderer.invoke('walkthrough:recheck')),
   dismiss: () => ipcRenderer.invoke('walkthrough:dismiss'),
   copyExport: () => ipcRenderer.invoke('walkthrough:copy-export'),
   saveExport: () => ipcRenderer.invoke('walkthrough:save-export'),

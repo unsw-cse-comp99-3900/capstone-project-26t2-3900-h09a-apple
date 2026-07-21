@@ -14,7 +14,9 @@
     <div id="highlight" class="highlight" hidden></div>
     <div id="tooltip" class="tooltip" role="dialog" aria-live="polite" hidden>
       <p id="eyebrow" class="eyebrow"></p>
+      <p id="platformBanner" class="platform-banner" hidden></p>
       <p id="instruction" class="instruction"></p>
+      <dl id="stepContext" class="step-context" hidden></dl>
       <img id="preview" class="preview" alt="Step screenshot preview" hidden />
       <p id="fallbackNote" class="fallback-note" hidden></p>
       <div id="exportPanel" class="export-panel" hidden>
@@ -27,6 +29,10 @@
       </div>
       <div id="actions" class="actions">
         <button type="button" class="btn-secondary" data-action="previous">Previous</button>
+        <button type="button" class="btn-secondary" data-action="recheck">Re-check</button>
+        <button type="button" class="btn-secondary" data-action="open-page" hidden>
+          Open page
+        </button>
         <button type="button" class="btn-primary" data-action="next">Next</button>
         <button type="button" class="btn-primary" data-action="finish" hidden>Finish</button>
       </div>

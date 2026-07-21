@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "db:migrate": "alembic upgrade head",
-    "dev": "uvicorn app.main:app --reload --host 0.0.0.0 --port 8000",
+    "dev": "node ./scripts/run-uvicorn.mjs",
     "build": "python -m compileall -q app",
     "lint": "ruff check . && ruff format --check .",
     "test": "pytest"

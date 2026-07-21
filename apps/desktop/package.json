@@ -8,7 +8,7 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test src/main/walkthrough/*.test.ts",
+    "test": "tsx --test src/main/walkthrough/*.test.ts src/main/recording/*.test.ts",
     "lint": "eslint .",
     "rebuild:native": "electron-builder install-app-deps",
     "package": "electron-vite build && electron-builder",

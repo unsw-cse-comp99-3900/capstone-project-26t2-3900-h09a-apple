@@ -9,13 +9,19 @@ export type VisionFailureReason =
   | 'invalid_response';
 
 export type VisionLocateOutcome =
-  | { ok: true; rect: import('./types').ScreenRect }
+  | {
+      ok: true;
+      rect: import('./types').ScreenRect;
+      coachingHint?: string | null;
+      /** Clicky POINT label / grid cell used as live Target in the panel. */
+      liveTargetLabel?: string | null;
+    }
   | { ok: false; reason: VisionFailureReason; detail?: string };
 
 export function formatVisionFailureLog(reason: VisionFailureReason, detail?: string): string {
   const base = {
     no_description: 'vision skipped: step has no target_label/instruction',
-    capture_failed: 'vision failed: could not capture target window screenshot',
+    capture_failed: 'vision failed: screen capture unavailable',
     not_authenticated: 'vision failed: desktop is not signed in',
     config_missing: 'vision failed: locate API unavailable (missing vision API key/config)',
     network_error: 'vision failed: network error calling locate-element',

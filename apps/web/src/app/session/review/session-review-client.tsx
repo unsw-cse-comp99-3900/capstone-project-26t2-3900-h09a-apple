@@ -104,6 +104,25 @@ const EVENT_ICONS: Record<EventType, ReactNode> = {
       <path d="M4 19h16" />
     </svg>
   ),
+  window_change: (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <path d="M3 9h18" />
+    </svg>
+  ),
+  scroll: (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M12 4v16" />
+      <path d="m8 8 4-4 4 4" />
+      <path d="m8 16 4 4 4-4" />
+    </svg>
+  ),
+  focus_change: (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <rect x="4" y="6" width="16" height="12" rx="2" />
+      <path d="M8 10h8M8 14h5" />
+    </svg>
+  ),
 };
 
 const EVENT_LABELS: Record<EventType, string> = {
@@ -120,6 +139,9 @@ const EVENT_LABELS: Record<EventType, string> = {
   file_save: 'File save',
   file_upload: 'File upload',
   file_download: 'File download',
+  window_change: 'Window change',
+  scroll: 'Scroll',
+  focus_change: 'Focus change',
 };
 
 const SESSION_REQUEST_ATTEMPTS = [

@@ -1,7 +1,9 @@
 import { uIOhook } from 'uiohook-napi';
 import type { WalkthroughStep } from './types';
 
-export type AutoAdvanceListener = (reason: 'click' | 'keydown') => void;
+export type AutoAdvanceEvent = { reason: 'click'; x: number; y: number } | { reason: 'keydown' };
+
+export type AutoAdvanceListener = (event: AutoAdvanceEvent) => void;
 
 export class WalkthroughAutoAdvance {
   private listening = false;
@@ -29,23 +31,29 @@ export class WalkthroughAutoAdvance {
       return;
     }
 
-    uIOhook.on('click', () => {
+    uIOhook.on('click', (event) => {
       if (!this.listening || !this.onAdvance) {
         return;
       }
       const expected = String(this.expected ?? 'click').toLowerCase();
       if (expected === 'click' || expected === 'pointer_click' || expected === '') {
-        this.onAdvance('click');
+        this.onAdvance({
+          reason: 'click',
+          x: Number(event.x),
+          y: Number(event.y),
+        });
       }
     });
 
+    // Keydown is reported for diagnostics only; the service does not auto-advance
+    // on global keydown (too loose without a focused-field signal).
     uIOhook.on('keydown', () => {
       if (!this.listening || !this.onAdvance) {
         return;
       }
       const expected = String(this.expected ?? '').toLowerCase();
       if (expected === 'input' || expected === 'keydown' || expected === 'keypress') {
-        this.onAdvance('keydown');
+        this.onAdvance({ reason: 'keydown' });
       }
     });
 

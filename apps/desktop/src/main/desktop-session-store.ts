@@ -26,6 +26,8 @@ export interface DesktopEventInput {
   target_label?: string | null;
   url?: string | null;
   screenshot_id?: string | null;
+  is_identified?: boolean;
+  identification_source?: 'accessibility_api' | 'ocr' | 'vision_model' | 'unidentified' | null;
   attrs: Record<string, unknown>;
 }
 
@@ -152,8 +154,8 @@ export class DesktopSessionStore {
       value: event.value ?? null,
       url: event.url ?? null,
       screenshot_id: event.screenshot_id ?? null,
-      is_identified: false,
-      identification_source: 'unidentified' as const,
+      is_identified: Boolean(event.is_identified),
+      identification_source: event.identification_source ?? 'unidentified',
       raw_x: event.raw_x,
       raw_y: event.raw_y,
       attrs: event.attrs,

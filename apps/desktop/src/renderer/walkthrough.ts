@@ -5,13 +5,17 @@ const role = (new URLSearchParams(window.location.search).get('role') || 'panel'
 const highlight = document.getElementById('highlight') as HTMLDivElement;
 const tooltip = document.getElementById('tooltip') as HTMLDivElement;
 const eyebrow = document.getElementById('eyebrow') as HTMLParagraphElement;
+const platformBanner = document.getElementById('platformBanner') as HTMLParagraphElement;
 const instruction = document.getElementById('instruction') as HTMLParagraphElement;
+const stepContextEl = document.getElementById('stepContext') as HTMLDListElement;
 const preview = document.getElementById('preview') as HTMLImageElement;
 const fallbackNote = document.getElementById('fallbackNote') as HTMLParagraphElement;
 const exportPanel = document.getElementById('exportPanel') as HTMLDivElement;
 const actions = document.getElementById('actions') as HTMLDivElement;
 const errorEl = document.getElementById('error') as HTMLParagraphElement;
 const previousBtn = tooltip.querySelector('[data-action="previous"]') as HTMLButtonElement;
+const recheckBtn = tooltip.querySelector('[data-action="recheck"]') as HTMLButtonElement;
+const openPageBtn = tooltip.querySelector('[data-action="open-page"]') as HTMLButtonElement;
 const nextBtn = tooltip.querySelector('[data-action="next"]') as HTMLButtonElement;
 const finishBtn = tooltip.querySelector('[data-action="finish"]') as HTMLButtonElement;
 
@@ -28,7 +32,6 @@ if (role === 'spotlight') {
 }
 
 function placeTooltip(anchor: { top: number; left: number; bottom: number; width: number }): void {
-  // Panel window is the card itself; keep tooltip filling the panel.
   tooltip.style.top = '12px';
   tooltip.style.left = '12px';
   tooltip.style.right = '12px';
@@ -45,6 +48,39 @@ function centerAnchor() {
   };
 }
 
+function renderStepContext(state: WalkthroughUiState): void {
+  const ctx = state.stepContext;
+  if (!ctx || state.status !== 'playing') {
+    stepContextEl.hidden = true;
+    stepContextEl.replaceChildren();
+    return;
+  }
+
+  let target = ctx.targetLabel?.trim() ? ctx.targetLabel : 'Unknown';
+  if (state.highlightStyle === 'approximate') {
+    target = `${target} (approximate)`;
+  }
+  const rows: Array<[string, string]> = [
+    ['App', ctx.app?.trim() ? ctx.app : 'Unknown'],
+    ['Window', ctx.windowTitle?.trim() ? ctx.windowTitle : 'Unknown'],
+    ['Target', target],
+  ];
+  if (ctx.recordedUrl?.trim()) {
+    rows.push(['Recorded URL', ctx.recordedUrl]);
+  }
+
+  stepContextEl.replaceChildren();
+  for (const [label, value] of rows) {
+    const dt = document.createElement('dt');
+    dt.textContent = label;
+    const dd = document.createElement('dd');
+    dd.textContent = value;
+    dd.title = value;
+    stepContextEl.append(dt, dd);
+  }
+  stepContextEl.hidden = false;
+}
+
 function renderSpotlight(state: WalkthroughUiState): void {
   lastState = state;
   tooltip.hidden = true;
@@ -56,12 +92,37 @@ function renderSpotlight(state: WalkthroughUiState): void {
 
   if (state.highlight.width > 0 && state.highlight.height > 0) {
     highlight.hidden = false;
-    highlight.style.left = `${state.highlight.x}px`;
-    highlight.style.top = `${state.highlight.y}px`;
-    highlight.style.width = `${state.highlight.width}px`;
-    highlight.style.height = `${state.highlight.height}px`;
+    highlight.classList.toggle('is-approximate', state.highlightStyle === 'approximate');
+    // DIP coords from main. On some Windows transparent overlays the CSS
+    // viewport is physical-sized while bounds stay DIP — scale so the hole
+    // does not drift bottom-right.
+    let x = state.highlight.x;
+    let y = state.highlight.y;
+    let w = state.highlight.width;
+    let h = state.highlight.height;
+    const dipW = state.displaySize?.width;
+    const dipH = state.displaySize?.height;
+    if (dipW && dipH && dipW > 0 && dipH > 0) {
+      const sx = window.innerWidth / dipW;
+      const sy = window.innerHeight / dipH;
+      if (
+        Number.isFinite(sx) &&
+        Number.isFinite(sy) &&
+        (Math.abs(sx - 1) > 0.02 || Math.abs(sy - 1) > 0.02)
+      ) {
+        x *= sx;
+        y *= sy;
+        w *= sx;
+        h *= sy;
+      }
+    }
+    highlight.style.left = `${x}px`;
+    highlight.style.top = `${y}px`;
+    highlight.style.width = `${w}px`;
+    highlight.style.height = `${h}px`;
   } else {
     highlight.hidden = true;
+    highlight.classList.remove('is-approximate');
   }
 }
 
@@ -73,6 +134,8 @@ function renderPanel(state: WalkthroughUiState): void {
   if (state.status === 'finished') {
     actions.hidden = true;
     exportPanel.hidden = false;
+    platformBanner.hidden = true;
+    stepContextEl.hidden = true;
     eyebrow.textContent = 'Walkthrough complete';
     instruction.textContent = state.exportAvailable
       ? 'Your validated agent prompt is ready to paste into Claude.'
@@ -96,15 +159,31 @@ function renderPanel(state: WalkthroughUiState): void {
     exportPanel.hidden = true;
     eyebrow.textContent = state.eyebrow;
     instruction.textContent = state.instruction;
+
+    if (state.platformBanner) {
+      platformBanner.hidden = false;
+      platformBanner.textContent = state.platformBanner;
+    } else {
+      platformBanner.hidden = true;
+    }
+
+    renderStepContext(state);
+
     const busy = Boolean(state.navBusy);
+    const noLiveTarget = !state.highlight || state.highlightStyle === 'approximate';
     previousBtn.disabled = state.previousDisabled || busy;
+    recheckBtn.disabled = busy;
     nextBtn.disabled = busy;
     finishBtn.disabled = busy;
+    openPageBtn.disabled = busy || !state.openPageUrl;
+    openPageBtn.hidden = !state.openPageUrl;
     nextBtn.hidden = state.isLastStep;
     finishBtn.hidden = !state.isLastStep;
     previousBtn.textContent = busy ? 'Resolving...' : 'Previous';
-    nextBtn.textContent = busy ? 'Resolving...' : 'Next';
+    recheckBtn.textContent = busy ? 'Resolving...' : 'Re-check';
+    nextBtn.textContent = busy ? 'Resolving...' : noLiveTarget ? 'Next (manual)' : 'Next';
     finishBtn.textContent = busy ? 'Resolving...' : 'Finish';
+    openPageBtn.textContent = 'Open page';
     actions.classList.toggle('is-busy', busy);
     actions.setAttribute('aria-busy', busy ? 'true' : 'false');
 
@@ -161,6 +240,10 @@ if (role === 'panel') {
       void window.walkthroughAPI.next().then(render);
     } else if (action === 'finish') {
       void window.walkthroughAPI.finish().then(render);
+    } else if (action === 'open-page') {
+      void window.walkthroughAPI.openPage().then(render);
+    } else if (action === 'recheck') {
+      void window.walkthroughAPI.recheck().then(render);
     } else if (action === 'copy-export') {
       void window.walkthroughAPI.copyExport();
     } else if (action === 'save-export') {

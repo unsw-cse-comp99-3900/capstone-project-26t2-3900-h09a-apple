@@ -37,6 +37,9 @@ export const API_SESSION_EVENT_TYPES = new Set([
   'file_save',
   'file_upload',
   'file_download',
+  'window_change',
+  'scroll',
+  'focus_change',
 ]);
 
 /**
@@ -65,6 +68,12 @@ const API_EVENT_TYPE_ALIASES = new Map([
   ['FILE_SAVE', 'file_save'],
   ['FILE_UPLOAD', 'file_upload'],
   ['FILE_DOWNLOAD', 'file_download'],
+  ['WINDOW_CHANGE', 'window_change'],
+  ['window_change', 'window_change'],
+  ['SCROLL', 'scroll'],
+  ['scroll', 'scroll'],
+  ['FOCUS_CHANGE', 'focus_change'],
+  ['focus_change', 'focus_change'],
 ]);
 
 /**

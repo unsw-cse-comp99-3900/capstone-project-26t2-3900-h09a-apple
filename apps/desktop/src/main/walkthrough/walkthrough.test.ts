@@ -21,6 +21,13 @@ import { formatVisionFailureLog, shouldApplyResolution } from './resolve-failure
 import { needleForStep, resolveStepPageUrl } from './step-navigation.js';
 import { parseWalkthroughProtocolSopId } from './protocol.js';
 import {
+  isAppFocusStep,
+  isPlausibleTaskbarHit,
+  targetAppNameFromStep,
+  taskbarIconHintRect,
+} from './app-focus.js';
+import { canSkipVisionForExtremeA11y } from './resolve-confidence.js';
+import {
   buildMissFallbackNote,
   refineGridCell,
   resolvePlaybackTarget,
@@ -214,11 +221,184 @@ test('hasScreenSpaceCoordinates only trusts desktop-marked raw coords', () => {
   );
 });
 
-test('resolvePlaybackTarget runs a11y and OCR concurrently then vision', async () => {
+test('app-focus steps target taskbar, not mid-page recorded coords', async () => {
+  const display = { x: 0, y: 0, width: 1707, height: 1067 };
+  const step = {
+    step_number: 2,
+    instruction: 'Click to focus the Claude application window.',
+    target_label: 'Claude',
+    attrs: { foreground_app: 'Claude', window_title: 'Claude' },
+    raw_coordinates: { x: 110, y: 180 },
+  };
+
+  assert.equal(isAppFocusStep(step), true);
+  assert.equal(targetAppNameFromStep(step), 'Claude');
+
+  const viaTaskbar = await resolvePlaybackTarget(step, display, {
+    resolveTaskbarIcon: async () => ({ x: 900, y: 1010, width: 44, height: 44 }),
+    resolveVisionGrid: async () => {
+      throw new Error('should not call vision when taskbar a11y hits');
+    },
+  });
+  assert.equal(viaTaskbar.source, 'accessibility_api');
+  assert.ok(viaTaskbar.rect);
+  assert.ok(viaTaskbar.rect!.y > display.height * 0.85);
+  assert.match(String(viaTaskbar.liveTargetLabel), /taskbar/i);
+
+  const viaHint = await resolvePlaybackTarget(step, display, {
+    resolveTaskbarIcon: async () => null,
+    resolveVisionGrid: async () => null,
+  });
+  assert.equal(viaHint.source, 'recorded_approximate');
+  assert.ok(viaHint.rect);
+  assert.ok(viaHint.rect!.y > display.height * 0.85);
+  assert.notEqual(viaHint.rect!.y, 160);
+
+  const midScreen = { x: 400, y: 300, width: 120, height: 48 };
+  assert.equal(isPlausibleTaskbarHit(midScreen, display), false);
+  const bar = taskbarIconHintRect(display);
+  assert.equal(isPlausibleTaskbarHit(bar, display), true);
+});
+
+test('non-app-focus steps reject vision taskbar hits', async () => {
+  const display = { x: 0, y: 0, width: 1707, height: 1067 };
+  const step = {
+    step_number: 5,
+    instruction: "Continue clicking to navigate through 'Claude'.",
+    attrs: {
+      foreground_app: 'Claude',
+      window_title: 'Claude',
+      layer: 'desktop',
+      coordinate_space: 'screen',
+      window_bounds: { x: 80, y: 40, width: 1400, height: 900 },
+    },
+    raw_coordinates: { x: 980, y: 720 },
+  };
+
+  assert.equal(isAppFocusStep(step), false);
+
+  const resolved = await resolvePlaybackTarget(step, display, {
+    resolveVisionGrid: async () => ({
+      rect: { x: 1100, y: 1010, width: 120, height: 48 },
+      coachingHint: 'Click the Claude icon on the bottom taskbar.',
+      liveTargetLabel: 'claude taskbar',
+    }),
+    resolveOcr: async () => null,
+    resolveAccessibility: async () => null,
+  });
+
+  assert.notEqual(resolved.source, 'vision_model');
+  assert.equal(/taskbar/i.test(String(resolved.liveTargetLabel || '')), false);
+  // Falls back to recorded click approximate inside the window, not taskbar.
+  assert.equal(resolved.source, 'recorded_approximate');
+  assert.ok(resolved.rect);
+  assert.ok(resolved.rect!.y < display.height * 0.85);
+});
+
+test('typing steps paint a field box instead of Unknown/taskbar', async () => {
+  const display = { x: 0, y: 0, width: 1707, height: 1067 };
+  const step = {
+    step_number: 3,
+    instruction: "Press a keyboard key in the 'Claude' window.",
+    expected_action: 'keydown' as const,
+    attrs: {
+      foreground_app: 'Claude',
+      window_title: 'Claude',
+      layer: 'desktop',
+      coordinate_space: 'screen',
+      window_bounds: { x: 80, y: 40, width: 1400, height: 900 },
+    },
+    raw_coordinates: { x: 700, y: 420 },
+  };
+
+  const resolved = await resolvePlaybackTarget(step, display, {
+    resolveVisionGrid: async () => ({
+      rect: { x: 1100, y: 1010, width: 120, height: 48 },
+      coachingHint: 'Press a key in the text input area at the bottom.',
+      liveTargetLabel: 'composer',
+    }),
+    resolveOcr: async () => null,
+    resolveAccessibility: async () => null,
+  });
+
+  assert.equal(resolved.source, 'recorded_approximate');
+  assert.ok(resolved.rect);
+  assert.ok(resolved.rect!.width >= 200);
+  assert.ok(resolved.rect!.y < display.height * 0.85);
+  assert.equal(resolved.liveTargetLabel, 'text field');
+});
+
+test('pickBestA11yCandidate prefers matching role then near click', async () => {
+  const { pickBestA11yCandidate } = await import('./accessibility-resolve.js');
+  const heading = {
+    x: 100,
+    y: 100,
+    width: 400,
+    height: 80,
+    area: 32000,
+    interactive: false,
+    controlType: 'ControlType.Text',
+  };
+  const farButton = {
+    x: 900,
+    y: 500,
+    width: 120,
+    height: 36,
+    area: 4320,
+    interactive: true,
+    controlType: 'ControlType.Button',
+  };
+  const nearButton = {
+    x: 200,
+    y: 220,
+    width: 100,
+    height: 32,
+    area: 3200,
+    interactive: true,
+    controlType: 'ControlType.Button',
+  };
+  const best = pickBestA11yCandidate([heading, farButton, nearButton], {
+    preferredTypeToken: 'button',
+    nearPoint: { x: 210, y: 230 },
+  });
+  assert.equal(best, nearButton);
+});
+
+test('extreme a11y skip requires multi-word needle and compact rect', () => {
+  const display = { x: 0, y: 0, width: 1920, height: 1080 };
+  const compact = { x: 400, y: 300, width: 140, height: 36 };
+  assert.equal(
+    canSkipVisionForExtremeA11y(
+      { step_number: 1, instruction: 'Click Save', target_label: 'Save' },
+      compact,
+      display,
+    ),
+    false,
+  );
+  assert.equal(
+    canSkipVisionForExtremeA11y(
+      { step_number: 1, instruction: 'Click Create project', target_label: 'Create project' },
+      compact,
+      display,
+    ),
+    true,
+  );
+  assert.equal(
+    canSkipVisionForExtremeA11y(
+      { step_number: 1, instruction: 'Click Create project', target_label: 'Create project' },
+      { x: 0, y: 0, width: 1800, height: 900 },
+      display,
+    ),
+    false,
+  );
+});
+
+test('resolvePlaybackTarget runs OCR and vision in parallel after a11y', async () => {
   const display = { x: 100, y: 50, width: 1920, height: 1080 };
   const order: string[] = [];
 
-  const viaA11y = await resolvePlaybackTarget(
+  // Short needle "Send" is NOT extreme-confidence - vision must still run.
+  const viaShortA11y = await resolvePlaybackTarget(
     { step_number: 1, instruction: 'Click', target_label: 'Send' },
     display,
     {
@@ -235,35 +415,48 @@ test('resolvePlaybackTarget runs a11y and OCR concurrently then vision', async (
         return { x: 220, y: 120, width: 70, height: 30 };
       },
       resolveVisionGrid: async () => {
-        order.push('vision');
-        return { x: 300, y: 200, width: 90, height: 50 };
+        order.push('vision-start');
+        await new Promise((r) => setTimeout(r, 5));
+        order.push('vision-done');
+        return {
+          rect: { x: 300, y: 200, width: 90, height: 50 },
+          coachingHint: 'click Send near the bottom right',
+        };
       },
     },
   );
-  assert.equal(viaA11y.source, 'accessibility_api');
-  assert.equal(viaA11y.fallbackNote, null);
-  // Both live layers start before either finishes (concurrent).
-  assert.ok(order.indexOf('a11y-start') < order.indexOf('ocr-done'));
-  assert.ok(order.indexOf('ocr-start') < order.indexOf('a11y-done'));
-  assert.ok(!order.includes('vision'));
+  // Strong needle + OCR hit preferred over POINT (keeps vision coach text).
+  assert.equal(viaShortA11y.source, 'ocr');
+  assert.equal(viaShortA11y.coachingHint, 'click Send near the bottom right');
+  // a11y finishes before OCR/vision start; OCR and vision overlap.
+  assert.ok(order.indexOf('a11y-done') < order.indexOf('ocr-start'));
+  assert.ok(order.indexOf('a11y-done') < order.indexOf('vision-start'));
+  assert.ok(order.indexOf('ocr-start') < order.indexOf('vision-done'));
+  assert.ok(order.indexOf('vision-start') < order.indexOf('ocr-done'));
 
-  const viaOcr = await resolvePlaybackTarget(
-    { step_number: 1, instruction: 'Click', target_label: 'Send' },
+  // Strong text needle: OCR wins over vision (avoids POINT drift to captions).
+  const viaOcrOverVision = await resolvePlaybackTarget(
+    { step_number: 1, instruction: 'Click', target_label: 'Chat' },
     display,
     {
       resolveAccessibility: async () => null,
       resolveOcr: async () => ({ x: 220, y: 120, width: 70, height: 30 }),
-      resolveVisionGrid: async () => ({ x: 300, y: 200, width: 90, height: 50 }),
+      resolveVisionGrid: async () => ({
+        rect: { x: 300, y: 400, width: 90, height: 50 },
+        coachingHint: 'click Chat',
+      }),
     },
   );
-  assert.equal(viaOcr.source, 'ocr');
+  assert.equal(viaOcrOverVision.source, 'ocr');
+  assert.equal(viaOcrOverVision.coachingHint, 'click Chat');
 
+  // Extreme multi-word a11y + compact rect may skip vision.
   let visionCalls = 0;
-  const viaVision = await resolvePlaybackTarget(
-    { step_number: 1, instruction: 'Click', target_label: 'New issue' },
+  const viaExtreme = await resolvePlaybackTarget(
+    { step_number: 1, instruction: 'Click Create project', target_label: 'Create project' },
     display,
     {
-      resolveAccessibility: async () => null,
+      resolveAccessibility: async () => ({ x: 400, y: 300, width: 140, height: 36 }),
       resolveOcr: async () => null,
       resolveVisionGrid: async () => {
         visionCalls += 1;
@@ -271,8 +464,20 @@ test('resolvePlaybackTarget runs a11y and OCR concurrently then vision', async (
       },
     },
   );
-  assert.equal(viaVision.source, 'vision_model');
-  assert.equal(visionCalls, 1);
+  assert.equal(viaExtreme.source, 'accessibility_api');
+  assert.equal(visionCalls, 0);
+
+  // Vision miss falls back to OCR.
+  const viaOcrFallback = await resolvePlaybackTarget(
+    { step_number: 1, instruction: 'Click', target_label: 'Send' },
+    display,
+    {
+      resolveAccessibility: async () => null,
+      resolveOcr: async () => ({ x: 220, y: 120, width: 70, height: 30 }),
+      resolveVisionGrid: async () => null,
+    },
+  );
+  assert.equal(viaOcrFallback.source, 'ocr');
 });
 
 test('screenshot-mode steps with a UI label still attempt live resolve', async () => {
@@ -288,16 +493,21 @@ test('screenshot-mode steps with a UI label still attempt live resolve', async (
   assert.equal(shouldAttemptLiveResolve(step), true);
 
   let ocrCalls = 0;
+  let visionCalls = 0;
   const resolved = await resolvePlaybackTarget(step, display, {
     resolveAccessibility: async () => null,
     resolveOcr: async () => {
       ocrCalls += 1;
       return { x: 120, y: 340, width: 160, height: 28 };
     },
-    resolveVisionGrid: async () => null,
+    resolveVisionGrid: async () => {
+      visionCalls += 1;
+      return null;
+    },
   });
 
   assert.equal(ocrCalls, 1);
+  assert.equal(visionCalls, 1);
   assert.equal(resolved.source, 'ocr');
   assert.equal(resolved.fallbackNote, null);
   assert.ok(resolved.rect);
@@ -372,10 +582,12 @@ test('resolvePlaybackTarget never paints non-screen recorded hints', async () =>
     },
     display,
   );
-  assert.equal(hinted.source, 'recorded_hint');
+  // Live miss: honest approximate hole from recorded screen coords (dashed UI).
+  assert.equal(hinted.source, 'recorded_approximate');
   assert.ok(hinted.rect);
   assert.equal(hinted.rect?.x, 360);
   assert.equal(hinted.rect?.y, 280);
+  assert.match(String(hinted.fallbackNote), /Approximate \(recorded\)/);
 
   const screenshotOnly = await resolvePlaybackTarget(
     {
@@ -387,13 +599,14 @@ test('resolvePlaybackTarget never paints non-screen recorded hints', async () =>
   );
   assert.equal(screenshotOnly.source, 'unidentified');
   assert.equal(screenshotOnly.rect, null);
+  // Desktop always attempts live resolve when instruction text exists (Clicky).
   assert.equal(
     shouldAttemptLiveResolve({
       step_number: 3,
       instruction: 'Read this',
       screenshot_url: 'https://example/s.png',
     }),
-    false,
+    true,
   );
 
   assert.equal(
@@ -482,15 +695,14 @@ test('stale resolve generation is discarded (rapid Next race)', async () => {
 test('vision unavailable still resolves via a11y or OCR', async () => {
   const display = { x: 0, y: 0, width: 1920, height: 1080 };
 
+  // Short "Save" is not extreme - vision is attempted; on miss, a11y remains.
   const viaA11y = await resolvePlaybackTarget(
     { step_number: 1, instruction: 'Click Save', target_label: 'Save' },
     display,
     {
       resolveAccessibility: async () => ({ x: 10, y: 20, width: 60, height: 24 }),
       resolveOcr: async () => null,
-      resolveVisionGrid: async () => {
-        throw new Error('should not call vision when a11y hits');
-      },
+      resolveVisionGrid: async () => null,
     },
   );
   assert.equal(viaA11y.source, 'accessibility_api');
@@ -591,6 +803,61 @@ test('resolveStepPageUrl mirrors extension expected_url / instruction order', ()
     null,
   );
   assert.equal(needleForStep({ step_number: 1, instruction: "Open 'Insights'" }), 'Insights');
+  assert.equal(
+    needleForStep({
+      step_number: 1,
+      instruction: "Click within the 'Claude' application window.",
+      target_label: 'Claude',
+      attrs: { foreground_app: 'Claude', window_title: 'Claude' },
+    }),
+    '',
+  );
+  assert.equal(
+    needleForStep({
+      step_number: 1,
+      instruction: "Click 'Create project'",
+      target_label: 'Claude',
+      attrs: { foreground_app: 'Claude', window_title: 'Claude' },
+    }),
+    'Create project',
+  );
+  assert.equal(
+    needleForStep({
+      step_number: 1,
+      instruction: 'Click Create project.',
+      attrs: { foreground_app: 'Claude' },
+    }),
+    'Create project',
+  );
+  assert.equal(
+    needleForStep({
+      step_number: 1,
+      instruction: 'Click the highlighted control in the Claude window.',
+      attrs: { foreground_app: 'Claude', window_title: 'Claude' },
+    }),
+    '',
+  );
+  assert.equal(
+    needleForStep({
+      step_number: 2,
+      instruction: "Press a series of keys on the keyboard while 'Claude' is active.",
+      attrs: { foreground_app: 'Claude' },
+    }),
+    '',
+  );
+  assert.equal(
+    needleForStep({
+      step_number: 3,
+      instruction: 'Click the highlighted control.',
+      target_label: null,
+      attrs: {
+        foreground_app: 'Claude',
+        uia_help_text: 'New chat',
+        uia_control_type: 'ControlType.Button',
+      },
+    }),
+    'New chat',
+  );
 });
 
 test('privacy crop uses window intersect, not full display', () => {
@@ -602,6 +869,37 @@ test('privacy crop uses window intersect, not full display', () => {
 
   const offscreen = intersectRects(display, { x: -50, y: 0, width: 80, height: 100 });
   assert.deepEqual(offscreen, { x: 0, y: 0, width: 30, height: 100 });
+});
+
+test('resolveCaptureCrop uses full display when live is Electron (no stale recorded bounds)', async () => {
+  const { resolveCaptureCrop } = await import('./capture-crop.js');
+  const display = { x: 0, y: 0, width: 1707, height: 1067 };
+  const recorded = { x: 100, y: 40, width: 1200, height: 900 };
+  const decision = resolveCaptureCrop(display, {
+    liveAppName: 'Electron',
+    liveBounds: { x: 0, y: 0, width: 400, height: 300 },
+    step: {
+      step_number: 1,
+      instruction: 'Click Chat',
+      attrs: { window_bounds: recorded, foreground_app: 'Claude' },
+    },
+  });
+  assert.equal(decision.crop, null);
+  assert.match(decision.reason, /full_display/);
+});
+
+test('resolveCaptureCrop prefers live target app window when overlay holds focus', async () => {
+  const { resolveCaptureCrop } = await import('./capture-crop.js');
+  const display = { x: 0, y: 0, width: 1707, height: 1067 };
+  const claude = { x: 80, y: 40, width: 1400, height: 900 };
+  const decision = resolveCaptureCrop(display, {
+    liveAppName: 'Electron',
+    liveBounds: { x: 0, y: 0, width: 400, height: 300 },
+    targetAppName: 'Claude',
+    targetAppBounds: claude,
+  });
+  assert.deepEqual(decision.crop, claude);
+  assert.equal(decision.reason, 'target_app=Claude');
 });
 
 test('viewport highlight alone cannot become a screen-space resolve', async () => {
