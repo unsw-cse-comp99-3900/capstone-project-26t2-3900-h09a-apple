@@ -153,13 +153,9 @@ class MockSopGenerator(SopGenerator):
             app = attrs.get("foreground_app")
             role = self._control_role(event)
             if isinstance(app, str) and app.strip() and role:
-                return (
-                    f"Click the highlighted {role} in the {app.strip()} window."
-                )
+                return f"Click the highlighted {role} in the {app.strip()} window."
             if isinstance(app, str) and app.strip():
-                return (
-                    f"Click the highlighted control in the {app.strip()} window."
-                )
+                return f"Click the highlighted control in the {app.strip()} window."
             if role:
                 return f"Click the highlighted {role}."
             return "Click the highlighted control."
@@ -174,8 +170,7 @@ class MockSopGenerator(SopGenerator):
             app = attrs.get("foreground_app")
             if isinstance(app, str) and app.strip():
                 return (
-                    f"Click the text field in the {app.strip()} window and type, "
-                    f"then continue."
+                    f"Click the text field in the {app.strip()} window and type, " f"then continue."
                 )
             return "Click the text field and type with the keyboard."
         if event_type == EventType.clipboard_copy.value:

@@ -62,9 +62,7 @@ def test_generate_single_step():
     assert result.title == "Login Flow"
     assert len(result.steps) == 1
     assert result.steps[0].title == "Example Login"
-    assert result.steps[0].instruction == (
-        "Open Example Login.\n" "Type in the 'username' field."
-    )
+    assert result.steps[0].instruction == ("Open Example Login.\n" "Type in the 'username' field.")
     assert result.steps[0].branch is None
     assert isinstance(result, SopPayload)
 
@@ -249,7 +247,9 @@ def test_window_change_and_focus_instructions():
 
     result = MockSopGenerator().generate(session)
 
-    assert any("Switch to" in step.instruction and "Claude" in step.instruction for step in result.steps)
+    assert any(
+        "Switch to" in step.instruction and "Claude" in step.instruction for step in result.steps
+    )
     assert any("Create project" in step.instruction for step in result.steps)
     assert any("Scroll within Claude" in step.instruction for step in result.steps)
 
@@ -271,9 +271,7 @@ def test_click_without_label_includes_foreground_app():
     )
 
     result = MockSopGenerator().generate(session)
-    assert result.steps[0].instruction == (
-        "Click the highlighted control in the Claude window."
-    )
+    assert result.steps[0].instruction == ("Click the highlighted control in the Claude window.")
 
 
 def test_click_uses_uia_help_text_and_role():
