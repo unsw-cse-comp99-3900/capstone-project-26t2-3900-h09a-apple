@@ -57,8 +57,8 @@ function ResetPasswordFormInner() {
       <AuthBrandPanel />
       <AuthFormPanel>
         <AuthFormCard
-          title="Choose a new password"
-          lead="Set a new password for your WorkTrace account."
+          title="Set a new password"
+          lead="Create a new password for your WorkTrace account"
           footer={
             <p className={styles.footer}>
               Ready to continue? <Link href="/login">Sign in</Link>

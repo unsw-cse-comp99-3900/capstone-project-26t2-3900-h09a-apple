@@ -27,6 +27,7 @@ from app.auth.rate_limit import clear_auth_rate_limit_state
 from app.auth.refresh_tokens import issue_refresh_token
 from app.database import get_db
 from app.email import clear_mock_email_outbox, get_mock_email_outbox
+from app.email.sender import build_password_reset_email
 from app.main import app
 from app.models import PasswordResetToken, RefreshToken, User, UserRole
 from app.settings import get_secret_key
@@ -666,3 +667,57 @@ def test_extension_handoff_redeem_rejects_expired_code(auth_db):
     response = client.post("/api/v1/auth/extension-handoff/redeem", json={"code": code})
 
     assert response.status_code == 401
+
+
+def test_password_reset_email_has_html_and_text_bodies(auth_db):
+    message = build_password_reset_email(to="employee@example.com", raw_token="raw-token")
+
+    assert message.subject == "Reset your WorkTrace password"
+    assert "http://localhost:3000/reset-password?token=raw-token" in message.text_body
+    assert message.html_body is not None
+    assert "WorkTrace" in message.html_body
+    assert "Reset password" in message.html_body
+    assert "expires in 30 minutes" in message.html_body
+
+
+def test_mock_email_outbox_exposes_reset_link_for_local_hand_testing(auth_db):
+    user = _employee()
+    auth_db.users.append(user)
+
+    client.post("/api/v1/auth/forgot-password", json={"email": user.email})
+    response = client.get("/api/v1/auth/dev/mock-email-outbox")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["messages"][0]["to"] == user.email
+    assert body["messages"][0]["reset_url"].startswith(
+        "http://localhost:3000/reset-password?token="
+    )
+    assert body["messages"][0]["html_body"]
+
+
+def test_mock_email_outbox_is_disabled_outside_mock(auth_db, monkeypatch):
+    monkeypatch.setenv("EMAIL_PROVIDER", "ses")
+
+    response = client.get("/api/v1/auth/dev/mock-email-outbox")
+
+    assert response.status_code == 404
+
+
+def test_forgot_password_logs_send_failure_without_changing_response(auth_db, monkeypatch, caplog):
+    class FailingSender:
+        def send(self, **_kwargs):
+            raise RuntimeError("SES rejected sender")
+
+    user = _employee()
+    auth_db.users.append(user)
+    monkeypatch.setattr(auth_routes, "get_email_sender", lambda: FailingSender())
+
+    response = client.post("/api/v1/auth/forgot-password", json={"email": user.email})
+
+    assert response.status_code == 200
+    assert response.json()["detail"] == (
+        "If an account exists for that email, a reset link has been sent."
+    )
+    assert "Password reset email send failed" in caplog.text
+    assert len(auth_db.password_reset_tokens) == 1
