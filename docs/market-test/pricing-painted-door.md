@@ -11,14 +11,18 @@ Feeds: **H09AAPPLE-55** (market test report).
 
 ## Status (honest schedule)
 
-| Field              | Value                                                                 |
-| ------------------ | --------------------------------------------------------------------- |
-| Brief target       | Sprint 2 / Week 6 (parallel with other market tests)                  |
-| Sprint 2 closed    | 2026-07-12                                                            |
-| Week 6             | Passed without this card or H09AAPPLE-55 starting                     |
-| This revision      | 2026-07-21                                                            |
-| Execution mode     | **Late catch-up** - run now; do not backdate or imply on-schedule run |
-| Engineering needed | None (Option A). Does not block or wait on -77 / -78 / -36 / -79      |
+| Field              | Value                                                                  |
+| ------------------ | ---------------------------------------------------------------------- |
+| Brief target       | Sprint 2 / Week 6 (parallel with other market tests)                   |
+| Sprint 2 closed    | 2026-07-12                                                             |
+| Week 6             | Flexible week in the course timetable; card work continues into Week 7 |
+| This revision      | 2026-07-21 (Week 7)                                                    |
+| Execution mode     | Run now in Week 7; do not backdate into Week 6 or imply an earlier run |
+| Engineering needed | None (Option A). Does not block or wait on -77 / -78 / -36 / -79       |
+
+**Schedule note for H09AAPPLE-55:** Week 6 being flexible makes a Week 7 run
+acceptable for course cadence. The dated Sprint 2 close (2026-07-12) is still
+past; say that plainly when asked. Never invent Week 6 click dates.
 
 Record the real **run start date** in the results table below when sharing begins.
 
