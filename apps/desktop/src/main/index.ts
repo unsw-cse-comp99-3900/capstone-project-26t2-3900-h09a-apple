@@ -29,8 +29,8 @@ let windowDragState:
 type WindowMode = 'compact' | 'expanded';
 
 const WINDOW_SIZES: Record<WindowMode, { width: number; height: number }> = {
-  compact: { width: 88, height: 88 },
-  expanded: { width: 440, height: 370 },
+  compact: { width: 104, height: 104 },
+  expanded: { width: 350, height: 300 },
 };
 
 interface RecordingStatus {

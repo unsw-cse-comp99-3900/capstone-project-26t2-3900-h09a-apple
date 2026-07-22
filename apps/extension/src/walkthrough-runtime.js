@@ -676,10 +676,43 @@
           background: #4f6bed;
           color: #fff;
         }
+        .identity-chip {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin: 0 0 10px;
+          padding: 6px 8px;
+          border-radius: 999px;
+          background: #1e293b;
+        }
+        .identity-chip[hidden] { display: none !important; }
+        .identity-avatar {
+          width: 22px;
+          height: 22px;
+          border-radius: 999px;
+          display: grid;
+          place-items: center;
+          color: #fff;
+          font-size: 11px;
+          font-weight: 800;
+          background: linear-gradient(135deg, #6882e8, #45c7a7);
+        }
+        .identity-label {
+          color: #cbd5e1;
+          font-size: 11px;
+          font-weight: 600;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
       </style>
       <div class="backdrop" aria-hidden="true"></div>
       <div class="highlight" hidden></div>
       <div class="tooltip" role="dialog" aria-live="polite" hidden>
+        <div class="identity-chip" hidden>
+          <span class="identity-avatar" aria-hidden="true">?</span>
+          <span class="identity-label"></span>
+        </div>
         <p class="eyebrow"></p>
         <p class="instruction"></p>
         <img class="preview" alt="Step screenshot preview" hidden />
@@ -1103,10 +1136,29 @@
     const previousBtn = root.querySelector('[data-action="previous"]');
     const nextBtn = root.querySelector('[data-action="next"]');
     const finishBtn = root.querySelector('[data-action="finish"]');
+    const identityChip = root.querySelector('.identity-chip');
+    const identityAvatar = root.querySelector('.identity-avatar');
+    const identityLabel = root.querySelector('.identity-label');
 
     const stepNumber = step.step_number ?? activeState.stepIndex + 1;
     eyebrow.textContent = `Step ${activeState.stepIndex + 1} / ${steps.length}`;
     instruction.textContent = String(step.instruction ?? '');
+
+    chrome.storage?.local?.get(['authEmail', 'authDisplayName'], (stored) => {
+      const email = stored?.authEmail;
+      const displayName = stored?.authDisplayName;
+      if (!identityChip || !identityAvatar || !identityLabel) {
+        return;
+      }
+      if (!email && !displayName) {
+        identityChip.hidden = true;
+        return;
+      }
+      const name = displayName || String(email).split('@')[0] || 'Signed in';
+      identityChip.hidden = false;
+      identityAvatar.textContent = String(name).charAt(0).toUpperCase();
+      identityLabel.textContent = `Signed in as ${name}`;
+    });
 
     const isFirst = activeState.stepIndex <= 0;
     const isLast = activeState.stepIndex >= steps.length - 1;

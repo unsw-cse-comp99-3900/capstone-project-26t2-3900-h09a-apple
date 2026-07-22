@@ -459,6 +459,53 @@ footer svg {
   line-height: 1.5;
 }
 
+.identity-section {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 16px;
+  padding: 12px;
+  border: 1px solid #dfe4fb;
+  border-radius: 16px;
+  background: rgb(255 255 255 / 88%);
+}
+
+.identity-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-weight: 800;
+  background: linear-gradient(135deg, #6882e8, #45c7a7);
+}
+
+.identity-copy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.identity-copy strong {
+  font-size: 13px;
+  color: #17213d;
+}
+
+.identity-copy span {
+  font-size: 12px;
+  color: #75809d;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.identity-signout {
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

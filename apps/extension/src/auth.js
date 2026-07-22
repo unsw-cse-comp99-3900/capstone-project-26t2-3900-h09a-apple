@@ -5,6 +5,8 @@ export const AUTH_STORAGE_KEYS = {
   refreshToken: 'authRefreshToken',
   expiresAt: 'authExpiresAt',
   userId: 'authUserId',
+  email: 'authEmail',
+  displayName: 'authDisplayName',
 };
 
 function storageGet(keys) {
@@ -32,6 +34,8 @@ export async function getStoredAuthTokens() {
     refreshToken: result[AUTH_STORAGE_KEYS.refreshToken] ?? null,
     expiresAt: result[AUTH_STORAGE_KEYS.expiresAt] ?? null,
     userId: result[AUTH_STORAGE_KEYS.userId] ?? null,
+    email: result[AUTH_STORAGE_KEYS.email] ?? null,
+    displayName: result[AUTH_STORAGE_KEYS.displayName] ?? null,
   };
 }
 
@@ -77,7 +81,51 @@ export async function redeemHandoffCode(code) {
     payload.expires_in,
     payload.user_id,
   );
+  try {
+    await refreshStoredUserProfile();
+  } catch {
+    // Profile is best-effort; tokens alone are enough to start recording.
+  }
   return payload;
+}
+
+function displayNameFromEmail(email) {
+  const local = String(email || '').split('@')[0] || 'User';
+  return local
+    .replace(/[._-]+/g, ' ')
+    .replace(/\b\w/g, (ch) => ch.toUpperCase())
+    .trim();
+}
+
+export async function setStoredUserProfile({ email, displayName }) {
+  await storageSet({
+    [AUTH_STORAGE_KEYS.email]: email ?? null,
+    [AUTH_STORAGE_KEYS.displayName]: displayName ?? null,
+  });
+}
+
+export async function getStoredUserProfile() {
+  const tokens = await getStoredAuthTokens();
+  return {
+    email: tokens.email,
+    displayName: tokens.displayName,
+    userId: tokens.userId,
+  };
+}
+
+/** Fetch GET /api/v1/auth/me and cache email/displayName for popup + walkthrough UI. */
+export async function refreshStoredUserProfile() {
+  const response = await authenticatedFetch('/api/v1/auth/me');
+  if (!response.ok) {
+    throw new Error('Failed to load extension user profile');
+  }
+  const body = await response.json();
+  const email = typeof body.email === 'string' ? body.email : null;
+  const displayName =
+    (typeof body.display_name === 'string' && body.display_name.trim()) ||
+    (email ? displayNameFromEmail(email) : null);
+  await setStoredUserProfile({ email, displayName });
+  return { email, displayName, userId: body.id ?? null, role: body.role ?? null };
 }
 
 async function refreshAccessToken(refreshToken) {

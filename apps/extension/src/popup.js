@@ -18,7 +18,13 @@ import {
   stopWalkthrough,
 } from './walkthrough-state.js';
 import { WEB_APP_BASE_URL } from './config.js';
-import { AUTH_STORAGE_KEYS, authenticatedFetch, getStoredAuthTokens } from './auth.js';
+import {
+  AUTH_STORAGE_KEYS,
+  authenticatedFetch,
+  clearStoredAuthTokens,
+  getStoredAuthTokens,
+  refreshStoredUserProfile,
+} from './auth.js';
 import {
   clearDataCaptureConsent,
   isConsentCurrent,
@@ -31,6 +37,10 @@ import { hasSessionPayload } from './session-store.js';
 const authSection = document.querySelector('#authSection');
 const recordingSection = document.querySelector('#recordingSection');
 const signInButton = document.querySelector('#signInButton');
+const signOutButton = document.querySelector('#signOutButton');
+const identityAvatar = document.querySelector('#identityAvatar');
+const identityName = document.querySelector('#identityName');
+const identityEmail = document.querySelector('#identityEmail');
 const footerText = document.querySelector('#footerText');
 const form = document.querySelector('#recordingForm');
 const workflowNameInput = document.querySelector('#workflowName');
@@ -72,7 +82,26 @@ let consentRecord = null;
 let isAuthenticated = false;
 let authReady = false;
 let currentUserId = null;
+let currentUserEmail = null;
+let currentDisplayName = null;
 let sessionStorageError = null;
+
+function initialFromLabel(label) {
+  const text = String(label || '?').trim();
+  return (text.charAt(0) || '?').toUpperCase();
+}
+
+function renderIdentity() {
+  if (!identityAvatar || !identityName || !identityEmail) {
+    return;
+  }
+  const name =
+    currentDisplayName || (currentUserEmail ? currentUserEmail.split('@')[0] : 'Signed in');
+  const email = currentUserEmail || '';
+  identityAvatar.textContent = initialFromLabel(name);
+  identityName.textContent = name;
+  identityEmail.textContent = email;
+}
 
 function getLocalStorage(keys) {
   return new Promise((resolve) => {
@@ -121,11 +150,15 @@ async function refreshAuthState({ renderAfter = true } = {}) {
   const previousUserId = currentUserId;
   isAuthenticated = Boolean(tokens.accessToken && tokens.refreshToken);
   currentUserId = tokens.userId ?? null;
+  currentUserEmail = tokens.email ?? null;
+  currentDisplayName = tokens.displayName ?? null;
 
   if (!isAuthenticated) {
     // Drop cached consent on logout so the next account cannot reuse it.
     await clearLocalConsent();
     consentRecord = null;
+    currentUserEmail = null;
+    currentDisplayName = null;
     if (renderAfter) {
       render();
     }
@@ -145,6 +178,16 @@ async function refreshAuthState({ renderAfter = true } = {}) {
     consentRecord = null;
   }
 
+  if (!currentUserEmail) {
+    try {
+      const profile = await refreshStoredUserProfile();
+      currentUserEmail = profile.email;
+      currentDisplayName = profile.displayName;
+    } catch {
+      // Keep token-only session if /me is unreachable.
+    }
+  }
+
   if (renderAfter) {
     render();
   }
@@ -153,6 +196,17 @@ async function refreshAuthState({ renderAfter = true } = {}) {
 
 signInButton.addEventListener('click', () => {
   openSignInPage();
+});
+
+signOutButton?.addEventListener('click', () => {
+  void (async () => {
+    try {
+      await clearStoredAuthTokens();
+      chrome.runtime?.sendMessage?.({ type: 'EXTENSION_LOGOUT' });
+    } finally {
+      await refreshAuthState();
+    }
+  })();
 });
 
 window.addEventListener('focus', () => {
@@ -187,7 +241,9 @@ chrome.storage?.onChanged.addListener((changes, area) => {
       changes[AUTH_STORAGE_KEYS.accessToken] ||
       changes[AUTH_STORAGE_KEYS.refreshToken] ||
       changes[AUTH_STORAGE_KEYS.expiresAt] ||
-      changes[AUTH_STORAGE_KEYS.userId]
+      changes[AUTH_STORAGE_KEYS.userId] ||
+      changes[AUTH_STORAGE_KEYS.email] ||
+      changes[AUTH_STORAGE_KEYS.displayName]
     ) {
       void refreshAuthState();
     }
@@ -258,6 +314,7 @@ function render() {
   }
 
   setPanelVisibility(isAuthenticated);
+  renderIdentity();
   footerText.textContent = isAuthenticated
     ? 'This preview keeps recording state on your device only.'
     : 'Sign in through the web app to connect this extension to your workspace.';

@@ -432,7 +432,7 @@ test('shows sign-in state when extension auth tokens are missing', async () => {
 
   signInButton.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
   assert.equal(openedTabs.length, 1);
-  assert.match(openedTabs[0].url, /\/login$/);
+  assert.equal(openedTabs[0].url, 'http://localhost:3000/login');
 });
 
 test('initPopup awaits recording state and event buffer before first render', () => {

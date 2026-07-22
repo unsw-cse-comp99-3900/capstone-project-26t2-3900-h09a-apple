@@ -5,7 +5,9 @@
   "type": "module",
   "main": "src/index.js",
   "scripts": {
-    "test": "node --test"
+    "pretest": "node ./scripts/ensure-native-for-node.mjs",
+    "test": "node --test",
+    "rebuild:node": "node ./scripts/ensure-native-for-node.mjs"
   },
   "dependencies": {
     "better-sqlite3": "12.11.1"

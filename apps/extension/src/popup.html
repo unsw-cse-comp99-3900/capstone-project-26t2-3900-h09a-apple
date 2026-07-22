@@ -31,6 +31,17 @@
       </section>
 
       <div id="recordingSection" hidden>
+        <section id="identitySection" class="identity-section" aria-label="Signed-in account">
+          <span id="identityAvatar" class="identity-avatar" aria-hidden="true">?</span>
+          <div class="identity-copy">
+            <strong id="identityName">Signed in</strong>
+            <span id="identityEmail"></span>
+          </div>
+          <button id="signOutButton" class="button button-secondary identity-signout" type="button">
+            Sign out
+          </button>
+        </section>
+
         <section class="intro" aria-labelledby="capture-heading">
           <div>
             <h2 id="capture-heading">Record a workflow</h2>

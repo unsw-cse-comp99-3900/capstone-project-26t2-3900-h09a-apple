@@ -5,6 +5,10 @@ import styles from '@/app/login/auth.module.css';
 export function AuthFormFooter() {
   return (
     <footer className={styles.formMetaFooter}>
+      <Link href="/">Back home</Link>
+      <span className={styles.formMetaDivider} aria-hidden="true">
+        &middot;
+      </span>
       <span>&copy; 2026 WorkTrace AI</span>
       <span className={styles.formMetaDivider} aria-hidden="true">
         &middot;

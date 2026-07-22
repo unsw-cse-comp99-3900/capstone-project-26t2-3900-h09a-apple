@@ -97,6 +97,7 @@ async function runAction(action: () => Promise<RecordingStatus>): Promise<void> 
 
 async function refreshAuth(): Promise<void> {
   const auth = await window.desktopAPI.getAuthStatus();
+  const wasAuthenticated = authenticated;
 
   authenticated = auth.authenticated;
 
@@ -107,6 +108,12 @@ async function refreshAuth(): Promise<void> {
 
   if (!authenticated) {
     hideConsent();
+  }
+
+  // After a fresh sign-in, collapse back to the floating orb so it does not
+  // look like the ball "disappeared" behind the expanded panel.
+  if (!wasAuthenticated && authenticated) {
+    document.body.dataset.windowMode = await window.desktopAPI.setWindowMode('compact');
   }
 }
 
