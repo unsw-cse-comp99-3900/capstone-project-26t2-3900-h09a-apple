@@ -30,7 +30,7 @@ if config.config_file_name is not None:
 database_url = os.getenv("DATABASE_URL")
 if database_url:
     # Alembic stores options in ConfigParser, where percent signs trigger
-    # interpolation. URL-encoded credentials contain values such as ``%5B``;
+    # interpolation. URL-encoded credentials contain values such as %5B;
     # escape them here so the database URL reaches SQLAlchemy unchanged.
     config.set_main_option("sqlalchemy.url", database_url.replace("%", "%%"))
 
