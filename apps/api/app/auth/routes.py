@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import secrets
 from typing import Annotated
 from uuid import UUID, uuid4
@@ -48,6 +49,8 @@ from app.auth_schema import (
     LogoutRequest,
     LogoutResponse,
     MeResponse,
+    MockEmailOutboxItem,
+    MockEmailOutboxResponse,
     RefreshRequest,
     RefreshResponse,
     RegisterRequest,
@@ -56,10 +59,16 @@ from app.auth_schema import (
     ResetPasswordResponse,
 )
 from app.database import get_db
-from app.email.sender import build_password_reset_email, get_email_sender
+from app.email.sender import (
+    build_password_reset_email,
+    get_email_sender,
+    get_mock_email_outbox,
+    is_mock_outbox_available,
+)
 from app.models import User, UserRole
 from app.settings import SettingsError, get_default_tenant_id
 
+logger = logging.getLogger(__name__)
 router = APIRouter(
     prefix="/api/v1/auth",
     tags=["auth"],
@@ -321,13 +330,40 @@ def forgot_password(
     if user is not None:
         raw_token = create_reset_token(db, user)
         message = build_password_reset_email(to=user.email, raw_token=raw_token)
-        get_email_sender().send(
-            to=message.to,
-            subject=message.subject,
-            text_body=message.text_body,
-        )
+        try:
+            get_email_sender().send(
+                to=message.to,
+                subject=message.subject,
+                text_body=message.text_body,
+                html_body=message.html_body,
+            )
+            logger.info("Password reset email queued", extra={"user_id": str(user.id)})
+        except Exception:
+            logger.exception(
+                "Password reset email send failed",
+                extra={"user_id": str(user.id)},
+            )
 
     return ForgotPasswordResponse()
+
+
+@router.get("/dev/mock-email-outbox", response_model=MockEmailOutboxResponse)
+def mock_email_outbox() -> MockEmailOutboxResponse:
+    if not is_mock_outbox_available():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+
+    return MockEmailOutboxResponse(
+        messages=[
+            MockEmailOutboxItem(
+                to=message.to,
+                subject=message.subject,
+                text_body=message.text_body,
+                html_body=message.html_body,
+                reset_url=message.reset_url,
+            )
+            for message in get_mock_email_outbox()
+        ]
+    )
 
 
 @router.post("/reset-password", response_model=ResetPasswordResponse)

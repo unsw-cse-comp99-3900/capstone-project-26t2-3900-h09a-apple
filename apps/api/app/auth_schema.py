@@ -78,6 +78,18 @@ class ForgotPasswordRequest(BaseModel):
     email: NormalizedEmail
 
 
+class MockEmailOutboxItem(BaseModel):
+    to: NormalizedEmail
+    subject: str
+    text_body: str
+    html_body: str | None = None
+    reset_url: str | None = None
+
+
+class MockEmailOutboxResponse(BaseModel):
+    messages: list[MockEmailOutboxItem]
+
+
 class ForgotPasswordResponse(BaseModel):
     detail: str = "If an account exists for that email, a reset link has been sent."
 
