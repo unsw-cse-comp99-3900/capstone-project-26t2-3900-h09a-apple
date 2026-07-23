@@ -23,6 +23,11 @@ class SuccessfulProvider:
 
     def generate_sop(self, session_payload: dict) -> LlmProviderResult:
         self.session_payload = session_payload
+        source_event_ids = [
+            event_id
+            for action in session_payload.get("semantic_actions", [])
+            for event_id in action["source_event_ids"]
+        ]
         return LlmProviderResult(
             sop=SopPayload(
                 title=f"LLM Draft: {session_payload['workflow_name']}",
@@ -33,9 +38,7 @@ class SuccessfulProvider:
                         title="Use workflow events",
                         instruction="Generate SOP from the ordered event log.",
                         branch="main",
-                        source_event_ids=[
-                            event["id"] for event in session_payload.get("events", [])
-                        ],
+                        source_event_ids=source_event_ids,
                     )
                 ],
             ),
@@ -73,7 +76,7 @@ def test_llm_sop_generator_returns_llm_payload(monkeypatch):
     db = FakeDb()
     generator = LlmSopGenerator(db=db)
     payload = generator.generate(session)
-    event_payload = provider.session_payload["events"][0]
+    action_payload = provider.session_payload["semantic_actions"][0]
 
     assert payload.title == "LLM Draft: Login Flow"
     assert payload.steps[0].source_event_ids == ["1"]
@@ -90,11 +93,16 @@ def test_llm_sop_generator_returns_llm_payload(monkeypatch):
     assert db.added[0].cost_usd == Decimal("0.001")
     assert payload.steps[0].branch == "main"
 
-    assert event_payload["target_label"] == "Sign in"
-    assert event_payload["value"] == "[MASKED]"
-    assert event_payload["attrs"] == {"page_title": "Login"}
-    assert event_payload["page_title"] == "Login"
-    assert event_payload["timestamp_ms"] == 1000
+    assert provider.session_payload["raw_event_count"] == 1
+    assert provider.session_payload["semantic_action_count"] == 1
+    assert provider.session_payload["workflow_name_is_placeholder"] is False
+    assert action_payload["action_type"] == "navigation"
+    assert action_payload["targets"][0]["label"] == "Sign in"
+    assert action_payload["input_values"] == ["[MASKED]"]
+    assert action_payload["page_titles"] == ["Login"]
+    assert action_payload["started_at_ms"] == 1000
+    assert action_payload["source_event_ids"] == ["1"]
+    assert "attrs" not in action_payload
 
 
 class FailingProvider:

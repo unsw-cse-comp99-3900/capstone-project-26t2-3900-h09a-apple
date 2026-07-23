@@ -17,7 +17,8 @@ contextBridge.exposeInMainWorld('desktopAPI', {
 
   // Recording
   getRecordingStatus: () => ipcRenderer.invoke('recording:get-status'),
-  startRecording: () => ipcRenderer.invoke('recording:start'),
+  startRecording: (workflowName?: string) =>
+    ipcRenderer.invoke('recording:start', workflowName),
   stopRecording: () => ipcRenderer.invoke('recording:stop'),
   getReviewSession: () => ipcRenderer.invoke('recording:get-review'),
   reviewSession: () => ipcRenderer.invoke('recording:review'),

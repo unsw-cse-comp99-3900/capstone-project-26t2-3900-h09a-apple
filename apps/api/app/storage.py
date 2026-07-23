@@ -15,6 +15,8 @@ from app.session_schema import ScreenshotInput
 class ObjectStorage(Protocol):
     def put_object(self, key: str, body: bytes, content_type: str) -> None: ...
 
+    def get_object(self, key: str) -> tuple[bytes, str]: ...
+
     def generate_signed_url(
         self,
         key: str,
@@ -73,6 +75,12 @@ class S3ObjectStorage:
             Body=body,
             ContentType=content_type,
         )
+
+    def get_object(self, key: str) -> tuple[bytes, str]:
+        response = self.client.get_object(Bucket=self.bucket_name, Key=key)
+        body = response["Body"].read()
+        content_type = response.get("ContentType") or "image/jpeg"
+        return body, content_type
 
     def generate_signed_url(
         self,

@@ -34,6 +34,7 @@ const durationText = requireElement<HTMLSpanElement>('review-duration');
 const eventsText = requireElement<HTMLSpanElement>('review-events');
 const submitButton = requireElement<HTMLButtonElement>('submit-session-button');
 const cancelButton = requireElement<HTMLButtonElement>('cancel-review-button');
+const workflowGoalInput = requireElement<HTMLInputElement>('workflow-goal');
 
 let busy = false;
 let dragPointerId: number | null = null;
@@ -56,10 +57,12 @@ function renderStatus(status: RecordingStatus): void {
   statusLabel.textContent = stateLabels[status.state];
   eventCount.textContent = String(status.eventCount);
 
-  startButton.disabled = busy || status.state === 'recording';
+  startButton.disabled =
+    busy || status.state === 'recording' || workflowGoalInput.value.trim().length === 0;
   stopButton.disabled = busy || status.state === 'idle';
   reviewButton.disabled = busy || status.state !== 'idle' || !status.sessionPath;
   logoutButton.disabled = busy || status.state === 'recording';
+  workflowGoalInput.disabled = busy || status.state !== 'idle';
 
   if (status.error) {
     statusMessage.textContent = status.error;
@@ -118,6 +121,25 @@ function hideConsent(): void {
   consentOverlay.hidden = true;
 }
 
+async function startRecordingWithGoal(): Promise<void> {
+  const workflowGoal = workflowGoalInput.value.trim();
+  if (!workflowGoal) {
+    statusMessage.textContent =
+      'Describe the task first so the generated SOP can preserve its intent.';
+    workflowGoalInput.focus();
+    return;
+  }
+
+  await runAction(() => window.desktopAPI.startRecording(workflowGoal));
+}
+
+workflowGoalInput.addEventListener('input', () => {
+  startButton.disabled =
+    busy ||
+    document.body.dataset.state === 'recording' ||
+    workflowGoalInput.value.trim().length === 0;
+});
+
 startButton.addEventListener('click', () => {
   void (async () => {
     const consent = await window.desktopAPI.getConsentStatus();
@@ -127,7 +149,7 @@ startButton.addEventListener('click', () => {
       return;
     }
 
-    await runAction(() => window.desktopAPI.startRecording());
+    await startRecordingWithGoal();
   })();
 });
 
@@ -152,12 +174,19 @@ cancelButton.addEventListener('click', () => {
 });
 
 submitButton.addEventListener('click', async () => {
+  submitButton.disabled = true;
+  const originalLabel = submitButton.textContent;
+  submitButton.textContent = 'Generating draft...';
+
   try {
-    await window.desktopAPI.submitSession();
+    const result = await window.desktopAPI.submitSession();
     reviewModal.hidden = true;
-    alert('Session submitted successfully.');
+    alert(`SOP draft generated successfully.\nSOP ID: ${result.sopId}`);
   } catch (error) {
     alert(error instanceof Error ? error.message : String(error));
+  } finally {
+    submitButton.disabled = false;
+    submitButton.textContent = originalLabel;
   }
 });
 
@@ -245,7 +274,7 @@ consentAcceptButton.addEventListener('click', () => {
 
     hideConsent();
 
-    await runAction(() => window.desktopAPI.startRecording());
+    await startRecordingWithGoal();
   })();
 });
 

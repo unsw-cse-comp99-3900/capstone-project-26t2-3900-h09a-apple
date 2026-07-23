@@ -120,6 +120,100 @@ class MockSopGenerator(SopGenerator):
             previous = current
         return None
 
+    def _semantic_target(self, action):
+        targets = action.get("targets") or []
+        for target in reversed(targets):
+            label = target.get("label")
+            if label:
+                return label
+        return "the relevant control"
+
+    def _semantic_step(self, index, action):
+        action_type = action.get("action_type", "interaction")
+        target = self._semantic_target(action)
+        values = action.get("input_values") or []
+
+        if action_type == "input_and_submit":
+            title = f"Complete {target}"
+            instruction = f"Enter the required information in {target}, then submit it."
+        elif action_type == "input":
+            title = f"Enter information in {target}"
+            instruction = f"Enter the required information in {target}."
+        elif action_type == "submit":
+            title = f"Submit {target}"
+            instruction = f"Submit {target}."
+        elif action_type == "navigation":
+            destination = (action.get("page_titles") or action.get("urls") or [target])[0]
+            title = f"Open {destination}"
+            instruction = f"Navigate to {destination}."
+        elif action_type == "tab_switch":
+            title = "Switch to the required window"
+            instruction = f"Switch to {action.get('window_title') or target}."
+        elif action_type == "repeated_click":
+            title = f"Select {target}"
+            instruction = f"Select {target} once."
+        elif action_type == "interaction_sequence":
+            title = f"Use {target}"
+            instruction = f"Use the relevant controls to continue to {target}."
+        else:
+            title = f"Select {target}"
+            instruction = f"Select {target}."
+
+        if values and action_type in {"input", "input_and_submit"}:
+            final_value = values[-1]
+            instruction = instruction.replace(
+                "the required information",
+                f'"{final_value}"',
+                1,
+            )
+
+        duration_ms = int(action.get("duration_ms") or 0)
+        time_estimate = 5 if duration_ms <= 0 else min(60, max(1, round(duration_ms / 1000)))
+        return SopStep(
+            order=index + 1,
+            title=title,
+            instruction=instruction,
+            source_event_ids=list(action.get("source_event_ids") or []),
+            time_estimate=time_estimate,
+        )
+
+    def generate_from_semantic_actions(self, workflow_name: str, actions: list[dict]):
+        if not actions:
+            return SopPayload(
+                title=workflow_name,
+                summary="1 step workflow",
+                steps=[
+                    SopStep(
+                        order=1,
+                        title="Review the recorded workflow",
+                        instruction="Review the recording and complete the intended task.",
+                        source_event_ids=[],
+                        time_estimate=None,
+                    )
+                ],
+                warnings=[],
+            )
+
+        steps = [
+            self._semantic_step(index, action)
+            for index, action in enumerate(actions)
+        ]
+        warnings = [
+            SopWarning(
+                type="repeated_action",
+                message="Repeated action detected",
+                source_event_ids=list(action.get("source_event_ids") or []),
+            )
+            for action in actions
+            if action.get("action_type") == "repeated_click"
+        ]
+        return SopPayload(
+            title=workflow_name,
+            summary=f"{len(steps)} step workflow",
+            steps=steps,
+            warnings=warnings,
+        )
+
     def generate(self, session: Session):
         events = sorted(session.events, key=lambda e: e.seq)
 

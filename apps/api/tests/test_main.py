@@ -526,6 +526,35 @@ def test_generate_sop_returns_201(monkeypatch):
         app.dependency_overrides[get_db] = override_get_db
 
 
+def test_generate_sop_retries_failed_job(monkeypatch):
+    from types import SimpleNamespace
+
+    fake_job = SimpleNamespace(status="failed")
+    fake_session = SimpleNamespace(
+        id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        workflow_name="Retry Login Flow",
+        events=[],
+    )
+
+    monkeypatch.setenv("LLM_PROVIDER", "openai")
+    monkeypatch.setattr(
+        "app.llm_sop_generator.get_llm_provider",
+        lambda: TestProvider(),
+    )
+
+    db = FakeDbWithSession(session=fake_session, job=fake_job)
+    app.dependency_overrides[get_db] = lambda: db
+
+    try:
+        response = client.post(f"/api/v1/sessions/{fake_session.id}/generate-sop")
+
+        assert response.status_code == 201
+        assert fake_job.status == "completed"
+        assert response.json()["title"] == "OpenAI Draft: Retry Login Flow"
+    finally:
+        app.dependency_overrides[get_db] = override_get_db
+
+
 def test_generate_sop_returns_404_when_session_missing():
     db = FakeDbWithSession(session=None)
 

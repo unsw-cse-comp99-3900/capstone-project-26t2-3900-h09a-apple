@@ -11,7 +11,11 @@ import { startHandoffServer, stopHandoffServer } from './auth/handoff-server';
 import { hasCurrentConsent, saveConsent } from './consent/consent-store';
 import { postConsentAccept } from './consent/consent-service';
 import { getCurrentAuth, logout } from './auth/auth-service';
-import { submitSession } from './session/submission-service';
+import {
+  createRemoteSession,
+  generateSopDraft,
+  type RemoteSessionSubmission,
+} from './session/submission-service';
 import { readFile } from 'node:fs/promises';
 import type { CompletedLocalSession } from './desktop-session-store';
 
@@ -19,6 +23,13 @@ let sessionStore: DesktopSessionStore | undefined;
 let recordingService: RecordingService | undefined;
 let recorderWindow: BrowserWindow | undefined;
 let lastCompletedSession: CompletedLocalSession | null = null;
+let pendingRemoteSubmission:
+  | {
+      localSessionId: string;
+      remote: RemoteSessionSubmission;
+    }
+  | null = null;
+let isGracefulQuitInProgress = false;
 let windowDragState:
   | {
       startCursor: { x: number; y: number };
@@ -147,7 +158,7 @@ if (!gotSingleInstanceLock) {
 
   ipcMain.handle('recording:get-status', () => getRecordingStatus());
 
-  ipcMain.handle('recording:start', () => {
+  ipcMain.handle('recording:start', (_event, workflowName?: string) => {
     try {
       const auth = getCurrentAuth();
       if (!auth) {
@@ -163,7 +174,10 @@ if (!gotSingleInstanceLock) {
       }
 
       lastCompletedSession = null;
-      recordingService.start();
+      pendingRemoteSubmission = null;
+      recordingService.start(
+        typeof workflowName === 'string' ? workflowName : undefined,
+      );
       return getRecordingStatus();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -171,13 +185,13 @@ if (!gotSingleInstanceLock) {
     }
   });
 
-  ipcMain.handle('recording:stop', () => {
+  ipcMain.handle('recording:stop', async () => {
     try {
       if (!recordingService) {
         throw new Error('The recording service is not ready');
       }
 
-      lastCompletedSession = recordingService.stop();
+      lastCompletedSession = await recordingService.stop();
       return getRecordingStatus();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -217,7 +231,20 @@ if (!gotSingleInstanceLock) {
       throw new Error('No completed recording session available');
     }
 
-    const result = await submitSession(lastCompletedSession.artifactPath);
+    if (pendingRemoteSubmission?.localSessionId !== lastCompletedSession.sessionId) {
+      pendingRemoteSubmission = null;
+    }
+
+    const remote =
+      pendingRemoteSubmission?.remote ??
+      (await createRemoteSession(lastCompletedSession.artifactPath));
+
+    pendingRemoteSubmission = {
+      localSessionId: lastCompletedSession.sessionId,
+      remote,
+    };
+
+    const result = await generateSopDraft(remote);
 
     if (result.success && sessionStore) {
       sessionStore.markSubmitted(lastCompletedSession.sessionId);
@@ -227,6 +254,7 @@ if (!gotSingleInstanceLock) {
       );
 
       lastCompletedSession = null;
+      pendingRemoteSubmission = null;
     }
 
     return result;
@@ -314,10 +342,21 @@ if (!gotSingleInstanceLock) {
     }
   });
 
-  app.on('before-quit', () => {
+  app.on('before-quit', (event) => {
+    if (isGracefulQuitInProgress) {
+      return;
+    }
+
+    event.preventDefault();
+    isGracefulQuitInProgress = true;
     stopHandoffServer();
-    recordingService?.stop();
-    sessionStore?.close();
+
+    void (async () => {
+      await recordingService?.stop();
+      recordingService?.dispose();
+      sessionStore?.close();
+      app.quit();
+    })();
   });
 
   app.on('window-all-closed', () => {
@@ -403,6 +442,7 @@ function createWindow(): void {
     },
   });
 
+  recorderWindow.setContentProtection(true);
   recorderWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   recorderWindow.on('closed', () => {
     windowDragState = undefined;

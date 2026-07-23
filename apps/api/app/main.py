@@ -201,6 +201,25 @@ def generate_sop(
             status_code=409,
             detail="SOP already generated",
         )
+
+    job = (
+        db.query(models.CodificationJob)
+        .filter(models.CodificationJob.session_id == session.id)
+        .order_by(models.CodificationJob.created_at.desc())
+        .first()
+    )
+
+    if job is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Codification job not found",
+        )
+
+    # A failed job can be retried through the same endpoint. Persist processing
+    # before the synchronous LLM call so status polling reflects real progress.
+    job.status = models.CodificationJobStatus.processing.value
+    db.commit()
+
     try:
         generator = get_sop_generator(db=db)
 
@@ -218,17 +237,7 @@ def generate_sop(
         )
         db.add(sop)
 
-        job = (
-            db.query(models.CodificationJob)
-            .filter(
-                models.CodificationJob.session_id == session.id,
-                models.CodificationJob.status == models.CodificationJobStatus.pending.value,
-            )
-            .first()
-        )
-
-        if job:
-            job.status = models.CodificationJobStatus.completed.value
+        job.status = models.CodificationJobStatus.completed.value
 
         db.commit()
 
@@ -238,10 +247,8 @@ def generate_sop(
 
         job = (
             db.query(models.CodificationJob)
-            .filter(
-                models.CodificationJob.session_id == session.id,
-                models.CodificationJob.status == models.CodificationJobStatus.pending.value,
-            )
+            .filter(models.CodificationJob.session_id == session.id)
+            .order_by(models.CodificationJob.created_at.desc())
             .first()
         )
 

@@ -14,6 +14,21 @@ Do not include explanatory text.
 
 
 def build_sop_prompt(session_payload: dict) -> str:
+    text_payload = {
+        **{
+            key: value
+            for key, value in session_payload.items()
+            if key != "vision_frames"
+        },
+        "vision_frames": [
+            {
+                key: value
+                for key, value in frame.items()
+                if key != "data_url"
+            }
+            for frame in session_payload.get("vision_frames", [])
+        ],
+    }
     return f"""
 Generate a structured SOP from the following session payload.
 
@@ -33,7 +48,7 @@ Estimate time_estimate only from the step's source events:
 - Do not use total workflow duration as a step estimate.
 
 Session payload:
-{json.dumps(session_payload, default=str)}
+{json.dumps(text_payload, default=str)}
 """
 
 

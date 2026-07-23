@@ -179,7 +179,7 @@ test('stores, reads, and assembles a completed desktop session', () => {
     x: 412,
     y: 238,
   });
-  assert.equal(payload.events[7].screenshot_id, null);
+  assert.equal(payload.events[7].screenshot_id, EVENT_SCREENSHOT_ID);
   assert.equal(payload.events[10].target_label, 'Done');
   assert.equal(payload.events[10].timestamp_ms, BASE_TIME_MS + 11_000);
   assert.deepEqual(payload.screenshots, []);

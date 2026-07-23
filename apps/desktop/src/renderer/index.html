@@ -61,6 +61,17 @@
       </div>
 
       <div id="recorder-panel" hidden>
+        <label class="workflow-goal" for="workflow-goal">
+          <span>What are you recording?</span>
+          <input
+            id="workflow-goal"
+            type="text"
+            maxlength="200"
+            placeholder="e.g. Build a weather agent with Claude Code"
+            autocomplete="off"
+          />
+        </label>
+
         <section class="recording-summary" aria-label="Recording summary">
           <div>
             <p class="summary-label">Captured events</p>

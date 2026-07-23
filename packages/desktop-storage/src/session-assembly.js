@@ -69,7 +69,7 @@ export function assembleSessionFromRows({ session, events }) {
         value: event.value ?? null,
         url: event.url ?? null,
         attrs: buildEventAttrs(event),
-        screenshot_id: null,
+        screenshot_id: event.screenshot_id ?? null,
         timestamp_ms: event.timestamp_ms,
       }),
     ),

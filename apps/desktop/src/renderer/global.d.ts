@@ -16,8 +16,9 @@ interface RecordingStatus {
 
 interface SubmissionResult {
   success: boolean;
-  sessionId?: string;
-  jobId?: string;
+  sessionId: string;
+  jobId: string;
+  sopId: string;
 }
 
 interface AuthStatus {
@@ -50,7 +51,7 @@ interface DesktopAPI {
 
   // Recording
   getRecordingStatus(): Promise<RecordingStatus>;
-  startRecording(): Promise<RecordingStatus>;
+  startRecording(workflowName?: string): Promise<RecordingStatus>;
   stopRecording(): Promise<RecordingStatus>;
   getReviewSession(): Promise<ReviewSessionData>;
   reviewSession(): Promise<RecordingStatus>;

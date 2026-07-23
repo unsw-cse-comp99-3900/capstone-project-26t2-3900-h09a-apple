@@ -11,10 +11,16 @@ import {
   type LocalBufferDatabase,
   type SessionAuditSummary,
 } from '@h09a/desktop-storage';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { rm } from 'node:fs/promises';
+
+type IdentificationSource =
+  | 'accessibility_api'
+  | 'ocr'
+  | 'vision_model'
+  | 'unidentified';
 
 export interface DesktopEventInput {
   category: string;
@@ -22,8 +28,20 @@ export interface DesktopEventInput {
   timestamp_ms: number;
   raw_x: number | null;
   raw_y: number | null;
+  target_selector?: string | null;
+  target_label?: string | null;
+  screenshot_id?: string | null;
+  is_identified?: boolean;
+  identification_source?: IdentificationSource | null;
   value?: string | null;
   attrs: Record<string, unknown>;
+}
+
+export interface DesktopScreenshotInput {
+  data: Buffer;
+  content_type: 'image/jpeg' | 'image/png' | 'image/webp';
+  width: number;
+  height: number;
 }
 
 export interface CompletedLocalSession {
@@ -40,6 +58,13 @@ interface ActiveSession {
   startedAtMs: number;
   nextSequence: number;
   directory: string;
+  screenshots: Array<{
+    id: string;
+    filePath: string;
+    contentType: DesktopScreenshotInput['content_type'];
+    width: number;
+    height: number;
+  }>;
 }
 
 export class DesktopSessionStore {
@@ -79,6 +104,7 @@ export class DesktopSessionStore {
       startedAtMs,
       nextSequence: 1,
       directory,
+      screenshots: [],
     };
 
     return id;
@@ -86,6 +112,29 @@ export class DesktopSessionStore {
 
   getActiveSessionId(): string | null {
     return this.activeSession?.id ?? null;
+  }
+
+  saveCapturedScreenshot(screenshot: DesktopScreenshotInput): string {
+    const session = this.requireActiveSession();
+    const id = randomUUID();
+    const extension =
+      screenshot.content_type === 'image/png'
+        ? 'png'
+        : screenshot.content_type === 'image/webp'
+          ? 'webp'
+          : 'jpg';
+    const filePath = join(session.directory, 'screenshots', `${id}.${extension}`);
+
+    writeFileSync(filePath, screenshot.data);
+    session.screenshots.push({
+      id,
+      filePath,
+      contentType: screenshot.content_type,
+      width: screenshot.width,
+      height: screenshot.height,
+    });
+
+    return id;
   }
 
   saveCapturedEvent(event: DesktopEventInput): boolean {
@@ -100,13 +149,14 @@ export class DesktopSessionStore {
       category: event.category,
       type: event.type,
       timestamp_ms: event.timestamp_ms,
-      target_selector: null,
-      target_label: null,
+      target_selector: event.target_selector ?? null,
+      target_label: event.target_label ?? null,
       value: event.value ?? null,
       url: null,
-      screenshot_id: null,
-      is_identified: false,
-      identification_source: 'unidentified' as const,
+      screenshot_id: event.screenshot_id ?? null,
+      is_identified: event.is_identified ?? false,
+      identification_source:
+        event.identification_source ?? (event.is_identified ? 'accessibility_api' : 'unidentified'),
       raw_x: event.raw_x,
       raw_y: event.raw_y,
       attrs: event.attrs,
@@ -142,7 +192,23 @@ export class DesktopSessionStore {
       throw new Error(`Completed session ${session.id} could not be read from SQLite`);
     }
 
-    const payload = assembleSessionFromRows(rows);
+    const payload = assembleSessionFromRows(rows) as {
+      screenshots: Array<{
+        id: string;
+        data_base64: string;
+        content_type: DesktopScreenshotInput['content_type'];
+        width: number;
+        height: number;
+      }>;
+      [key: string]: unknown;
+    };
+    payload.screenshots = session.screenshots.map((screenshot) => ({
+      id: screenshot.id,
+      data_base64: readFileSync(screenshot.filePath).toString('base64'),
+      content_type: screenshot.contentType,
+      width: screenshot.width,
+      height: screenshot.height,
+    }));
     const artifactPath = join(session.directory, 'session.json');
     const auditSummary = getSessionAuditSummary(session.id);
     const auditSummaryPath = join(session.directory, 'capture-policy-audit.json');
