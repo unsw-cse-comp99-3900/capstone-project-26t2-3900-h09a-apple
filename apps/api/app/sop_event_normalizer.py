@@ -24,9 +24,6 @@ GENERIC_STRUCTURAL_LABELS = {
     "region",
     "system tray",
     "taskbar",
-    "区域",
-    "图像",
-    "组",
 }
 
 
