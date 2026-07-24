@@ -72,6 +72,7 @@ def _desktop_target(attrs: dict[str, Any]) -> dict[str, Any]:
 def _event_view(event: object) -> dict[str, Any]:
     attrs = _event_attrs(event)
     desktop_target = _desktop_target(attrs)
+    screenshot_id = getattr(event, "screenshot_id", None)
     is_password = attrs.get("is_password") is True or desktop_target.get("is_password") is True
     timestamp_ms = int(getattr(event, "timestamp_ms", 0) or 0)
     target_label = (
@@ -95,7 +96,7 @@ def _event_view(event: object) -> dict[str, Any]:
     )
 
     return {
-        "id": str(getattr(event, "id")),
+        "id": str(event.id),
         "seq": int(getattr(event, "seq", 0) or 0),
         "type": _event_type(event),
         "timestamp_ms": timestamp_ms,
@@ -117,11 +118,7 @@ def _event_view(event: object) -> dict[str, Any]:
         "value": value,
         "url": _short_text(getattr(event, "url", None), 300),
         "raw_event_type": _short_text(attrs.get("raw_event_type"), 60),
-        "screenshot_id": (
-            str(getattr(event, "screenshot_id"))
-            if getattr(event, "screenshot_id", None) is not None
-            else None
-        ),
+        "screenshot_id": str(screenshot_id) if screenshot_id is not None else None,
     }
 
 

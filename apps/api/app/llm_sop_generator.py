@@ -123,11 +123,11 @@ class LlmSopGenerator(SopGenerator):
             commit_events,
             min(MAX_COMMIT_VISION_FRAMES, len(commit_events)),
         )
-        selected_ids = {str(getattr(event, "id")) for event in selected_events}
+        selected_ids = {str(event.id) for event in selected_events}
         context_candidates = [
             event
             for event in screenshot_events
-            if str(getattr(event, "id")) not in selected_ids
+            if str(event.id) not in selected_ids
         ]
         selected_events.extend(
             _evenly_sample(
