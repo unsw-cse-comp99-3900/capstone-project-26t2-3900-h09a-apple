@@ -133,6 +133,7 @@ def _employee():
 
 def test_upload_voice_feedback_persists_classifies_and_emails(monkeypatch):
     clear_mock_email_outbox()
+    monkeypatch.setenv("WEB_BASE_URL", "http://localhost:3000")
     storage = FakeStorage()
     db = FakeDB()
 
