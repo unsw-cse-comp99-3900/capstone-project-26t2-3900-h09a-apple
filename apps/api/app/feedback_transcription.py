@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
@@ -13,6 +15,7 @@ MAX_AUDIO_SECONDS = 60
 WHISPER_MODEL_NAME = "base"
 
 _model = None
+_audio_tool_cache: dict[str, str] = {}
 
 
 def get_whisper_model():
@@ -28,10 +31,39 @@ def preload_whisper_model() -> None:
     get_whisper_model()
 
 
+def resolve_audio_tool(name: str) -> str:
+    """Resolve ffmpeg/ffprobe even when uvicorn was started without updated PATH."""
+    cached = _audio_tool_cache.get(name)
+    if cached is not None:
+        return cached
+
+    env_key = f"{name.upper()}_PATH"
+    env_path = os.environ.get(env_key)
+    if env_path and Path(env_path).is_file():
+        _audio_tool_cache[name] = env_path
+        return env_path
+
+    found = shutil.which(name)
+    if found:
+        _audio_tool_cache[name] = found
+        return found
+
+    winget_root = Path.home() / "AppData/Local/Microsoft/WinGet/Packages"
+    if winget_root.is_dir():
+        matches = sorted(winget_root.glob(f"Gyan.FFmpeg*/ffmpeg-*/bin/{name}.exe"))
+        if matches:
+            resolved = str(matches[-1])
+            _audio_tool_cache[name] = resolved
+            return resolved
+
+    _audio_tool_cache[name] = name
+    return name
+
+
 def get_audio_duration_seconds(wav_path: Path) -> float:
     result = run_audio_command(
         [
-            "ffprobe",
+            resolve_audio_tool("ffprobe"),
             "-v",
             "error",
             "-show_entries",
@@ -55,7 +87,7 @@ def get_audio_duration_seconds(wav_path: Path) -> float:
 def convert_to_wav(input_path: Path, output_path: Path) -> None:
     run_audio_command(
         [
-            "ffmpeg",
+            resolve_audio_tool("ffmpeg"),
             "-y",
             "-i",
             str(input_path),
@@ -70,6 +102,16 @@ def convert_to_wav(input_path: Path, output_path: Path) -> None:
 
 async def transcribe_upload(audio: UploadFile) -> dict[str, Any]:
     suffix = Path(audio.filename or "audio.webm").suffix or ".webm"
+    audio_bytes = await audio.read()
+    return await transcribe_audio_bytes(audio_bytes, suffix=suffix)
+
+
+async def transcribe_audio_bytes(audio_bytes: bytes, *, suffix: str = ".webm") -> dict[str, Any]:
+    if not audio_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Audio body is empty",
+        )
 
     input_file = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
     wav_file = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
@@ -79,9 +121,7 @@ async def transcribe_upload(audio: UploadFile) -> dict[str, Any]:
     wav_file.close()
 
     try:
-        audio_bytes = await audio.read()
         input_path.write_bytes(audio_bytes)
-
         return await run_in_threadpool(transcribe_audio_file, input_path, wav_path)
     finally:
         input_path.unlink(missing_ok=True)

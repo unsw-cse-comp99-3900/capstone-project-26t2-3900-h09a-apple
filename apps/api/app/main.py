@@ -15,6 +15,7 @@ from app.auth.deps import filter_by_tenant, require_role
 from app.auth.routes import router as auth_router
 from app.consent_routes import router as consent_router
 from app.database import get_db
+from app.feedback_routes import notifications_router
 from app.feedback_routes import router as feedback_router
 from app.feedback_transcription import preload_whisper_model
 from app.ingestion import ingest_session
@@ -70,6 +71,7 @@ app.add_middleware(
 
 app.include_router(auth_router)
 app.include_router(feedback_router)
+app.include_router(notifications_router)
 app.include_router(consent_router)
 app.include_router(walkthrough_router)
 app.include_router(workflow_router)
