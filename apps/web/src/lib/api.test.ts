@@ -3,10 +3,12 @@ import {
   ApiError,
   apiUrl,
   approveSop,
+  getKmeansAnalysis,
   getPublishedSops,
   getSop,
   getSopsByStatus,
   publishSop,
+  runKmeansAnalysis,
 } from './api';
 
 afterEach(() => {
@@ -71,6 +73,81 @@ describe('getPublishedSops', () => {
         cache: 'no-store',
       }),
     );
+  });
+});
+
+describe('K-means analytics API helpers', () => {
+  const result = {
+    workflow_id: 'workflow/one',
+    k: 3,
+    clusters: [],
+    assignments: [],
+    outliers: [],
+    silhouette_score: null,
+    metadata: {
+      session_count: 5,
+      feature_count: 2,
+      feature_names: ['duration', 'clicks'],
+      algorithm_version: '1.0',
+      computed_at: '2026-07-28T00:00:00Z',
+      computation_time_ms: 42,
+      cached: false,
+    },
+  };
+
+  it('posts analysis settings as JSON', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify(result), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+
+    await expect(
+      runKmeansAnalysis({ workflow_id: 'workflow/one', k: 3, min_sessions: 5 }),
+    ).resolves.toEqual(result);
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/api/backend/analytics/kmeans',
+      expect.objectContaining({
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workflow_id: 'workflow/one', k: 3, min_sessions: 5 }),
+        cache: 'no-store',
+      }),
+    );
+  });
+
+  it('encodes the workflow id when loading cached results', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify(result), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+
+    await expect(getKmeansAnalysis('workflow/one')).resolves.toEqual(result);
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/api/backend/analytics/kmeans/workflow%2Fone',
+      expect.objectContaining({ cache: 'no-store' }),
+    );
+  });
+
+  it('preserves the response status in analytics errors', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ detail: 'Not enough sessions' }), {
+        status: 422,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+
+    await expect(
+      runKmeansAnalysis({ workflow_id: 'workflow/one', k: 3, min_sessions: 5 }),
+    ).rejects.toMatchObject({
+      name: 'ApiError',
+      status: 422,
+      message: 'Failed to run K-means analysis: Not enough sessions',
+    } satisfies Partial<ApiError>);
   });
 });
 

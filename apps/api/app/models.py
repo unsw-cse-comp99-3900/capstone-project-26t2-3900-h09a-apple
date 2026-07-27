@@ -30,6 +30,7 @@ from sqlalchemy import (
     Column,
     Computed,
     DateTime,
+    Float,
     ForeignKey,
     Index,
     Integer,
@@ -537,6 +538,47 @@ class SopStepEmbedding(Base):
     )
 
 
+class ClusteringResult(Base):
+    """Historical tenant-scoped K-means analytics result."""
+
+    __tablename__ = "clustering_results"
+
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    tenant_id = Column(UUID(as_uuid=True), nullable=False)
+    workflow_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("sops.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    k = Column(Integer, nullable=False)
+    cluster_centers = Column(JSONB, nullable=False)
+    session_cluster_assignments = Column(JSONB, nullable=False)
+    clusters = Column(JSONB, nullable=False)
+    outliers = Column(JSONB, nullable=False)
+    silhouette = Column(Float, nullable=True)
+    analytics_metadata = Column("metadata", JSONB, nullable=False)
+    algorithm_version = Column(String(64), nullable=False)
+    computed_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=text("now()"),
+    )
+
+    __table_args__ = (
+        CheckConstraint("k >= 2 AND k <= 4", name="ck_clustering_results_k"),
+        Index(
+            "ix_clustering_results_tenant_workflow_computed",
+            "tenant_id",
+            "workflow_id",
+            text("computed_at DESC"),
+        ),
+    )
+
+
 class WorkflowCluster(Base):
     """One cluster from a workflow variance run (H09AAPPLE-36)."""
 
@@ -909,6 +951,7 @@ __all__ = [
     "SopStatus",
     "CodificationJob",
     "CodificationJobStatus",
+    "ClusteringResult",
     "User",
     "UserRole",
     "RefreshToken",

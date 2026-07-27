@@ -59,10 +59,20 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     env:
       DATABASE_URL: postgresql+psycopg://worktrace:secret@localhost:5432/worktrace
       SECRET_KEY: ci-test-secret-key-not-for-production
       DEFAULT_TENANT_ID: 22222222-2222-2222-2222-222222222222
+      REDIS_URL: redis://localhost:6379/0
     defaults:
       run:
         working-directory: apps/api

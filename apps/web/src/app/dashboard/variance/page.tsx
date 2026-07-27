@@ -1,5 +1,5 @@
-import { RoleLanding } from '@/components/role-landing';
+import { VarianceDashboardClient } from './variance-dashboard-client';
 
 export default function VarianceDashboardPage() {
-  return <RoleLanding title="Variance dashboard" role="MANAGER" />;
+  return <VarianceDashboardClient />;
 }

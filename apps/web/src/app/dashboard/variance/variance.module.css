@@ -1,0 +1,410 @@
+.page {
+  --navy: #172033;
+  --slate: #64748b;
+  --indigo: #4f46e5;
+  --border: #dfe5ee;
+  --surface: #ffffff;
+  --background: #f5f7fb;
+  min-height: 100vh;
+  padding: 2.5rem 2rem 4rem;
+  background: var(--background);
+  color: var(--navy);
+  font-family:
+    Inter,
+    system-ui,
+    -apple-system,
+    sans-serif;
+}
+
+.header,
+.controls,
+.results,
+.stateCard,
+.error,
+.state {
+  width: min(1120px, 100%);
+  margin-inline: auto;
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 2rem;
+  margin-bottom: 1.5rem;
+}
+
+.eyebrow {
+  margin: 0;
+  color: var(--indigo);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.title {
+  margin: 0.35rem 0 0;
+  font-size: clamp(1.8rem, 4vw, 2.4rem);
+  letter-spacing: -0.03em;
+}
+
+.lead {
+  max-width: 62ch;
+  margin: 0.65rem 0 0;
+  color: var(--slate);
+  line-height: 1.55;
+}
+
+.account {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  color: var(--slate);
+  font-size: 0.88rem;
+}
+
+.controls {
+  display: grid;
+  grid-template-columns: minmax(260px, 2fr) repeat(2, minmax(130px, 0.6fr)) auto;
+  gap: 1rem;
+  align-items: end;
+  margin-bottom: 1.25rem;
+  padding: 1.15rem;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+}
+
+.controls label {
+  display: grid;
+  gap: 0.4rem;
+  color: #475569;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.controls select,
+.controls input {
+  min-width: 0;
+  height: 42px;
+  padding: 0 0.75rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 9px;
+  background: #fff;
+  color: var(--navy);
+  font: inherit;
+  font-weight: 500;
+}
+
+.primaryButton,
+.secondaryButton {
+  min-height: 42px;
+  padding: 0.55rem 1rem;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.primaryButton {
+  border: 1px solid var(--indigo);
+  background: var(--indigo);
+  color: #fff;
+}
+
+.secondaryButton {
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--navy);
+}
+
+.primaryButton:disabled,
+.controls select:disabled,
+.controls input:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.error {
+  box-sizing: border-box;
+  margin-bottom: 1rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-weight: 600;
+}
+
+.stateCard {
+  box-sizing: border-box;
+  padding: 2.5rem;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  text-align: center;
+}
+
+.stateCard h2,
+.stateCard p {
+  margin: 0;
+}
+
+.stateCard p,
+.state,
+.muted,
+.stateInline {
+  color: var(--slate);
+}
+
+.stateCard p {
+  margin-top: 0.5rem;
+}
+
+.results {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.9rem;
+}
+
+.metric,
+.clusterCard,
+.metadata,
+.tableSection {
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+}
+
+.metric {
+  display: grid;
+  gap: 0.45rem;
+  padding: 1.1rem 1.25rem;
+}
+
+.metric span,
+.metadata span {
+  color: var(--slate);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.metric strong {
+  font-size: 1.35rem;
+}
+
+.metadata {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+}
+
+.metadata div {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.metadata strong {
+  overflow-wrap: anywhere;
+  font-size: 0.88rem;
+}
+
+.sectionHeading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.85rem;
+}
+
+.sectionHeading h2 {
+  margin: 0.25rem 0 0;
+  font-size: 1.35rem;
+}
+
+.sectionHeading > span {
+  color: var(--slate);
+  font-size: 0.85rem;
+}
+
+.clusterGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.clusterCard {
+  padding: 1.25rem;
+}
+
+.clusterCard header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.clusterCard header span {
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  background: #eef2ff;
+  color: var(--indigo);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.clusterCard h3,
+.clusterCard h4 {
+  margin: 0;
+}
+
+.clusterCard h4 {
+  margin-top: 1rem;
+  color: #475569;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+}
+
+.clusterCard ul {
+  margin: 0.45rem 0 0;
+  padding-left: 1.25rem;
+  color: #334155;
+}
+
+.clusterCard li + li {
+  margin-top: 0.25rem;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+}
+
+.chips span {
+  padding: 0.25rem 0.55rem;
+  border-radius: 6px;
+  background: #f1f5f9;
+  color: #334155;
+  font-size: 0.78rem;
+  overflow-wrap: anywhere;
+}
+
+.centroids {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0.5rem 0 0;
+}
+
+.centroids div {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 0.3rem;
+  border-bottom: 1px solid #eef2f7;
+  font-size: 0.82rem;
+}
+
+.centroids dd {
+  margin: 0;
+  font-weight: 700;
+}
+
+.tableSection {
+  min-width: 0;
+  padding: 1.25rem;
+}
+
+.tableWrap {
+  overflow-x: auto;
+}
+
+.tableWrap table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.84rem;
+}
+
+.tableWrap th,
+.tableWrap td {
+  padding: 0.75rem;
+  border-bottom: 1px solid #edf0f5;
+  text-align: left;
+  vertical-align: top;
+}
+
+.tableWrap th {
+  color: #475569;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.tableWrap td {
+  overflow-wrap: anywhere;
+}
+
+.tableWrap small {
+  display: block;
+  margin-top: 0.2rem;
+  color: var(--slate);
+}
+
+.stateInline {
+  margin: 0;
+}
+
+@media (max-width: 900px) {
+  .controls {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .workflowField {
+    grid-column: 1 / -1;
+  }
+
+  .metrics,
+  .metadata {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .page {
+    padding: 1.5rem 1rem 3rem;
+  }
+
+  .header,
+  .account,
+  .sectionHeading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .account {
+    justify-content: flex-start;
+  }
+
+  .controls,
+  .metrics,
+  .metadata,
+  .clusterGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .workflowField {
+    grid-column: auto;
+  }
+}
