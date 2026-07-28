@@ -54,6 +54,19 @@
   align-items: center;
   gap: 12px;
   margin-bottom: 18px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.brandHeader:hover .wordmark {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.brandHeader:focus-visible {
+  border-radius: 12px;
+  outline: 3px solid rgb(196 203 255 / 45%);
+  outline-offset: 4px;
 }
 
 .logoMark {
