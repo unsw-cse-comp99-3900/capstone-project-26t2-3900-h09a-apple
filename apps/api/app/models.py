@@ -26,6 +26,7 @@ import enum
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     CheckConstraint,
     Column,
     Computed,
@@ -956,6 +957,208 @@ class WalkthroughStepTiming(Base):
     )
 
 
+class FrictionAnalysisStatus(str, enum.Enum):
+    pending = "pending"
+    processing = "processing"
+    completed = "completed"
+    failed = "failed"
+
+
+class FrictionAnalysis(Base):
+    """One publish-triggered friction calculation run for an SOP."""
+
+    __tablename__ = "friction_analysis"
+
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    tenant_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    sop_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("sops.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    status = Column(
+        String(32),
+        nullable=False,
+        server_default=FrictionAnalysisStatus.pending.value,
+    )
+    overall_score = Column(Numeric(6, 2))
+    highest_friction_step = Column(Integer)
+    employee_count = Column(Integer, nullable=False, server_default="0")
+    algorithm_version = Column(String(64), nullable=False, server_default="friction-v1")
+    error_message = Column(Text)
+    triggered_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=text("now()"),
+    )
+    started_at = Column(DateTime(timezone=True))
+    completed_at = Column(DateTime(timezone=True))
+
+    employee_step_scores = relationship(
+        "FrictionEmployeeStepScore",
+        back_populates="analysis",
+        cascade="all, delete-orphan",
+    )
+    step_aggregates = relationship(
+        "FrictionStepAggregate",
+        back_populates="analysis",
+        cascade="all, delete-orphan",
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            f"status IN ({_csv(FrictionAnalysisStatus)})",
+            name="ck_friction_analysis_status",
+        ),
+        CheckConstraint(
+            "overall_score IS NULL OR (overall_score >= 0 AND overall_score <= 100)",
+            name="ck_friction_analysis_overall_score",
+        ),
+        CheckConstraint(
+            "highest_friction_step IS NULL OR highest_friction_step >= 1",
+            name="ck_friction_analysis_highest_step",
+        ),
+        CheckConstraint("employee_count >= 0", name="ck_friction_analysis_employee_count"),
+        Index(
+            "ix_friction_analysis_tenant_sop_triggered",
+            "tenant_id",
+            "sop_id",
+            text("triggered_at DESC"),
+        ),
+    )
+
+
+class FrictionEmployeeStepScore(Base):
+    """Calculated 0-100 score for one employee and one SOP step."""
+
+    __tablename__ = "friction_employee_step_scores"
+
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    analysis_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("friction_analysis.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    employee_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    completion_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("walkthrough_completions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    step_number = Column(Integer, nullable=False)
+    duration_ms = Column(Integer, nullable=False)
+    expected_duration_ms = Column(Integer, nullable=False)
+    retry_count = Column(Integer, nullable=False, server_default="0")
+    path_deviation_count = Column(Integer, nullable=False, server_default="0")
+    score = Column(Numeric(6, 2), nullable=False)
+    is_outlier = Column(Boolean, nullable=False, server_default=text("false"))
+
+    analysis = relationship("FrictionAnalysis", back_populates="employee_step_scores")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "analysis_id",
+            "employee_id",
+            "step_number",
+            name="uq_friction_score_analysis_employee_step",
+        ),
+        CheckConstraint("step_number >= 1", name="ck_friction_score_step_number"),
+        CheckConstraint("duration_ms >= 0", name="ck_friction_score_duration"),
+        CheckConstraint("expected_duration_ms > 0", name="ck_friction_score_expected_duration"),
+        CheckConstraint("retry_count >= 0", name="ck_friction_score_retries"),
+        CheckConstraint(
+            "path_deviation_count >= 0",
+            name="ck_friction_score_path_deviations",
+        ),
+        CheckConstraint(
+            "score >= 0 AND score <= 100",
+            name="ck_friction_score_range",
+        ),
+        Index(
+            "ix_friction_scores_analysis_step",
+            "analysis_id",
+            "step_number",
+        ),
+        Index(
+            "ix_friction_scores_analysis_employee",
+            "analysis_id",
+            "employee_id",
+        ),
+    )
+
+
+class FrictionStepAggregate(Base):
+    """Best/worst and aggregate score for one step in an analysis run."""
+
+    __tablename__ = "friction_step_aggregates"
+
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    analysis_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("friction_analysis.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    step_number = Column(Integer, nullable=False)
+    average_score = Column(Numeric(6, 2), nullable=False)
+    min_score = Column(Numeric(6, 2), nullable=False)
+    max_score = Column(Numeric(6, 2), nullable=False)
+    best_employee_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+    )
+    worst_employee_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+    )
+    sample_size = Column(Integer, nullable=False)
+
+    analysis = relationship("FrictionAnalysis", back_populates="step_aggregates")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "analysis_id",
+            "step_number",
+            name="uq_friction_aggregate_analysis_step",
+        ),
+        CheckConstraint("step_number >= 1", name="ck_friction_aggregate_step_number"),
+        CheckConstraint(
+            "average_score >= 0 AND average_score <= 100",
+            name="ck_friction_aggregate_average",
+        ),
+        CheckConstraint(
+            "min_score >= 0 AND min_score <= 100",
+            name="ck_friction_aggregate_min",
+        ),
+        CheckConstraint(
+            "max_score >= 0 AND max_score <= 100",
+            name="ck_friction_aggregate_max",
+        ),
+        CheckConstraint(
+            "min_score <= average_score AND average_score <= max_score",
+            name="ck_friction_aggregate_order",
+        ),
+        CheckConstraint("sample_size >= 1", name="ck_friction_aggregate_sample_size"),
+        Index("ix_friction_aggregates_analysis", "analysis_id"),
+    )
+
+
 __all__ = [
     "Base",
     "ConsentAcceptance",
@@ -982,4 +1185,8 @@ __all__ = [
     "WalkthroughFrictionType",
     "WorkflowCluster",
     "WorkflowStepVariance",
+    "FrictionAnalysis",
+    "FrictionAnalysisStatus",
+    "FrictionEmployeeStepScore",
+    "FrictionStepAggregate",
 ]

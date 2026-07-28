@@ -3,6 +3,7 @@ import type {
   ConsentAcceptResponse,
   ConsentStatusResponse,
   ConsentType,
+  FrictionAnalysisResponse,
   HealthResponse,
   KmeansAnalysisRequest,
   KmeansAnalysisResponse,
@@ -184,6 +185,16 @@ export async function getKmeansAnalysis(workflowId: string): Promise<KmeansAnaly
 
   if (!res.ok) {
     throw new ApiError(await errorMessage(res, 'Failed to load K-means analysis'), res.status);
+  }
+
+  return res.json();
+}
+
+export async function getFrictionAnalysis(sopId: string): Promise<FrictionAnalysisResponse> {
+  const res = await authedFetch(`/api/v1/analytics/friction/${encodeURIComponent(sopId)}`);
+
+  if (!res.ok) {
+    throw new ApiError(await errorMessage(res, 'Failed to load friction analysis'), res.status);
   }
 
   return res.json();

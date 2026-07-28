@@ -19,6 +19,12 @@ describe('variance dashboard client', () => {
     expect(dashboardSource).toContain('min_sessions: minSessions');
   });
 
+  it('subscribes to asynchronous friction completion updates', () => {
+    expect(dashboardSource).toContain('new WebSocket(frictionWebSocketUrl())');
+    expect(dashboardSource).toContain("update.event === 'friction_analysis.updated'");
+    expect(dashboardSource).toContain('setFrictionUpdate');
+  });
+
   it('prevents stale cached requests from replacing a fresh analysis', () => {
     expect(dashboardSource).toContain('const analysisRequestId = useRef(0)');
     expect(dashboardSource).toContain('requestId === analysisRequestId.current');

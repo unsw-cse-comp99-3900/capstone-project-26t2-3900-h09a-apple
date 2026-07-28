@@ -228,6 +228,9 @@ export interface SopPublishResponse {
   library_url: string;
   /** pending | complete | failed; set when publish enqueues embed work. */
   embedding_status?: string | null;
+  friction_analysis_id: string;
+  /** pending | processing | completed | failed. */
+  friction_status: string;
 }
 
 /**
