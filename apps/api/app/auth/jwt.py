@@ -16,6 +16,8 @@ ACCESS_TOKEN_EXPIRE_SECONDS = TOKEN_EXPIRE_HOURS * 3600
 
 TOKEN_TYPE_ACCESS = "access"
 TOKEN_TYPE_REFRESH = "refresh"
+TOKEN_TYPE_WS = "ws"
+WS_TOKEN_EXPIRE_SECONDS = 60
 
 
 class InvalidTokenError(Exception):
@@ -40,6 +42,18 @@ def generate_token(user_id: UUID, role: UserRole, tenant_id: UUID) -> str:
         "role": role.value,
         "tenant_id": str(tenant_id),
         "type": TOKEN_TYPE_ACCESS,
+        "exp": expire,
+    }
+    return _encode_token(payload)
+
+
+def generate_ws_ticket(user_id: UUID, role: UserRole, tenant_id: UUID) -> str:
+    expire = datetime.now(UTC) + timedelta(seconds=WS_TOKEN_EXPIRE_SECONDS)
+    payload = {
+        "user_id": str(user_id),
+        "role": role.value,
+        "tenant_id": str(tenant_id),
+        "type": TOKEN_TYPE_WS,
         "exp": expire,
     }
     return _encode_token(payload)
@@ -86,6 +100,14 @@ def verify_token(token: str) -> dict[str, str]:
     payload = _decode_token(token)
     token_type = payload.get("type")
     if token_type is not None and token_type != TOKEN_TYPE_ACCESS:
+        raise InvalidTokenError("Invalid or expired token")
+    return _token_identity(payload)
+
+
+def verify_access_or_ws_token(token: str) -> dict[str, str]:
+    payload = _decode_token(token)
+    token_type = payload.get("type")
+    if token_type not in {None, TOKEN_TYPE_ACCESS, TOKEN_TYPE_WS}:
         raise InvalidTokenError("Invalid or expired token")
     return _token_identity(payload)
 

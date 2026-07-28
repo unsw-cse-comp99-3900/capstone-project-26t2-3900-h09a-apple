@@ -69,3 +69,9 @@ export type FeedbackNotificationItem = {
 export type FeedbackNotificationListResponse = {
   notifications: FeedbackNotificationItem[];
 };
+
+export type NotificationWsTicketResponse = {
+  ticket: string;
+  expires_in_seconds: number;
+  ws_path: string;
+};

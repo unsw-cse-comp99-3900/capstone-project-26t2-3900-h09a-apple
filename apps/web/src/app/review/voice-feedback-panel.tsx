@@ -5,9 +5,11 @@ import type { FeedbackNotificationItem, VoiceFeedbackItem } from '@h09a/types';
 
 import {
   ApiError,
+  createNotificationWsTicket,
   listFeedbackNotifications,
   listVoiceFeedback,
   markFeedbackNotificationRead,
+  notificationsWebSocketUrl,
   reviewVoiceFeedback,
 } from '@/lib/api';
 
@@ -64,6 +66,38 @@ export function VoiceFeedbackPanel({ initialFeedbackId = null }: FeedbackPanelPr
   }, [load]);
 
   useEffect(() => {
+    let socket: WebSocket | null = null;
+    let cancelled = false;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+
+    async function connect() {
+      try {
+        const ticket = await createNotificationWsTicket();
+        if (cancelled) return;
+        socket = new WebSocket(notificationsWebSocketUrl(ticket.ticket, ticket.ws_path));
+        socket.onmessage = () => {
+          void load();
+        };
+        socket.onclose = () => {
+          if (cancelled) return;
+          reconnectTimer = setTimeout(() => {
+            void connect();
+          }, 5000);
+        };
+      } catch {
+        // Inbox polling via Refresh still works if the socket cannot connect.
+      }
+    }
+
+    void connect();
+    return () => {
+      cancelled = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      socket?.close();
+    };
+  }, [load]);
+
+  useEffect(() => {
     if (selected) {
       setComment(selected.reviewer_comment ?? '');
       setTags(selected.reviewer_tags.join(', '));
@@ -83,7 +117,13 @@ export function VoiceFeedbackPanel({ initialFeedbackId = null }: FeedbackPanelPr
           .filter(Boolean),
         mark_reviewed: true,
       });
-      setItems((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+      setItems((current) =>
+        current.map((item) =>
+          item.id === updated.id
+            ? { ...updated, audio_url: updated.audio_url ?? item.audio_url }
+            : item,
+        ),
+      );
     } catch (saveError) {
       setError(saveError instanceof ApiError ? saveError.message : 'Failed to save review.');
     } finally {

@@ -21,7 +21,12 @@ from sqlalchemy.orm import Session as DBSession
 from sqlalchemy.orm import aliased
 
 from app.auth.deps import filter_by_tenant, require_role
-from app.auth.jwt import InvalidTokenError, verify_token
+from app.auth.jwt import (
+    WS_TOKEN_EXPIRE_SECONDS,
+    InvalidTokenError,
+    generate_ws_ticket,
+    verify_access_or_ws_token,
+)
 from app.database import get_db
 from app.feedback_classification import classify_feedback_transcript
 from app.feedback_notify import notification_hub, notify_feedback_uploaded
@@ -30,6 +35,7 @@ from app.feedback_schema import (
     FeedbackNotificationItem,
     FeedbackNotificationListResponse,
     FeedbackStatsResponse,
+    NotificationWsTicketResponse,
     TranscribeResponse,
     VoiceFeedbackCreateResponse,
     VoiceFeedbackItem,
@@ -381,6 +387,7 @@ def review_voice_feedback(
     payload: VoiceFeedbackReviewRequest,
     current_user: Annotated[User, Depends(require_role(UserRole.reviewer))],
     db: Annotated[DBSession, Depends(get_db)],
+    storage: Annotated[ObjectStorage, Depends(get_storage)],
 ) -> VoiceFeedbackItem:
     row = _joined_feedback_query(db, current_user).filter(VoiceFeedback.id == feedback_id).first()
     if row is None:
@@ -401,6 +408,10 @@ def review_voice_feedback(
         feedback,
         employee_email=employee.email,
         sop_title=sop.title,
+        audio_url=storage.generate_signed_url(
+            feedback.audio_object_key,
+            expires=AUDIO_URL_EXPIRES,
+        ),
     )
 
 
@@ -473,17 +484,41 @@ def mark_notification_read(
     )
 
 
+@notifications_router.post("/ws-ticket", response_model=NotificationWsTicketResponse)
+def create_notification_ws_ticket(
+    current_user: Annotated[User, Depends(require_role(UserRole.reviewer))],
+) -> NotificationWsTicketResponse:
+    try:
+        role = UserRole(current_user.role)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid user role",
+        ) from exc
+    ticket = generate_ws_ticket(current_user.id, role, current_user.tenant_id)
+    return NotificationWsTicketResponse(
+        ticket=ticket,
+        expires_in_seconds=WS_TOKEN_EXPIRE_SECONDS,
+    )
+
+
 @notifications_router.websocket("/ws")
 async def notifications_ws(
     websocket: WebSocket,
     db: Annotated[DBSession, Depends(get_db)],
     token: Annotated[str | None, Query()] = None,
 ) -> None:
-    if not token:
+    auth_header = websocket.headers.get("authorization")
+    header_token = None
+    if auth_header and auth_header.lower().startswith("bearer "):
+        header_token = auth_header.split(" ", 1)[1].strip() or None
+    cookie_token = websocket.cookies.get("wt_access_token")
+    resolved = token or header_token or cookie_token
+    if not resolved:
         await websocket.close(code=4401)
         return
     try:
-        payload = verify_token(token)
+        payload = verify_access_or_ws_token(resolved)
         user_id = UUID(payload["user_id"])
     except (InvalidTokenError, ValueError, KeyError):
         await websocket.close(code=4401)

@@ -21,12 +21,16 @@ function statusLabel(status: string): string {
   return status;
 }
 
+function canAccessReview(role: string | undefined): boolean {
+  return role === 'REVIEWER' || role === 'MANAGER';
+}
+
 export function ReviewQueueClient() {
   const { user, loading, logout } = useCurrentUser();
   const searchParams = useSearchParams();
-  const initialTab = searchParams.get('tab') === 'feedback' ? 'feedback' : 'sops';
+  const requestedTab = searchParams.get('tab') === 'feedback' ? 'feedback' : 'sops';
   const feedbackId = searchParams.get('feedbackId');
-  const [tab, setTab] = useState<ReviewTab>(initialTab);
+  const [tab, setTab] = useState<ReviewTab>(requestedTab);
   const [items, setItems] = useState<QueueItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loadingQueue, setLoadingQueue] = useState(true);
@@ -57,11 +61,11 @@ export function ReviewQueueClient() {
   }, []);
 
   useEffect(() => {
-    setTab(initialTab);
-  }, [initialTab]);
+    setTab(requestedTab);
+  }, [requestedTab]);
 
   useEffect(() => {
-    if (!loading && user?.role === 'REVIEWER' && tab === 'sops') {
+    if (!loading && canAccessReview(user?.role) && tab === 'sops') {
       void loadQueue();
     }
   }, [loading, user?.role, loadQueue, tab]);
@@ -116,12 +120,12 @@ export function ReviewQueueClient() {
     );
   }
 
-  if (user.role !== 'REVIEWER') {
+  if (!canAccessReview(user.role)) {
     return (
       <main className={styles.page}>
         <h1 className={styles.title}>Review queue</h1>
         <p className={styles.muted}>
-          This page is for REVIEWER accounts. Signed in as {user.email} ({user.role}).
+          This page is for REVIEWER and MANAGER accounts. Signed in as {user.email} ({user.role}).
         </p>
         <div className={styles.headerActions}>
           <Link href="/library" className={styles.linkButton}>
@@ -139,7 +143,9 @@ export function ReviewQueueClient() {
     <main className={styles.page}>
       <header className={styles.header}>
         <div>
-          <p className={styles.eyebrow}>Reviewer workspace</p>
+          <p className={styles.eyebrow}>
+            {user.role === 'MANAGER' ? 'Manager workspace' : 'Reviewer workspace'}
+          </p>
           <h1 className={styles.title}>Review queue</h1>
           <p className={styles.lead}>
             Approve draft SOPs and review employee voice feedback with transcript and severity.
@@ -149,6 +155,11 @@ export function ReviewQueueClient() {
           <p className={styles.userMeta}>
             {user.email} ({user.role})
           </p>
+          {user.role === 'MANAGER' ? (
+            <Link href="/dashboard/feedback" className={styles.linkButton}>
+              Feedback dashboard
+            </Link>
+          ) : null}
           <Link href="/library" className={styles.linkButton}>
             Library
           </Link>

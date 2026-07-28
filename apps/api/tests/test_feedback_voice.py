@@ -248,6 +248,7 @@ def test_review_voice_feedback_marks_reviewed(monkeypatch):
         created_at=now,
         updated_at=now,
         tenant_id=TENANT,
+        audio_object_key="tenants/x/feedback/audio.webm",
     )
     employee = SimpleNamespace(id=EMPLOYEE_ID, email="employee@example.com")
     sop = SimpleNamespace(id=SOP_ID, title="Refund workflow")
@@ -266,8 +267,10 @@ def test_review_voice_feedback_marks_reviewed(monkeypatch):
 
     previous_user = app.dependency_overrides.get(get_current_user)
     previous_db = app.dependency_overrides.get(get_db)
+    previous_storage = app.dependency_overrides.get(get_storage)
     app.dependency_overrides[get_current_user] = reviewer
     app.dependency_overrides[get_db] = lambda: ReviewDB()
+    app.dependency_overrides[get_storage] = lambda: FakeStorage()
 
     try:
         response = client.patch(
@@ -277,9 +280,12 @@ def test_review_voice_feedback_marks_reviewed(monkeypatch):
     finally:
         _restore_override(get_current_user, previous_user)
         _restore_override(get_db, previous_db)
+        _restore_override(get_storage, previous_storage)
 
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["status"] == "reviewed"
     assert body["reviewer_comment"] == "Looks valid"
     assert body["reviewer_tags"] == ["ux"]
+    assert body["audio_url"]
+    assert "signed.example" in body["audio_url"]

@@ -82,3 +82,9 @@ class FeedbackNotificationListResponse(BaseModel):
 class AudioUrlResponse(BaseModel):
     url: str
     expires_in_seconds: int = 3600
+
+
+class NotificationWsTicketResponse(BaseModel):
+    ticket: str
+    expires_in_seconds: int = 60
+    ws_path: str = "/api/v1/notifications/ws"

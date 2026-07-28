@@ -337,3 +337,33 @@ export async function markFeedbackNotificationRead(notificationId: string): Prom
     throw new ApiError(await errorMessage(res, 'Failed to mark notification read'), res.status);
   }
 }
+
+export type NotificationWsTicket = {
+  ticket: string;
+  expires_in_seconds: number;
+  ws_path: string;
+};
+
+export async function createNotificationWsTicket(): Promise<NotificationWsTicket> {
+  const res = await authedFetch('/api/v1/notifications/ws-ticket', { method: 'POST' });
+  if (!res.ok) {
+    throw new ApiError(
+      await errorMessage(res, 'Failed to mint notification socket ticket'),
+      res.status,
+    );
+  }
+  return res.json();
+}
+
+export function notificationsWebSocketUrl(
+  ticket: string,
+  wsPath = '/api/v1/notifications/ws',
+): string {
+  const httpBase = (process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000').replace(
+    /\/$/,
+    '',
+  );
+  const wsBase = httpBase.replace(/^http/, 'ws');
+  const path = wsPath.startsWith('/') ? wsPath : `/${wsPath}`;
+  return `${wsBase}${path}?token=${encodeURIComponent(ticket)}`;
+}
