@@ -384,6 +384,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             duration_seconds: Math.round(durationMs / 1000),
             friction_events: serializeFrictionEvents(message.friction_events),
             step_timings: message.step_timings ?? [],
+            step_sequence: message.step_sequence ?? [],
           }),
         });
 

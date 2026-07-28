@@ -803,6 +803,17 @@ class WalkthroughCompletion(Base):
         Integer,
         nullable=False,
     )
+    step_sequence = Column(
+        JSONB,
+        nullable=False,
+        default=list,
+        server_default=text("'[]'::jsonb"),
+    )
+    user_role = Column(
+        String(32),
+        nullable=False,
+        server_default=UserRole.employee.value,
+    )
     created_at = Column(
         DateTime(timezone=True),
         nullable=False,
@@ -824,6 +835,14 @@ class WalkthroughCompletion(Base):
         CheckConstraint(
             "duration_seconds >= 0",
             name="ck_walkthrough_completion_duration_nonneg",
+        ),
+        CheckConstraint(
+            "jsonb_typeof(step_sequence) = 'array'",
+            name="ck_walkthrough_completion_step_sequence_array",
+        ),
+        CheckConstraint(
+            f"user_role IN ({_csv(UserRole)})",
+            name="ck_walkthrough_completion_user_role",
         ),
         Index(
             "ix_walkthrough_completion_sop_employee",

@@ -50,6 +50,29 @@
    *   duration_ms: number,
    * }>} */
   let stepTimings = [];
+  /** @type {number[]} Complete visit path; intentionally independent of timing retraction. */
+  let stepSequence = [];
+
+  function persistAnalyticsState() {
+    if (!activeState) {
+      return;
+    }
+    activeState = {
+      ...activeState,
+      stepSequence: [...stepSequence],
+      stepTimings: stepTimings.map((timing) => ({ ...timing })),
+      frictionEvents: frictionEvents.map((event) => ({ ...event })),
+      activeVisit:
+        currentVisitEnteredAt != null && currentVisitStepNumber != null
+          ? {
+              stepIndex: lastEnteredStepIndex,
+              step_number: currentVisitStepNumber,
+              entered_at: currentVisitEnteredAt,
+            }
+          : null,
+    };
+    chrome.storage?.session?.set({ [STORAGE_STATE_KEY]: activeState });
+  }
 
   // Guards against re-recording selector_miss/wrong_page on every scroll,
   // resize, or DOM mutation while the same step's target stays unresolved.
@@ -988,6 +1011,9 @@
     lastEnteredStepIndex = activeState.stepIndex;
     currentVisitStepNumber = stepNumber;
     currentVisitEnteredAt = Date.now();
+    stepSequence.push(stepNumber);
+    // Keep all analytics across page navigations, which reload this content script.
+    persistAnalyticsState();
     try {
       chrome.runtime?.sendMessage?.({
         type: 'WALKTHROUGH_STEP_ENTERED',
@@ -1018,24 +1044,26 @@
     const leftAt = Date.now();
     const durationMs = leftAt - currentVisitEnteredAt;
 
+    const stepNumber = currentVisitStepNumber;
+    const enteredAt = currentVisitEnteredAt;
     stepTimings.push({
-      step_number: currentVisitStepNumber,
-      entered_at: currentVisitEnteredAt,
+      step_number: stepNumber,
+      entered_at: enteredAt,
       left_at: leftAt,
       duration_ms: durationMs,
     });
+    clearCurrentVisit();
+    persistAnalyticsState();
 
     try {
       chrome.runtime?.sendMessage?.({
         type: 'WALKTHROUGH_STEP_LEFT',
-        step_number: currentVisitStepNumber,
-        entered_at: currentVisitEnteredAt,
+        step_number: stepNumber,
+        entered_at: enteredAt,
         left_at: leftAt,
         duration_ms: durationMs,
       });
     } catch {}
-
-    clearCurrentVisit();
   }
 
   /** Drop the open visit without recording it (Previous retreat). */
@@ -1051,6 +1079,7 @@
   function retractPathToStep(destinationStepNumber) {
     stepTimings = stepTimings.filter((t) => t.step_number < destinationStepNumber);
     frictionEvents = frictionEvents.filter((e) => e.step_number <= destinationStepNumber);
+    persistAnalyticsState();
   }
 
   // Single source of truth for tearing down an in-progress run's bookkeeping,
@@ -1066,11 +1095,16 @@
 
     frictionEvents = [];
     stepTimings = [];
+    stepSequence = [];
     missFrictionStepIndex = null;
 
     currentVisitEnteredAt = null;
     currentVisitStepNumber = null;
     lastEnteredStepIndex = null;
+
+    if (activeState?.status !== 'playing') {
+      persistAnalyticsState();
+    }
   }
 
   function recordFriction(eventType) {
@@ -1079,6 +1113,7 @@
       event_type: eventType,
       occurred_at: Date.now(),
     });
+    persistAnalyticsState();
   }
 
   function render() {
@@ -1248,6 +1283,7 @@
         sopId: activeState?.sopId ?? null,
         friction_events: frictionEvents,
         step_timings: stepTimings,
+        step_sequence: stepSequence,
       });
     } catch {
       // ignore
@@ -1282,6 +1318,34 @@
 
     activeState = state;
     activePayload = payload;
+    stepSequence = Array.isArray(state?.stepSequence)
+      ? [...state.stepSequence]
+      : wasPlaying
+        ? stepSequence
+        : [];
+    stepTimings = Array.isArray(state?.stepTimings)
+      ? state.stepTimings.map((timing) => ({ ...timing }))
+      : wasPlaying
+        ? stepTimings
+        : [];
+    frictionEvents = Array.isArray(state?.frictionEvents)
+      ? state.frictionEvents.map((event) => ({ ...event }))
+      : wasPlaying
+        ? frictionEvents
+        : [];
+    if (
+      state?.status === 'playing' &&
+      state.activeVisit?.stepIndex === state.stepIndex &&
+      Number.isFinite(state.activeVisit.entered_at) &&
+      Number.isFinite(state.activeVisit.step_number)
+    ) {
+      currentVisitEnteredAt = state.activeVisit.entered_at;
+      currentVisitStepNumber = state.activeVisit.step_number;
+      lastEnteredStepIndex = state.activeVisit.stepIndex;
+    } else if (!wasPlaying) {
+      clearCurrentVisit();
+      lastEnteredStepIndex = null;
+    }
 
     // Walkthrough stopped externally (e.g. popup Stop clearing storage out
     // from under this content script, rather than going through handleFinish).

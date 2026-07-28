@@ -3,7 +3,7 @@ from __future__ import annotations
 import time
 from collections import Counter
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -22,7 +22,7 @@ from app.analytics_schema import (
     AnalyticsOutlier,
 )
 
-ALGORITHM_VERSION = "walkthrough-kmeans-v1"
+ALGORITHM_VERSION = "walkthrough-kmeans-v2"
 DEFAULT_CLUSTER_COUNT = 3
 DEFAULT_MIN_SESSIONS = 5
 FRICTION_TYPES = tuple(item.value for item in models.WalkthroughFrictionType)
@@ -43,6 +43,9 @@ class WalkthroughSessionData:
     total_duration_ms: int
     step_durations_ms: dict[int, int]
     friction_counts: dict[tuple[int, str], int]
+    step_sequence: list[int] = field(default_factory=list)
+    user_role: str = models.UserRole.employee.value
+    account_age_days: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -68,10 +71,24 @@ def _feature_names(step_numbers: Sequence[int]) -> list[str]:
                 f"{prefix}_duration_ms",
                 f"{prefix}_completed",
                 f"{prefix}_in_order",
+                f"{prefix}_first_visit_position",
+                f"{prefix}_visit_count",
             ]
         )
         names.extend(f"{prefix}_friction_{event_type}" for event_type in FRICTION_TYPES)
-    names.extend(["total_duration_ms", "completion_ratio"])
+    names.extend(
+        [
+            "total_duration_ms",
+            "completion_ratio",
+            "sequence_length",
+            "backtrack_count",
+            "skip_count",
+            "role_employee",
+            "role_reviewer",
+            "role_manager",
+            "account_age_days",
+        ]
+    )
     return names
 
 
@@ -86,8 +103,22 @@ def build_feature_matrix(
 
     ordered_sessions = sorted(sessions, key=lambda item: str(item.session_id))
     rows: list[list[float]] = []
+    step_indexes = {step_number: index for index, step_number in enumerate(ordered_steps)}
     for session in ordered_sessions:
         completed_steps = set(session.step_durations_ms)
+        # Historical rows may contain stale/deleted step numbers. They have no
+        # canonical position and must not affect any sequence-derived feature.
+        sequence = [step for step in session.step_sequence if step in step_indexes]
+        sequence_length = len(sequence)
+        first_positions = (
+            {
+                step_number: (sequence.index(step_number) + 1) / sequence_length
+                for step_number in set(sequence)
+            }
+            if sequence
+            else {}
+        )
+        visit_counts = Counter(sequence)
         row: list[float] = []
         preceding_complete = True
         for step_number in ordered_steps:
@@ -98,6 +129,8 @@ def build_feature_matrix(
                     float(session.step_durations_ms.get(step_number, 0)),
                     float(completed),
                     float(in_order),
+                    float(first_positions.get(step_number, 0)),
+                    float(visit_counts.get(step_number, 0)),
                 ]
             )
             row.extend(
@@ -109,6 +142,24 @@ def build_feature_matrix(
             [
                 float(session.total_duration_ms),
                 len(completed_steps.intersection(ordered_steps)) / len(ordered_steps),
+                float(sequence_length),
+                float(
+                    sum(
+                        step_indexes[current] < step_indexes[previous]
+                        for previous, current in zip(sequence, sequence[1:], strict=False)
+                    )
+                ),
+                float(
+                    sum(
+                        step_indexes[current] - step_indexes[previous] - 1
+                        for previous, current in zip(sequence, sequence[1:], strict=False)
+                        if step_indexes[current] > step_indexes[previous]
+                    )
+                ),
+                float(session.user_role == models.UserRole.employee.value),
+                float(session.user_role == models.UserRole.reviewer.value),
+                float(session.user_role == models.UserRole.manager.value),
+                float(session.account_age_days),
             ]
         )
         rows.append(row)
@@ -136,6 +187,18 @@ def _sop_step_numbers(raw_steps: object) -> list[int]:
     if len(numbers) != len(set(numbers)):
         raise ValueError("SOP step orders must be unique")
     return sorted(numbers)
+
+
+def _user_role_value(raw_role: object) -> str:
+    return raw_role.value if isinstance(raw_role, models.UserRole) else str(raw_role)
+
+
+def _account_age_days(completed_at: datetime, created_at: datetime) -> float:
+    if completed_at.tzinfo is None and created_at.tzinfo is not None:
+        completed_at = completed_at.replace(tzinfo=created_at.tzinfo)
+    elif completed_at.tzinfo is not None and created_at.tzinfo is None:
+        created_at = created_at.replace(tzinfo=completed_at.tzinfo)
+    return max(0.0, (completed_at - created_at).total_seconds() / 86_400)
 
 
 def load_walkthrough_sessions(
@@ -173,7 +236,7 @@ def load_walkthrough_sessions(
         .filter(models.User.id.in_(employee_ids), models.User.tenant_id == tenant_id)
         .all()
     )
-    eligible_employee_ids = {item.id for item in employees}
+    users_by_id = {item.id: item for item in employees}
 
     timings = (
         db.query(models.WalkthroughStepTiming)
@@ -214,9 +277,19 @@ def load_walkthrough_sessions(
                 total_duration_ms=int(item.duration_seconds) * 1000,
                 step_durations_ms=durations_by_completion.get(item.id, {}),
                 friction_counts=dict(friction_by_completion.get(item.id, {})),
+                step_sequence=list(
+                    getattr(item, "step_sequence", None)
+                    or sorted(durations_by_completion.get(item.id, {}))
+                ),
+                user_role=_user_role_value(
+                    getattr(item, "user_role", models.UserRole.employee.value)
+                ),
+                account_age_days=_account_age_days(
+                    item.completed_at, users_by_id[item.employee_id].created_at
+                ),
             )
             for item in completions
-            if item.employee_id in eligible_employee_ids
+            if item.employee_id in users_by_id
         ],
         step_numbers,
     )
