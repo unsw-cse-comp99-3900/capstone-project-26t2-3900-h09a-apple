@@ -93,13 +93,12 @@ def override_get_db():
     yield db
 
 
-app.dependency_overrides[get_db] = override_get_db
-
-
 @pytest.fixture(autouse=True)
 def authenticate_requests():
+    app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_current_user] = lambda: _make_user()
     yield
+    app.dependency_overrides.pop(get_db, None)
     app.dependency_overrides.pop(get_current_user, None)
 
 

@@ -511,7 +511,33 @@ test('finish clears session walkthrough state and tears down overlay', async () 
   assert.equal(document.getElementById('worktrace-walkthrough-host'), null);
 });
 
-test('previous discards abandoned forward step timing; finish has one row per step', async () => {
+test('external reset finalizes the open visit and clears persisted analytics', async () => {
+  const payload = {
+    steps: [{ step_number: 1, instruction: 'Only step', css_selector: '#save-btn' }],
+  };
+  const { document, flush, sentMessages, sessionValues, window } = loadRuntime({
+    walkthroughState: { status: 'playing', sopId: 'sop-1', stepIndex: 0 },
+    walkthroughPayload: payload,
+  });
+  await flush();
+
+  window.chrome.storage.session.set({
+    walkthroughState: { status: 'idle', sopId: null, stepIndex: 0 },
+    walkthroughPayload: null,
+  });
+  await flush();
+
+  assert.equal(document.getElementById('worktrace-walkthrough-host'), null);
+  assert.equal(
+    sentMessages.filter((message) => message.type === 'WALKTHROUGH_STEP_LEFT').length,
+    1,
+  );
+  assert.deepEqual(Array.from(sessionValues().walkthroughState.stepSequence), []);
+  assert.deepEqual(Array.from(sessionValues().walkthroughState.stepTimings), []);
+  assert.deepEqual(Array.from(sessionValues().walkthroughState.frictionEvents), []);
+});
+
+test('previous retracts timing but preserves the complete step visit sequence', async () => {
   const payload = {
     steps: [
       { step_number: 1, instruction: 'One', css_selector: '#save-btn' },
@@ -530,12 +556,12 @@ test('previous discards abandoned forward step timing; finish has one row per st
   const next = host.shadowRoot.querySelector('[data-action="next"]');
   const previous = host.shadowRoot.querySelector('[data-action="previous"]');
 
-  // 1 → 2 → 3, then Previous back to 2 (discard step 3), then Next → 3 → Finish
-  next.click();
-  await flush();
+  // 1 → 2, Previous → 1, then 2 → 3 → Finish.
   next.click();
   await flush();
   previous.click();
+  await flush();
+  next.click();
   await flush();
   next.click();
   await flush();
@@ -551,15 +577,81 @@ test('previous discards abandoned forward step timing; finish has one row per st
   assert.equal(timings[0].step_number, 1);
   assert.equal(timings[1].step_number, 2);
   assert.equal(timings[2].step_number, 3);
+  assert.deepEqual(Array.from(finished.step_sequence), [1, 2, 1, 2, 3]);
 
   const leftMessages = sentMessages.filter((m) => m.type === 'WALKTHROUGH_STEP_LEFT');
-  // Next from 1, Next from 2 (first visit), Next from 2 (after Previous), Finish on 3.
-  // Previous must not emit STEP_LEFT for the abandoned visit to step 3.
+  // Next from 1, Next from 1 (after Previous), Next from 2, Finish on 3.
+  // Previous must not emit STEP_LEFT for the abandoned visit to step 2.
   assert.equal(leftMessages.length, 4);
   assert.equal(leftMessages[0].step_number, 1);
-  assert.equal(leftMessages[1].step_number, 2);
+  assert.equal(leftMessages[1].step_number, 1);
   assert.equal(leftMessages[2].step_number, 2);
   assert.equal(leftMessages[3].step_number, 3);
+});
+
+test('all analytics resume after a page-navigation content-script reload', async () => {
+  const payload = {
+    steps: [
+      {
+        step_number: 1,
+        instruction: 'One',
+        css_selector: '#missing',
+        anchor_mode: 'element',
+      },
+      {
+        step_number: 2,
+        instruction: 'Two',
+        css_selector: '#name-field',
+        expected_action: 'click',
+      },
+    ],
+  };
+  const firstPage = loadRuntime({
+    walkthroughState: { status: 'playing', sopId: 'sop-1', stepIndex: 0 },
+    walkthroughPayload: payload,
+  });
+  await firstPage.flush();
+
+  firstPage.document
+    .getElementById('worktrace-walkthrough-host')
+    .shadowRoot.querySelector('[data-action="next"]')
+    .click();
+  await firstPage.flush();
+
+  const stateAtReload = firstPage.sessionValues().walkthroughState;
+  assert.deepEqual(Array.from(stateAtReload.stepSequence), [1, 2]);
+  assert.equal(stateAtReload.stepTimings.length, 1);
+  assert.equal(stateAtReload.frictionEvents[0].event_type, 'selector_miss');
+
+  const secondPage = loadRuntime({
+    walkthroughState: stateAtReload,
+    walkthroughPayload: payload,
+  });
+  await secondPage.flush();
+
+  // Add friction after the reload, then finish the second step.
+  secondPage.document.getElementById('save-btn').click();
+  secondPage.document
+    .getElementById('worktrace-walkthrough-host')
+    .shadowRoot.querySelector('[data-action="finish"]')
+    .click();
+  await secondPage.flush();
+
+  const finished = secondPage.sentMessages.find(
+    (message) => message.type === 'WALKTHROUGH_FINISHED',
+  );
+  assert.deepEqual(Array.from(finished.step_sequence), [1, 2]);
+  assert.deepEqual(
+    Array.from(finished.step_timings, (timing) => timing.step_number),
+    [1, 2],
+  );
+  assert.deepEqual(
+    Array.from(finished.friction_events, (event) => [event.step_number, event.event_type]),
+    [
+      [1, 'selector_miss'],
+      [2, 'wrong_target'],
+    ],
+  );
 });
 
 test('mismatched tabId does not mount the overlay', async () => {

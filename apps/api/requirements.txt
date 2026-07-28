@@ -18,3 +18,4 @@ Pillow==11.1.0
 python-multipart
 scikit-learn==1.6.1
 numpy==2.2.3
+redis==8.0.1

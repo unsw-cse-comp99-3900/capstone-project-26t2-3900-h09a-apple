@@ -27,6 +27,21 @@ router = APIRouter(
 )
 
 
+def _sop_step_numbers(raw_steps: object) -> set[int]:
+    if not isinstance(raw_steps, list):
+        return set()
+    numbers: set[int] = set()
+    for index, step in enumerate(raw_steps, start=1):
+        raw_number = step.get("order", index) if isinstance(step, dict) else index
+        try:
+            number = int(raw_number)
+        except (TypeError, ValueError):
+            continue
+        if number >= 1:
+            numbers.add(number)
+    return numbers
+
+
 @router.post(
     "/complete",
     response_model=WalkthroughCompletionResponse,
@@ -53,6 +68,20 @@ def complete_walkthrough(
             detail="SOP not found",
         )
 
+    valid_step_numbers = _sop_step_numbers(sop.steps)
+    invalid_step_numbers = sorted(set(payload.step_sequence) - valid_step_numbers)
+    if invalid_step_numbers:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"step_sequence contains steps not in SOP: {invalid_step_numbers}",
+        )
+
+    user_role = (
+        current_user.role.value
+        if isinstance(current_user.role, UserRole)
+        else str(current_user.role)
+    )
+
     try:
         completion = models.WalkthroughCompletion(
             tenant_id=current_user.tenant_id,
@@ -60,6 +89,8 @@ def complete_walkthrough(
             employee_id=current_user.id,
             completed_at=payload.completed_at,
             duration_seconds=payload.duration_seconds,
+            step_sequence=payload.step_sequence,
+            user_role=user_role,
         )
         db.add(completion)
         db.flush()

@@ -43,3 +43,7 @@ test('background starts walkthroughs from external web handoff using only sop id
   assert.match(backgroundSource, /syncWalkthroughToTab/);
   assert.match(backgroundSource, /WALKTHROUGH_ENSURE_PAGE/);
 });
+
+test('background uploads the complete walkthrough step sequence', () => {
+  assert.match(backgroundSource, /step_sequence: message\.step_sequence \?\? \[\]/);
+});
