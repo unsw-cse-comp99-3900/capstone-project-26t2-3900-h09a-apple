@@ -19,6 +19,7 @@ import {
   syncWalkthroughToTab,
   waitForTabComplete,
 } from './walkthrough-launch.js';
+import { serializeFrictionEvents } from './walkthrough-completion.js';
 
 const externalAuthHandlers = {
   redeemHandoffCode,
@@ -381,8 +382,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             sop_id: message.sopId,
             completed_at: new Date().toISOString(),
             duration_seconds: Math.round(durationMs / 1000),
-            friction_events: message.friction_events ?? [],
+            friction_events: serializeFrictionEvents(message.friction_events),
             step_timings: message.step_timings ?? [],
+            step_sequence: message.step_sequence ?? [],
           }),
         });
 

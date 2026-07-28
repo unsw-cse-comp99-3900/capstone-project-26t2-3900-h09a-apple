@@ -1,12 +1,5 @@
-import { RoleLanding } from '@/components/role-landing';
-import Link from 'next/link';
+import { VarianceDashboardClient } from './variance-dashboard-client';
 
 export default function VarianceDashboardPage() {
-  return (
-    <RoleLanding title="Variance dashboard" role="MANAGER">
-      <p>
-        <Link href="/dashboard/feedback">Open voice feedback dashboard</Link>
-      </p>
-    </RoleLanding>
-  );
+  return <VarianceDashboardClient />;
 }

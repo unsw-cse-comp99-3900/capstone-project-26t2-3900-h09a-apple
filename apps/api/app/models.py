@@ -30,6 +30,7 @@ from sqlalchemy import (
     Column,
     Computed,
     DateTime,
+    Float,
     ForeignKey,
     Index,
     Integer,
@@ -537,6 +538,47 @@ class SopStepEmbedding(Base):
     )
 
 
+class ClusteringResult(Base):
+    """Historical tenant-scoped K-means analytics result."""
+
+    __tablename__ = "clustering_results"
+
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    tenant_id = Column(UUID(as_uuid=True), nullable=False)
+    workflow_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("sops.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    k = Column(Integer, nullable=False)
+    cluster_centers = Column(JSONB, nullable=False)
+    session_cluster_assignments = Column(JSONB, nullable=False)
+    clusters = Column(JSONB, nullable=False)
+    outliers = Column(JSONB, nullable=False)
+    silhouette = Column(Float, nullable=True)
+    analytics_metadata = Column("metadata", JSONB, nullable=False)
+    algorithm_version = Column(String(64), nullable=False)
+    computed_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=text("now()"),
+    )
+
+    __table_args__ = (
+        CheckConstraint("k >= 2 AND k <= 4", name="ck_clustering_results_k"),
+        Index(
+            "ix_clustering_results_tenant_workflow_computed",
+            "tenant_id",
+            "workflow_id",
+            text("computed_at DESC"),
+        ),
+    )
+
+
 class WorkflowCluster(Base):
     """One cluster from a workflow variance run (H09AAPPLE-36)."""
 
@@ -921,6 +963,17 @@ class WalkthroughCompletion(Base):
         Integer,
         nullable=False,
     )
+    step_sequence = Column(
+        JSONB,
+        nullable=False,
+        default=list,
+        server_default=text("'[]'::jsonb"),
+    )
+    user_role = Column(
+        String(32),
+        nullable=False,
+        server_default=UserRole.employee.value,
+    )
     created_at = Column(
         DateTime(timezone=True),
         nullable=False,
@@ -942,6 +995,14 @@ class WalkthroughCompletion(Base):
         CheckConstraint(
             "duration_seconds >= 0",
             name="ck_walkthrough_completion_duration_nonneg",
+        ),
+        CheckConstraint(
+            "jsonb_typeof(step_sequence) = 'array'",
+            name="ck_walkthrough_completion_step_sequence_array",
+        ),
+        CheckConstraint(
+            f"user_role IN ({_csv(UserRole)})",
+            name="ck_walkthrough_completion_user_role",
         ),
         Index(
             "ix_walkthrough_completion_sop_employee",
@@ -1069,6 +1130,7 @@ __all__ = [
     "SopStatus",
     "CodificationJob",
     "CodificationJobStatus",
+    "ClusteringResult",
     "User",
     "UserRole",
     "RefreshToken",

@@ -1,3 +1,5 @@
+import Link from 'next/link';
+
 import styles from '@/app/login/auth.module.css';
 
 import {
@@ -30,12 +32,12 @@ export function AuthBrandPanel() {
   return (
     <aside className={styles.brandPanel} aria-label="WorkTrace AI">
       <div className={styles.brandInner}>
-        <div className={styles.brandHeader}>
+        <Link className={styles.brandHeader} href="/" aria-label="WorkTrace AI home">
           <span className={styles.logoMark} aria-hidden="true">
             <AuthLogoIcon className={styles.logoMarkIcon} />
           </span>
           <span className={styles.wordmark}>WorkTrace AI</span>
-        </div>
+        </Link>
 
         <p className={styles.eyebrowBadge}>
           <AuthSparkleIcon className={styles.eyebrowBadgeIcon} />

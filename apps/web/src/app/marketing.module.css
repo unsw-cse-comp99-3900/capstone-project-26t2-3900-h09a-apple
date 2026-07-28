@@ -1,0 +1,626 @@
+.page,
+.page * {
+  box-sizing: border-box;
+}
+
+.page {
+  min-height: 100dvh;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 8% 18%, rgb(117 110 255 / 10%), transparent 26rem),
+    linear-gradient(180deg, #ffffff 0%, #f7f8ff 100%);
+  color: #17213d;
+  font-family: Inter, system-ui, sans-serif;
+}
+
+.header {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: min(100% - 48px, 1180px);
+  min-height: 76px;
+  margin: 0 auto;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 11px;
+  color: #17213d;
+  font-size: 1.15rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  text-decoration: none;
+}
+
+.brandMark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #756eff, #6882e8);
+  box-shadow: 0 12px 28px rgb(95 105 220 / 24%);
+}
+
+.brandIcon {
+  width: 20px;
+  height: 20px;
+  color: #fff;
+}
+
+.nav {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+}
+
+.navLink,
+.navCta {
+  color: #536080;
+  font-size: 0.92rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.navLink:hover {
+  color: #5b63d9;
+}
+
+.navCta {
+  padding: 10px 17px;
+  border-radius: 11px;
+  background: linear-gradient(135deg, #756eff, #6882e8);
+  color: #fff;
+  box-shadow: 0 10px 22px rgb(104 112 232 / 20%);
+}
+
+.navCta:hover {
+  box-shadow: 0 14px 26px rgb(104 112 232 / 28%);
+  transform: translateY(-1px);
+}
+
+.hero {
+  position: relative;
+  width: min(100% - 48px, 1180px);
+  margin: 18px auto 0;
+  padding: clamp(72px, 10vw, 118px) clamp(24px, 6vw, 78px);
+  overflow: hidden;
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at 18% 20%, rgb(117 110 255 / 38%), transparent 42%),
+    radial-gradient(circle at 84% 74%, rgb(69 199 167 / 20%), transparent 34%),
+    linear-gradient(145deg, #14102f 0%, #2a2468 43%, #1f3f8a 100%);
+  box-shadow: 0 24px 60px rgb(75 86 145 / 16%);
+  color: #f5f7ff;
+}
+
+.hero::after {
+  position: absolute;
+  right: -110px;
+  bottom: -190px;
+  width: 430px;
+  height: 430px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, rgb(117 110 255 / 35%), rgb(104 130 232 / 8%));
+  content: '';
+  pointer-events: none;
+}
+
+.heroContent {
+  position: relative;
+  z-index: 1;
+  max-width: 760px;
+}
+
+.eyebrow {
+  display: inline-flex;
+  margin: 0 0 18px;
+  padding: 7px 13px;
+  border: 1px solid rgb(255 255 255 / 16%);
+  border-radius: 999px;
+  background: rgb(255 255 255 / 8%);
+  color: #dce1ff;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.hero h1,
+.pricingHero h1 {
+  margin: 0;
+  font-size: clamp(2.35rem, 6vw, 4.35rem);
+  font-weight: 800;
+  line-height: 1.02;
+  letter-spacing: -0.05em;
+}
+
+.heroLead {
+  max-width: 650px;
+  margin: 24px 0 0;
+  color: rgb(226 230 255 / 86%);
+  font-size: clamp(1rem, 2vw, 1.16rem);
+  line-height: 1.7;
+}
+
+.heroActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 32px;
+}
+
+.primaryButton,
+.secondaryButton,
+.outlineButton,
+.planButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: 0 21px;
+  border: 0;
+  border-radius: 12px;
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 800;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.primaryButton {
+  background: linear-gradient(135deg, #756eff, #6882e8);
+  box-shadow: 0 14px 28px rgb(104 112 232 / 26%);
+  color: #fff;
+}
+
+.hero .primaryButton {
+  background: #fff;
+  color: #373b89;
+  box-shadow: 0 14px 32px rgb(4 7 34 / 24%);
+}
+
+.secondaryButton {
+  border: 1px solid rgb(255 255 255 / 25%);
+  background: rgb(255 255 255 / 8%);
+  color: #fff;
+}
+
+.outlineButton {
+  border: 1px solid #d9def2;
+  background: #fff;
+  color: #4d57c4;
+}
+
+.primaryButton:hover,
+.secondaryButton:hover,
+.outlineButton:hover,
+.planButton:hover {
+  transform: translateY(-2px);
+}
+
+.contentSection,
+.pricingSection {
+  width: min(100% - 48px, 1080px);
+  margin: 0 auto;
+  padding: 92px 0;
+}
+
+.sectionHeading {
+  max-width: 700px;
+}
+
+.sectionHeading h2 {
+  margin: 0;
+  font-size: clamp(2rem, 4vw, 3rem);
+  line-height: 1.08;
+  letter-spacing: -0.04em;
+}
+
+.sectionHeading p {
+  margin: 18px 0 0;
+  color: #5f6b8f;
+  font-size: 1.04rem;
+  line-height: 1.7;
+}
+
+.valueGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+  margin-top: 38px;
+}
+
+.valueCard {
+  padding: 25px;
+  border: 1px solid #e2e6f6;
+  border-radius: 20px;
+  background: rgb(255 255 255 / 86%);
+  box-shadow: 0 14px 35px rgb(85 94 145 / 8%);
+}
+
+.valueNumber {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: #f0f1ff;
+  color: #5b63d9;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.valueCard h3 {
+  margin: 20px 0 0;
+  font-size: 1.05rem;
+}
+
+.valueCard p {
+  margin: 9px 0 0;
+  color: #66708f;
+  font-size: 0.92rem;
+  line-height: 1.6;
+}
+
+.pricingCallout {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 30px;
+  width: min(100% - 48px, 1080px);
+  margin: 0 auto 92px;
+  padding: 36px;
+  border: 1px solid #dfe4ff;
+  border-radius: 24px;
+  background: linear-gradient(135deg, #f2f3ff, #eef7ff);
+}
+
+.pricingCallout h2 {
+  margin: 0;
+  font-size: clamp(1.45rem, 3vw, 2rem);
+  letter-spacing: -0.03em;
+}
+
+.pricingCallout p {
+  max-width: 650px;
+  margin: 10px 0 0;
+  color: #5f6b8f;
+  line-height: 1.6;
+}
+
+.pricingHero {
+  width: min(100% - 48px, 850px);
+  margin: 66px auto 0;
+  text-align: center;
+}
+
+.pricingHero h1 {
+  color: #17213d;
+  font-size: clamp(2.35rem, 5vw, 3.8rem);
+}
+
+.pricingHero p {
+  max-width: 680px;
+  margin: 20px auto 0;
+  color: #5f6b8f;
+  font-size: 1.06rem;
+  line-height: 1.7;
+}
+
+.pricingSection {
+  width: min(100% - 48px, 1240px);
+  padding-top: 54px;
+}
+
+.planGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  align-items: stretch;
+}
+
+.planCard {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 475px;
+  padding: 27px 23px 23px;
+  border: 1px solid #e0e4f3;
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: 0 14px 35px rgb(85 94 145 / 8%);
+}
+
+.featuredPlan {
+  border: 2px solid #756eff;
+  box-shadow: 0 20px 46px rgb(95 105 220 / 15%);
+}
+
+.planBadge {
+  position: absolute;
+  top: -14px;
+  left: 50%;
+  margin: 0;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #756eff, #6882e8);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 800;
+  white-space: nowrap;
+  transform: translateX(-50%);
+}
+
+.planName {
+  margin: 0;
+  color: #596480;
+  font-size: 0.84rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.planPrice {
+  min-height: 52px;
+  margin: 17px 0 0;
+  color: #4f5873;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.planPrice strong {
+  color: #17213d;
+  font-size: 2.2rem;
+  letter-spacing: -0.04em;
+}
+
+.businessPrice strong {
+  font-size: 1.75rem;
+}
+
+.planMeta {
+  min-height: 20px;
+  margin: 4px 0 0;
+  color: #6c76a0;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.planBlurb {
+  min-height: 48px;
+  margin: 15px 0 0;
+  color: #66708f;
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+
+.featureList {
+  display: grid;
+  gap: 12px;
+  margin: 23px 0 27px;
+  padding: 20px 0 0;
+  border-top: 1px solid #edf0f8;
+  list-style: none;
+}
+
+.featureList li {
+  position: relative;
+  padding-left: 22px;
+  color: #3d496b;
+  font-size: 0.87rem;
+  line-height: 1.45;
+}
+
+.featureList li::before {
+  position: absolute;
+  top: 0.06rem;
+  left: 0;
+  color: #45a98d;
+  font-weight: 800;
+  content: '✓';
+}
+
+.planButton {
+  width: 100%;
+  min-height: 46px;
+  margin-top: auto;
+  border: 1px solid #d9def2;
+  background: #fff;
+  color: #4d57c4;
+}
+
+.featuredPlan .planButton {
+  border: 0;
+  background: linear-gradient(135deg, #756eff, #6882e8);
+  color: #fff;
+  box-shadow: 0 12px 25px rgb(104 112 232 / 22%);
+}
+
+.comingSoon {
+  max-width: 760px;
+  margin: 20px auto 0;
+  padding: 25px;
+  border: 1px solid #dce1ff;
+  border-radius: 18px;
+  background: #f3f4ff;
+  text-align: center;
+}
+
+.comingSoon:focus {
+  outline: 3px solid rgb(117 110 255 / 20%);
+  outline-offset: 3px;
+}
+
+.comingSoon h2 {
+  margin: 0;
+  color: #303a78;
+  font-size: 1.25rem;
+}
+
+.comingSoon p {
+  margin: 9px 0 0;
+  color: #5f6b8f;
+  line-height: 1.6;
+}
+
+.pricingNote {
+  margin: 22px 0 0;
+  color: #75809d;
+  font-size: 0.82rem;
+  line-height: 1.55;
+  text-align: center;
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  width: min(100% - 48px, 1180px);
+  margin: 0 auto;
+  padding: 26px 0 34px;
+  border-top: 1px solid #e2e6f3;
+  color: #75809d;
+  font-size: 0.84rem;
+}
+
+.footer p {
+  margin: 0;
+}
+
+.footerLinks {
+  display: flex;
+  gap: 18px;
+}
+
+.footer a {
+  color: #5b63d9;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.footer a:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 980px) {
+  .planGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 24px 16px;
+  }
+
+  .valueGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .valueCard {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    column-gap: 16px;
+  }
+
+  .valueCard h3 {
+    margin-top: 4px;
+  }
+
+  .valueCard p {
+    grid-column: 2;
+  }
+}
+
+@media (max-width: 640px) {
+  .header {
+    width: min(100% - 28px, 1180px);
+    min-height: 68px;
+  }
+
+  .brand {
+    font-size: 1rem;
+  }
+
+  .brandMark {
+    width: 34px;
+    height: 34px;
+  }
+
+  .nav {
+    gap: 13px;
+  }
+
+  .nav .navLink:first-child {
+    display: none;
+  }
+
+  .navCta {
+    padding: 9px 13px;
+  }
+
+  .hero {
+    width: min(100% - 28px, 1180px);
+    margin-top: 8px;
+    padding: 62px 22px;
+    border-radius: 22px;
+  }
+
+  .hero h1 {
+    font-size: clamp(2.35rem, 13vw, 3.2rem);
+  }
+
+  .heroActions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .contentSection,
+  .pricingSection {
+    width: min(100% - 28px, 1080px);
+    padding: 68px 0;
+  }
+
+  .pricingCallout {
+    align-items: flex-start;
+    flex-direction: column;
+    width: min(100% - 28px, 1080px);
+    margin-bottom: 68px;
+    padding: 26px 22px;
+  }
+
+  .pricingHero {
+    width: min(100% - 28px, 850px);
+    margin-top: 48px;
+  }
+
+  .pricingSection {
+    width: min(100% - 28px, 1240px);
+    padding-top: 46px;
+  }
+
+  .planGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .planCard {
+    min-height: 0;
+  }
+
+  .planBlurb,
+  .planMeta {
+    min-height: 0;
+  }
+
+  .footer {
+    align-items: flex-start;
+    flex-direction: column;
+    width: min(100% - 28px, 1180px);
+  }
+}

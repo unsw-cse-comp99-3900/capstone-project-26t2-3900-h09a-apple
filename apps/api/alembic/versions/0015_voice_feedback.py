@@ -1,7 +1,7 @@
 """Add voice_feedbacks and feedback_notifications (H09AAPPLE-33).
 
-Revision ID: 0013_voice_feedback
-Revises: 0012_workflow_clustering
+Revision ID: 0015_voice_feedback
+Revises: 0014_walkthrough_step_sequence
 Create Date: 2026-07-28
 """
 
@@ -12,8 +12,8 @@ from sqlalchemy.dialects import postgresql
 
 from alembic import op
 
-revision = "0013_voice_feedback"
-down_revision = "0012_workflow_clustering"
+revision = "0015_voice_feedback"
+down_revision = "0014_walkthrough_step_sequence"
 branch_labels = None
 depends_on = None
 

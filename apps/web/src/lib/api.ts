@@ -6,6 +6,8 @@ import type {
   FeedbackNotificationListResponse,
   FeedbackStatsResponse,
   HealthResponse,
+  KmeansAnalysisRequest,
+  KmeansAnalysisResponse,
   SessionCreateResponse,
   SessionStatusResponse,
   SessionUploadPayload,
@@ -159,6 +161,34 @@ export async function getPublishedSops(): Promise<SopListResponse> {
 
   if (!res.ok) {
     throw new ApiError(await errorMessage(res, 'Failed to load SOP library'), res.status);
+  }
+
+  return res.json();
+}
+
+export async function runKmeansAnalysis(
+  payload: KmeansAnalysisRequest,
+): Promise<KmeansAnalysisResponse> {
+  const res = await authedFetch('/api/v1/analytics/kmeans', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    throw new ApiError(await errorMessage(res, 'Failed to run K-means analysis'), res.status);
+  }
+
+  return res.json();
+}
+
+export async function getKmeansAnalysis(workflowId: string): Promise<KmeansAnalysisResponse> {
+  const res = await authedFetch(`/api/v1/analytics/kmeans/${encodeURIComponent(workflowId)}`);
+
+  if (!res.ok) {
+    throw new ApiError(await errorMessage(res, 'Failed to load K-means analysis'), res.status);
   }
 
   return res.json();

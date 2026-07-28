@@ -365,6 +365,52 @@ Matches `SopWarning` in `sop_schema.py`:
 ]
 ```
 
+## Table: `walkthrough_completions` (H09AAPPLE-30 / analytics v2)
+
+Each row records one authenticated employee's completed SOP walkthrough.
+`step_sequence JSONB NOT NULL DEFAULT '[]'` stores every entered canonical step
+number in visit order, including Previous navigation and repeated visits. It is
+validated as a JSON array with at most 10,000 positive integer items, and the
+completion API rejects numbers outside the owning SOP's `steps[].order`
+(falling back to the one-based array index when `order` is absent). Timing
+retraction remains independent and continues to retain only the final per-step
+timing path. `user_role VARCHAR(32)` snapshots the completing user's role so
+later role changes cannot rewrite historical analytics; allowed values are
+`EMPLOYEE`, `REVIEWER`, and `MANAGER`. Rows created before revision
+`0014_walkthrough_step_sequence` use `[]` and `EMPLOYEE`.
+
+Migration `0014_walkthrough_step_sequence` adds both columns plus
+`ck_walkthrough_completion_step_sequence_array` and
+`ck_walkthrough_completion_user_role`.
+
+### Walkthrough analytics feature contract
+
+`walkthrough-kmeans-v2` builds a deterministic fixed-width vector in canonical
+SOP step order:
+
+- Per step: `duration_ms`, `completed`, `in_order`,
+  `first_visit_position` (one-based visit index divided by sequence length;
+  zero when unvisited), `visit_count`, and each friction-event count.
+- Per session: `total_duration_ms`, `completion_ratio`, `sequence_length`,
+  `backtrack_count` (adjacent decreases in canonical SOP order), and
+  `skip_count` (only canonical steps skipped by forward moves; reverse moves
+  contribute only to `backtrack_count`). Unknown historical step numbers are
+  ignored safely.
+- User metadata: `role_employee`, `role_reviewer`, and `role_manager` one-hot
+  values from the completion-time role snapshot, plus `account_age_days`,
+  calculated from the persisted user creation time to completion time and
+  clamped to zero.
+
+Historical rows with an empty `step_sequence` fall back to the available timing
+step numbers in ascending order. Email addresses and employee identifiers are
+never vector features.
+
+The clustering API is restricted to managers and every database read is scoped
+to the manager's tenant. Its product contract intentionally returns tenant-local
+employee UUIDs in assignments, cluster membership, and outliers; it does not
+return email addresses. Neither email addresses nor UUID/employee identifiers
+are converted into numerical clustering features.
+
 ---
 
 ## PII summary (AC5)
@@ -593,4 +639,4 @@ and LLM/heuristic classification live on the row.
 Inbox rows for reviewers/managers. WebSocket push is best-effort; email is the
 fallback when the recipient has no active socket.
 
-**Revision:** `0013_voice_feedback`
+**Revision:** `0015_voice_feedback`

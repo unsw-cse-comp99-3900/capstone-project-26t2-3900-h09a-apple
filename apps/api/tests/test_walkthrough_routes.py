@@ -134,14 +134,14 @@ def walkthrough_db():
         app.dependency_overrides.pop(get_current_user, None)
 
 
-def add_sop(db):
+def add_sop(db, steps=None):
     sop = models.Sop(
         id=SOP_ID,
         tenant_id=TENANT_ID,
         title="Test SOP",
         session_id=uuid4(),
         status=models.SopStatus.published.value,
-        steps=[],
+        steps=steps if steps is not None else [{"order": 1}, {"order": 2}, {"order": 3}],
         warnings=[],
     )
     db.sops.append(sop)
@@ -153,6 +153,7 @@ def valid_payload():
         "sop_id": str(SOP_ID),
         "completed_at": "2026-07-15T10:25:31Z",
         "duration_seconds": 142,
+        "step_sequence": [1, 2, 1, 2, 3],
         "friction_events": [
             {
                 "step_number": 2,
@@ -222,6 +223,59 @@ def test_complete_creates_completion(walkthrough_db):
     assert completion.employee_id == USER_ID
     assert completion.tenant_id == TENANT_ID
     assert completion.duration_seconds == 142
+    assert completion.step_sequence == [1, 2, 1, 2, 3]
+    assert completion.user_role == UserRole.employee.value
+
+
+def test_complete_snapshots_current_user_role(walkthrough_db):
+    add_sop(walkthrough_db)
+    app.dependency_overrides[get_current_user] = lambda: _make_user(UserRole.manager)
+
+    response = client.post("/api/v1/walkthroughs/complete", json=valid_payload())
+
+    assert response.status_code == 201
+    assert walkthrough_db.completions[0].user_role == UserRole.manager.value
+
+
+def test_complete_rejects_invalid_step_sequence(walkthrough_db):
+    add_sop(walkthrough_db)
+    payload = valid_payload()
+    payload["step_sequence"] = [1, 0, 2]
+
+    response = client.post("/api/v1/walkthroughs/complete", json=payload)
+
+    assert response.status_code == 422
+
+
+def test_complete_rejects_sequence_step_not_in_non_contiguous_sop(walkthrough_db):
+    add_sop(walkthrough_db, steps=[{"order": 10}, {"order": 30}, {"title": "fallback"}])
+    payload = valid_payload()
+    payload["step_sequence"] = [10, 2, 30]
+
+    response = client.post("/api/v1/walkthroughs/complete", json=payload)
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "step_sequence contains steps not in SOP: [2]"
+
+
+def test_complete_accepts_explicit_and_index_fallback_step_numbers(walkthrough_db):
+    add_sop(walkthrough_db, steps=[{"order": 10}, {"title": "fallback"}, {"order": 30}])
+    payload = valid_payload()
+    payload["step_sequence"] = [10, 2, 30]
+
+    response = client.post("/api/v1/walkthroughs/complete", json=payload)
+
+    assert response.status_code == 201
+
+
+def test_complete_rejects_step_sequence_over_length_limit(walkthrough_db):
+    add_sop(walkthrough_db)
+    payload = valid_payload()
+    payload["step_sequence"] = [1] * 10_001
+
+    response = client.post("/api/v1/walkthroughs/complete", json=payload)
+
+    assert response.status_code == 422
 
 
 def test_complete_persists_friction_events(walkthrough_db):
