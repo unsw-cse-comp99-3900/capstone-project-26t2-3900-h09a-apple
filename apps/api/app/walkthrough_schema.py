@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Annotated
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -26,6 +27,7 @@ class WalkthroughCompletionPayload(BaseModel):
                 "sop_id": "6d1c3a59-9d0c-4fd5-8c8b-26dc0d57d62a",
                 "completed_at": "2026-07-15T10:25:31Z",
                 "duration_seconds": 142,
+                "step_sequence": [1, 2, 1, 2, 3],
                 "friction_events": [
                     {
                         "step_number": 2,
@@ -49,6 +51,10 @@ class WalkthroughCompletionPayload(BaseModel):
     sop_id: UUID
     completed_at: datetime
     duration_seconds: int = Field(..., ge=0)
+    step_sequence: list[Annotated[int, Field(ge=1)]] = Field(
+        default_factory=list,
+        max_length=10_000,
+    )
     friction_events: list[FrictionEventPayload] = Field(default_factory=list)
     step_timings: list[StepTimingPayload] = Field(default_factory=list)
 
