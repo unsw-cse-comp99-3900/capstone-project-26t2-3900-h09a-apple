@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useRef, useState, type FormEvent } from 'react';
 import type { KmeansAnalysisResponse, SopLibraryItem } from '@h09a/types';
+import Link from 'next/link';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 
 import { useCurrentUser } from '@/contexts/auth-context';
 import { ApiError, getKmeansAnalysis, getPublishedSops, runKmeansAnalysis } from '@/lib/api';
@@ -167,6 +168,9 @@ export function VarianceDashboardClient() {
           </p>
         </div>
         <div className={styles.account}>
+          <Link className={styles.secondaryButton} href="/dashboard/feedback">
+            Voice feedback
+          </Link>
           <span>{user.email}</span>
           <button className={styles.secondaryButton} type="button" onClick={() => void logout()}>
             Log out

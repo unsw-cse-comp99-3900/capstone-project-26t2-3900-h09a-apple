@@ -435,7 +435,7 @@ them directly.
 ## Out of scope (H09AAPPLE-15 - historical)
 
 - `tenants` table and full auth UX - `users` landed in H09AAPPLE-42; login in H09AAPPLE-43
-- Analytics / feedback tables
+- Analytics tables (voice feedback landed later in H09AAPPLE-33)
 - Partitioning of `events` (needed past ~10M rows; not Sprint 1)
 - Archival to cold storage
 - Server-side URL masking (lives in H09AAPPLE-14)
@@ -603,3 +603,40 @@ is stored; the raw token is emailed once via SES (or the mock sender in local/CI
 - `POST /api/v1/auth/reset-password` - validates token, updates password, marks used, revokes refresh tokens
 
 **Revision:** `0010_auth_token_tables`
+
+---
+
+## Table: `voice_feedbacks` (H09AAPPLE-33)
+
+Employee voice notes attached to an SOP. Audio lives in object storage; transcript
+and LLM/heuristic classification live on the row.
+
+| Column             | Type          | Null | Default             | Notes                            |
+| ------------------ | ------------- | ---- | ------------------- | -------------------------------- |
+| `id`               | uuid          | no   | `gen_random_uuid()` | PK                               |
+| `tenant_id`        | uuid          | no   | -                   | indexed                          |
+| `employee_id`      | uuid          | no   | -                   | FK -> `users.id` CASCADE         |
+| `sop_id`           | uuid          | no   | -                   | FK -> `sops.id` CASCADE          |
+| `audio_object_key` | varchar(512)  | no   | -                   | S3 key                           |
+| `content_type`     | varchar(128)  | no   | -                   |                                  |
+| `duration_seconds` | numeric(10,3) | no   | -                   | >= 0                             |
+| `transcript`       | text          | no   | -                   |                                  |
+| `language`         | varchar(32)   | yes  | -                   |                                  |
+| `classification`   | varchar(32)   | no   | -                   | friction / question / suggestion |
+| `polarity`         | varchar(32)   | no   | -                   | issue / positive                 |
+| `severity`         | varchar(16)   | no   | -                   | high / medium / low              |
+| `status`           | varchar(32)   | no   | `pending`           | pending / reviewed               |
+| `reviewer_comment` | text          | yes  | -                   |                                  |
+| `reviewer_tags`    | jsonb         | no   | `[]`                | array                            |
+| `reviewed_by`      | uuid          | yes  | -                   | FK -> `users.id` SET NULL        |
+| `reviewed_at`      | timestamptz   | yes  | -                   |                                  |
+| `recorded_at`      | timestamptz   | no   | -                   | client or server time            |
+| `created_at`       | timestamptz   | no   | `now()`             |                                  |
+| `updated_at`       | timestamptz   | no   | `now()`             |                                  |
+
+## Table: `feedback_notifications` (H09AAPPLE-33)
+
+Inbox rows for reviewers/managers. WebSocket push is best-effort; email is the
+fallback when the recipient has no active socket.
+
+**Revision:** `0015_voice_feedback`
