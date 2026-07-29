@@ -23,6 +23,9 @@ Both `main` and `develop` are protected:
 - Force pushes are disabled
 - Direct pushes are disabled
 
+CI job details, required check names, and `main` web deploy behaviour:
+[docs/development/ci-cd.md](./development/ci-cd.md).
+
 ## Creating a feature branch
 
 ```bash
