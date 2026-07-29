@@ -5,7 +5,14 @@ import Link from 'next/link';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 
 import { useCurrentUser } from '@/contexts/auth-context';
-import { ApiError, getKmeansAnalysis, getPublishedSops, runKmeansAnalysis } from '@/lib/api';
+import {
+  ApiError,
+  createFrictionWsTicket,
+  frictionWebSocketUrl,
+  getKmeansAnalysis,
+  getPublishedSops,
+  runKmeansAnalysis,
+} from '@/lib/api';
 
 import styles from './variance.module.css';
 
@@ -23,11 +30,6 @@ function formatDate(value: string): string {
 
 function errorText(error: unknown, fallback: string): string {
   return error instanceof ApiError ? error.message : fallback;
-}
-
-function frictionWebSocketUrl(): string {
-  const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000';
-  return `${apiBase.replace(/^http/, 'ws').replace(/\/$/, '')}/api/v1/analytics/friction/ws`;
 }
 
 export function VarianceDashboardClient() {
@@ -79,24 +81,32 @@ export function VarianceDashboardClient() {
     let socket: WebSocket | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
-    const connect = () => {
-      socket = new WebSocket(frictionWebSocketUrl());
-      socket.onmessage = (message) => {
-        try {
-          const update = JSON.parse(message.data as string) as Partial<FrictionAnalysisUpdate>;
-          if (update.event === 'friction_analysis.updated') {
-            setFrictionUpdate(update as FrictionAnalysisUpdate);
-          }
-        } catch {
-          // Ignore heartbeat or malformed messages; the next update remains usable.
-        }
-      };
-      socket.onclose = () => {
-        if (active) reconnectTimer = setTimeout(connect, 3_000);
-      };
+    const scheduleReconnect = () => {
+      if (active) reconnectTimer = setTimeout(() => void connect(), 3_000);
     };
 
-    connect();
+    const connect = async () => {
+      try {
+        const wsTicket = await createFrictionWsTicket();
+        if (!active) return;
+        socket = new WebSocket(frictionWebSocketUrl(wsTicket.ticket, wsTicket.ws_path));
+        socket.onmessage = (message) => {
+          try {
+            const update = JSON.parse(message.data as string) as Partial<FrictionAnalysisUpdate>;
+            if (update.event === 'friction_analysis.updated') {
+              setFrictionUpdate(update as FrictionAnalysisUpdate);
+            }
+          } catch {
+            // Ignore heartbeat or malformed messages; the next update remains usable.
+          }
+        };
+        socket.onclose = scheduleReconnect;
+      } catch {
+        scheduleReconnect();
+      }
+    };
+
+    void connect();
     return () => {
       active = false;
       if (reconnectTimer) clearTimeout(reconnectTimer);

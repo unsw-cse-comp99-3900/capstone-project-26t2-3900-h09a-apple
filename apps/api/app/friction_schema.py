@@ -54,3 +54,9 @@ class FrictionAnalysisResponse(BaseModel):
     steps: list[FrictionStepAggregateResponse] = Field(default_factory=list)
     employees: list[FrictionEmployeeSummary] = Field(default_factory=list)
     employee_step_scores: list[FrictionEmployeeStepResponse] = Field(default_factory=list)
+
+
+class FrictionWsTicketResponse(BaseModel):
+    ticket: str
+    expires_in_seconds: int
+    ws_path: str = "/api/v1/analytics/friction/ws"

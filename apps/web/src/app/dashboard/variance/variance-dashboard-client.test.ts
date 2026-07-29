@@ -20,7 +20,10 @@ describe('variance dashboard client', () => {
   });
 
   it('subscribes to asynchronous friction completion updates', () => {
-    expect(dashboardSource).toContain('new WebSocket(frictionWebSocketUrl())');
+    expect(dashboardSource).toContain('const wsTicket = await createFrictionWsTicket()');
+    expect(dashboardSource).toContain(
+      'new WebSocket(frictionWebSocketUrl(wsTicket.ticket, wsTicket.ws_path))',
+    );
     expect(dashboardSource).toContain("update.event === 'friction_analysis.updated'");
     expect(dashboardSource).toContain('setFrictionUpdate');
   });

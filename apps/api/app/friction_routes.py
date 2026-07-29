@@ -5,12 +5,17 @@ from typing import Annotated
 from uuid import UUID
 
 import redis.asyncio as async_redis
-from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status
+from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect, status
 from sqlalchemy.orm import Session as DBSession
 
 from app import models
 from app.auth.deps import require_role
-from app.auth.jwt import InvalidTokenError, verify_token
+from app.auth.jwt import (
+    WS_TOKEN_EXPIRE_SECONDS,
+    InvalidTokenError,
+    generate_ws_ticket,
+    verify_access_or_ws_token,
+)
 from app.database import get_db
 from app.friction_model import average_score
 from app.friction_notifications import friction_channel
@@ -19,6 +24,7 @@ from app.friction_schema import (
     FrictionEmployeeStepResponse,
     FrictionEmployeeSummary,
     FrictionStepAggregateResponse,
+    FrictionWsTicketResponse,
 )
 from app.models import User, UserRole
 
@@ -165,23 +171,55 @@ def get_latest_friction_analysis(
     return _analysis_response(db, analysis, sop)
 
 
-def _websocket_identity(websocket: WebSocket) -> dict[str, str]:
-    token = websocket.cookies.get("wt_access_token") or websocket.query_params.get("token")
-    if not token:
-        raise InvalidTokenError("Missing access token")
-    identity = verify_token(token)
-    if identity.get("role") not in (UserRole.reviewer.value, UserRole.manager.value):
-        raise InvalidTokenError("Reviewer role or higher required")
-    UUID(identity["tenant_id"])
-    return identity
+@router.post("/ws-ticket", response_model=FrictionWsTicketResponse)
+def create_friction_ws_ticket(
+    current_user: Annotated[User, Depends(require_role(UserRole.reviewer))],
+) -> FrictionWsTicketResponse:
+    try:
+        role = UserRole(current_user.role)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid user role",
+        ) from exc
+    return FrictionWsTicketResponse(
+        ticket=generate_ws_ticket(current_user.id, role, current_user.tenant_id),
+        expires_in_seconds=WS_TOKEN_EXPIRE_SECONDS,
+    )
 
 
 @router.websocket("/ws")
-async def friction_updates(websocket: WebSocket) -> None:
+async def friction_updates(
+    websocket: WebSocket,
+    db: Annotated[DBSession, Depends(get_db)],
+    token: Annotated[str | None, Query()] = None,
+) -> None:
+    auth_header = websocket.headers.get("authorization")
+    header_token = None
+    if auth_header and auth_header.lower().startswith("bearer "):
+        header_token = auth_header.split(" ", 1)[1].strip() or None
+    resolved = token or header_token or websocket.cookies.get("wt_access_token")
+    if not resolved:
+        await websocket.close(code=4401)
+        return
     try:
-        identity = _websocket_identity(websocket)
-    except (InvalidTokenError, ValueError):
-        await websocket.close(code=1008, reason="Not authenticated")
+        identity = verify_access_or_ws_token(resolved)
+        user_id = UUID(identity["user_id"])
+    except (InvalidTokenError, KeyError, ValueError):
+        await websocket.close(code=4401)
+        return
+
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if user is None:
+        await websocket.close(code=4401)
+        return
+    try:
+        role = UserRole(user.role)
+    except ValueError:
+        await websocket.close(code=4403)
+        return
+    if role not in {UserRole.reviewer, UserRole.manager}:
+        await websocket.close(code=4403)
         return
 
     await websocket.accept()
@@ -191,7 +229,7 @@ async def friction_updates(websocket: WebSocket) -> None:
     )
     pubsub = client.pubsub()
     try:
-        await pubsub.subscribe(friction_channel(identity["tenant_id"]))
+        await pubsub.subscribe(friction_channel(user.tenant_id))
         while True:
             message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=20)
             if message and message.get("type") == "message":
