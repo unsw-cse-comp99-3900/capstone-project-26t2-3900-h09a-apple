@@ -34,7 +34,7 @@ CI gates (these run automatically - tick once they go green):
 
 If this PR changes the database schema (`models.py` or `alembic/versions/`):
 
-- [ ] New Alembic revision included; `down_revision` is the current `main` head
+- [ ] New Alembic revision included; `down_revision` is the current `develop` head
 - [ ] `models.py` matches the migration; `docs/db-schema.md` updated if the contract changed
 - [ ] `cd apps/api && alembic upgrade head` succeeds on a fresh database (CI also runs upgrade -> downgrade base -> upgrade)
 
