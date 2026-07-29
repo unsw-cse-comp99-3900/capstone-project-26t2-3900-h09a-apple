@@ -5,5 +5,6 @@ export type HealthResponse = {
 export * from './analytics';
 export * from './auth';
 export * from './consent';
+export * from './feedback';
 export * from './friction';
 export * from './session';

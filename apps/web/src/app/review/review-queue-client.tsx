@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import type { SopLibraryItem } from '@h09a/types';
 
@@ -8,8 +9,10 @@ import { useCurrentUser } from '@/contexts/auth-context';
 import { ApiError, approveSop, getSopsByStatus, publishSop } from '@/lib/api';
 
 import styles from './review.module.css';
+import { VoiceFeedbackPanel } from './voice-feedback-panel';
 
 type QueueItem = SopLibraryItem & { busy?: boolean };
+type ReviewTab = 'sops' | 'feedback';
 
 function statusLabel(status: string): string {
   if (status === 'draft') return 'Pending approval';
@@ -18,8 +21,16 @@ function statusLabel(status: string): string {
   return status;
 }
 
+function canAccessReview(role: string | undefined): boolean {
+  return role === 'REVIEWER' || role === 'MANAGER';
+}
+
 export function ReviewQueueClient() {
   const { user, loading, logout } = useCurrentUser();
+  const searchParams = useSearchParams();
+  const requestedTab = searchParams.get('tab') === 'feedback' ? 'feedback' : 'sops';
+  const feedbackId = searchParams.get('feedbackId');
+  const [tab, setTab] = useState<ReviewTab>(requestedTab);
   const [items, setItems] = useState<QueueItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loadingQueue, setLoadingQueue] = useState(true);
@@ -50,10 +61,14 @@ export function ReviewQueueClient() {
   }, []);
 
   useEffect(() => {
-    if (!loading && user?.role === 'REVIEWER') {
+    setTab(requestedTab);
+  }, [requestedTab]);
+
+  useEffect(() => {
+    if (!loading && canAccessReview(user?.role) && tab === 'sops') {
       void loadQueue();
     }
-  }, [loading, user?.role, loadQueue]);
+  }, [loading, user?.role, loadQueue, tab]);
 
   async function handleApprove(sopId: string) {
     setItems((current) =>
@@ -105,12 +120,12 @@ export function ReviewQueueClient() {
     );
   }
 
-  if (user.role !== 'REVIEWER') {
+  if (!canAccessReview(user.role)) {
     return (
       <main className={styles.page}>
         <h1 className={styles.title}>Review queue</h1>
         <p className={styles.muted}>
-          This page is for REVIEWER accounts. Signed in as {user.email} ({user.role}).
+          This page is for REVIEWER and MANAGER accounts. Signed in as {user.email} ({user.role}).
         </p>
         <div className={styles.headerActions}>
           <Link href="/library" className={styles.linkButton}>
@@ -128,17 +143,23 @@ export function ReviewQueueClient() {
     <main className={styles.page}>
       <header className={styles.header}>
         <div>
-          <p className={styles.eyebrow}>Reviewer workspace</p>
+          <p className={styles.eyebrow}>
+            {user.role === 'MANAGER' ? 'Manager workspace' : 'Reviewer workspace'}
+          </p>
           <h1 className={styles.title}>Review queue</h1>
           <p className={styles.lead}>
-            Approve draft SOPs, then publish them so employees can start walkthroughs from the
-            library.
+            Approve draft SOPs and review employee voice feedback with transcript and severity.
           </p>
         </div>
         <div className={styles.headerActions}>
           <p className={styles.userMeta}>
             {user.email} ({user.role})
           </p>
+          {user.role === 'MANAGER' ? (
+            <Link href="/dashboard/feedback" className={styles.linkButton}>
+              Feedback dashboard
+            </Link>
+          ) : null}
           <Link href="/library" className={styles.linkButton}>
             Library
           </Link>
@@ -148,55 +169,78 @@ export function ReviewQueueClient() {
         </div>
       </header>
 
-      {error ? <p className={styles.error}>{error}</p> : null}
+      <div className={styles.tabs}>
+        <button
+          type="button"
+          className={`${styles.tab} ${tab === 'sops' ? styles.tabActive : ''}`}
+          onClick={() => setTab('sops')}
+        >
+          SOP queue
+        </button>
+        <button
+          type="button"
+          className={`${styles.tab} ${tab === 'feedback' ? styles.tabActive : ''}`}
+          onClick={() => setTab('feedback')}
+        >
+          Voice feedback
+        </button>
+      </div>
 
-      {loadingQueue ? (
-        <p className={styles.muted}>Loading review queue...</p>
-      ) : items.length === 0 ? (
-        <section className={styles.empty}>
-          <h2>No SOPs waiting</h2>
-          <p>Draft and approved SOPs in this workspace will show up here.</p>
-        </section>
+      {tab === 'feedback' ? (
+        <VoiceFeedbackPanel initialFeedbackId={feedbackId} />
       ) : (
-        <ul className={styles.list}>
-          {items.map((sop) => (
-            <li key={sop.id} className={styles.card}>
-              <div className={styles.cardBody}>
-                <div className={styles.cardMeta}>
-                  <span className={styles.status}>{statusLabel(sop.status)}</span>
-                  <span className={styles.steps}>{sop.step_count} steps</span>
-                </div>
-                <h2 className={styles.cardTitle}>{sop.title}</h2>
-                <p className={styles.cardId}>{sop.id}</p>
-              </div>
-              <div className={styles.cardActions}>
-                <Link href={`/sop/${sop.id}`} className={styles.linkButton}>
-                  Open
-                </Link>
-                {sop.status === 'draft' || sop.status === 'needs_review' ? (
-                  <button
-                    type="button"
-                    className={styles.primaryButton}
-                    disabled={sop.busy}
-                    onClick={() => void handleApprove(sop.id)}
-                  >
-                    {sop.busy ? 'Approving...' : 'Approve'}
-                  </button>
-                ) : null}
-                {sop.status === 'approved' ? (
-                  <button
-                    type="button"
-                    className={styles.primaryButton}
-                    disabled={sop.busy}
-                    onClick={() => void handlePublish(sop.id)}
-                  >
-                    {sop.busy ? 'Publishing...' : 'Publish'}
-                  </button>
-                ) : null}
-              </div>
-            </li>
-          ))}
-        </ul>
+        <>
+          {error ? <p className={styles.error}>{error}</p> : null}
+
+          {loadingQueue ? (
+            <p className={styles.muted}>Loading review queue...</p>
+          ) : items.length === 0 ? (
+            <section className={styles.empty}>
+              <h2>No SOPs waiting</h2>
+              <p>Draft and approved SOPs in this workspace will show up here.</p>
+            </section>
+          ) : (
+            <ul className={styles.list}>
+              {items.map((sop) => (
+                <li key={sop.id} className={styles.card}>
+                  <div className={styles.cardBody}>
+                    <div className={styles.cardMeta}>
+                      <span className={styles.status}>{statusLabel(sop.status)}</span>
+                      <span className={styles.steps}>{sop.step_count} steps</span>
+                    </div>
+                    <h2 className={styles.cardTitle}>{sop.title}</h2>
+                    <p className={styles.cardId}>{sop.id}</p>
+                  </div>
+                  <div className={styles.cardActions}>
+                    <Link href={`/sop/${sop.id}`} className={styles.linkButton}>
+                      Open
+                    </Link>
+                    {sop.status === 'draft' || sop.status === 'needs_review' ? (
+                      <button
+                        type="button"
+                        className={styles.primaryButton}
+                        disabled={sop.busy}
+                        onClick={() => void handleApprove(sop.id)}
+                      >
+                        {sop.busy ? 'Approving...' : 'Approve'}
+                      </button>
+                    ) : null}
+                    {sop.status === 'approved' ? (
+                      <button
+                        type="button"
+                        className={styles.primaryButton}
+                        disabled={sop.busy}
+                        onClick={() => void handlePublish(sop.id)}
+                      >
+                        {sop.busy ? 'Publishing...' : 'Publish'}
+                      </button>
+                    ) : null}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
       )}
     </main>
   );

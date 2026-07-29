@@ -1,7 +1,7 @@
 """Add asynchronous friction analysis results.
 
-Revision ID: 0015_friction_analysis
-Revises: 0014_walkthrough_step_sequence
+Revision ID: 0016_friction_analysis
+Revises: 0015_voice_feedback
 Create Date: 2026-07-28
 """
 
@@ -12,8 +12,8 @@ from sqlalchemy.dialects import postgresql
 
 from alembic import op
 
-revision = "0015_friction_analysis"
-down_revision = "0014_walkthrough_step_sequence"
+revision = "0016_friction_analysis"
+down_revision = "0015_voice_feedback"
 branch_labels = None
 depends_on = None
 

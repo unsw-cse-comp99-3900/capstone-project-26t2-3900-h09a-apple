@@ -769,6 +769,166 @@ class ConsentAcceptance(Base):
 
 
 # ---------------------------------------------------------------------------
+# voice_feedbacks / feedback_notifications (H09AAPPLE-33)
+# ---------------------------------------------------------------------------
+class FeedbackClassification(str, enum.Enum):
+    friction = "friction"
+    question = "question"
+    suggestion = "suggestion"
+
+
+class FeedbackPolarity(str, enum.Enum):
+    issue = "issue"
+    positive = "positive"
+
+
+class FeedbackSeverity(str, enum.Enum):
+    high = "high"
+    medium = "medium"
+    low = "low"
+
+
+class FeedbackReviewStatus(str, enum.Enum):
+    pending = "pending"
+    reviewed = "reviewed"
+
+
+class VoiceFeedback(Base):
+    __tablename__ = "voice_feedbacks"
+
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    tenant_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    employee_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    sop_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("sops.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    audio_object_key = Column(String(512), nullable=False)
+    content_type = Column(String(128), nullable=False)
+    duration_seconds = Column(Numeric(10, 3), nullable=False)
+    transcript = Column(Text, nullable=False)
+    language = Column(String(32))
+    classification = Column(String(32), nullable=False)
+    polarity = Column(String(32), nullable=False)
+    severity = Column(String(16), nullable=False)
+    status = Column(
+        String(32),
+        nullable=False,
+        server_default=FeedbackReviewStatus.pending.value,
+    )
+    reviewer_comment = Column(Text)
+    reviewer_tags = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
+    reviewed_by = Column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    reviewed_at = Column(DateTime(timezone=True))
+    recorded_at = Column(DateTime(timezone=True), nullable=False)
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=text("now()"),
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=text("now()"),
+    )
+
+    notifications = relationship(
+        "FeedbackNotification",
+        back_populates="feedback",
+        cascade="all, delete-orphan",
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            f"classification IN ({_csv(FeedbackClassification)})",
+            name="ck_voice_feedbacks_classification",
+        ),
+        CheckConstraint(
+            f"polarity IN ({_csv(FeedbackPolarity)})",
+            name="ck_voice_feedbacks_polarity",
+        ),
+        CheckConstraint(
+            f"severity IN ({_csv(FeedbackSeverity)})",
+            name="ck_voice_feedbacks_severity",
+        ),
+        CheckConstraint(
+            f"status IN ({_csv(FeedbackReviewStatus)})",
+            name="ck_voice_feedbacks_status",
+        ),
+        CheckConstraint(
+            "duration_seconds >= 0",
+            name="ck_voice_feedbacks_duration_nonneg",
+        ),
+        CheckConstraint(
+            "jsonb_typeof(reviewer_tags) = 'array'",
+            name="ck_voice_feedbacks_reviewer_tags_array",
+        ),
+        Index("ix_voice_feedbacks_tenant_severity", "tenant_id", "severity"),
+        Index("ix_voice_feedbacks_tenant_status", "tenant_id", "status"),
+        Index("ix_voice_feedbacks_employee_sop", "employee_id", "sop_id"),
+    )
+
+
+class FeedbackNotification(Base):
+    __tablename__ = "feedback_notifications"
+
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    tenant_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    recipient_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    feedback_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("voice_feedbacks.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    event_type = Column(String(64), nullable=False)
+    title = Column(String(300), nullable=False)
+    body = Column(Text, nullable=False)
+    delivered_via = Column(String(32), nullable=False, server_default="inbox")
+    read_at = Column(DateTime(timezone=True))
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=text("now()"),
+    )
+
+    feedback = relationship("VoiceFeedback", back_populates="notifications")
+
+    __table_args__ = (
+        Index(
+            "ix_feedback_notifications_recipient_unread",
+            "recipient_id",
+            "read_at",
+            "created_at",
+        ),
+    )
+
+
+# ---------------------------------------------------------------------------
 # walkthrough_completions (H09AAPPLE-30)
 # ---------------------------------------------------------------------------
 class WalkthroughCompletion(Base):
@@ -1189,4 +1349,10 @@ __all__ = [
     "FrictionAnalysisStatus",
     "FrictionEmployeeStepScore",
     "FrictionStepAggregate",
+    "FeedbackClassification",
+    "FeedbackPolarity",
+    "FeedbackSeverity",
+    "FeedbackReviewStatus",
+    "VoiceFeedback",
+    "FeedbackNotification",
 ]

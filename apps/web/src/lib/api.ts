@@ -3,6 +3,8 @@ import type {
   ConsentAcceptResponse,
   ConsentStatusResponse,
   ConsentType,
+  FeedbackNotificationListResponse,
+  FeedbackStatsResponse,
   FrictionAnalysisResponse,
   HealthResponse,
   KmeansAnalysisRequest,
@@ -15,6 +17,9 @@ import type {
   SopListResponse,
   SopPublishResponse,
   SopStatus,
+  VoiceFeedbackItem,
+  VoiceFeedbackListResponse,
+  VoiceFeedbackReviewRequest,
 } from '@h09a/types';
 
 import { silentRefreshAccessToken } from '@/lib/auth/session-refresh';
@@ -270,4 +275,106 @@ export async function acceptConsent(payload: ConsentAcceptRequest): Promise<Cons
   }
 
   return res.json();
+}
+
+export async function listVoiceFeedback(params?: {
+  severity?: string;
+  classification?: string;
+  status?: string;
+  sopId?: string;
+}): Promise<VoiceFeedbackListResponse> {
+  const query = new URLSearchParams();
+  if (params?.severity) query.set('severity', params.severity);
+  if (params?.classification) query.set('classification', params.classification);
+  if (params?.status) query.set('status', params.status);
+  if (params?.sopId) query.set('sop_id', params.sopId);
+  query.set('include_audio_url', 'true');
+  const suffix = query.toString() ? `?${query.toString()}` : '';
+  const res = await authedFetch(`/api/v1/feedback${suffix}`);
+  if (!res.ok) {
+    throw new ApiError(await errorMessage(res, 'Failed to load voice feedback'), res.status);
+  }
+  return res.json();
+}
+
+export async function getVoiceFeedback(feedbackId: string): Promise<VoiceFeedbackItem> {
+  const res = await authedFetch(`/api/v1/feedback/${encodeURIComponent(feedbackId)}`);
+  if (!res.ok) {
+    throw new ApiError(await errorMessage(res, 'Failed to load feedback'), res.status);
+  }
+  return res.json();
+}
+
+export async function reviewVoiceFeedback(
+  feedbackId: string,
+  payload: VoiceFeedbackReviewRequest,
+): Promise<VoiceFeedbackItem> {
+  const res = await authedFetch(`/api/v1/feedback/${encodeURIComponent(feedbackId)}/review`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    throw new ApiError(await errorMessage(res, 'Failed to save feedback review'), res.status);
+  }
+  return res.json();
+}
+
+export async function getFeedbackStats(): Promise<FeedbackStatsResponse> {
+  const res = await authedFetch('/api/v1/feedback/stats');
+  if (!res.ok) {
+    throw new ApiError(await errorMessage(res, 'Failed to load feedback stats'), res.status);
+  }
+  return res.json();
+}
+
+export async function listFeedbackNotifications(
+  unreadOnly = false,
+): Promise<FeedbackNotificationListResponse> {
+  const suffix = unreadOnly ? '?unread_only=true' : '';
+  const res = await authedFetch(`/api/v1/notifications${suffix}`);
+  if (!res.ok) {
+    throw new ApiError(await errorMessage(res, 'Failed to load notifications'), res.status);
+  }
+  return res.json();
+}
+
+export async function markFeedbackNotificationRead(notificationId: string): Promise<void> {
+  const res = await authedFetch(
+    `/api/v1/notifications/${encodeURIComponent(notificationId)}/read`,
+    { method: 'POST' },
+  );
+  if (!res.ok) {
+    throw new ApiError(await errorMessage(res, 'Failed to mark notification read'), res.status);
+  }
+}
+
+export type NotificationWsTicket = {
+  ticket: string;
+  expires_in_seconds: number;
+  ws_path: string;
+};
+
+export async function createNotificationWsTicket(): Promise<NotificationWsTicket> {
+  const res = await authedFetch('/api/v1/notifications/ws-ticket', { method: 'POST' });
+  if (!res.ok) {
+    throw new ApiError(
+      await errorMessage(res, 'Failed to mint notification socket ticket'),
+      res.status,
+    );
+  }
+  return res.json();
+}
+
+export function notificationsWebSocketUrl(
+  ticket: string,
+  wsPath = '/api/v1/notifications/ws',
+): string {
+  const httpBase = (process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000').replace(
+    /\/$/,
+    '',
+  );
+  const wsBase = httpBase.replace(/^http/, 'ws');
+  const path = wsPath.startsWith('/') ? wsPath : `/${wsPath}`;
+  return `${wsBase}${path}?token=${encodeURIComponent(ticket)}`;
 }
