@@ -2,7 +2,7 @@ import os
 import time
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from dotenv import load_dotenv
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query, status
@@ -19,6 +19,8 @@ from app.database import get_db
 from app.feedback_routes import notifications_router
 from app.feedback_routes import router as feedback_router
 from app.feedback_transcription import preload_whisper_model
+from app.friction_routes import router as friction_router
+from app.friction_tasks import enqueue_friction_calculation
 from app.ingestion import ingest_session
 from app.models import User, UserRole
 from app.session_schema import (
@@ -55,7 +57,8 @@ load_dotenv()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    preload_whisper_model()
+    if os.getenv("PRELOAD_WHISPER_MODEL", "false").lower() in {"1", "true", "yes"}:
+        preload_whisper_model()
     yield
 
 
@@ -77,6 +80,7 @@ app.include_router(consent_router)
 app.include_router(walkthrough_router)
 app.include_router(workflow_router)
 app.include_router(analytics_router)
+app.include_router(friction_router)
 
 
 @app.get("/health")
@@ -425,8 +429,16 @@ def publish_sop(
     sop.status = models.SopStatus.published.value
     sop.published_at = datetime.now(UTC)
     job = enqueue_embed_job(db, sop)
+    friction_analysis = models.FrictionAnalysis(
+        id=uuid4(),
+        tenant_id=current_user.tenant_id,
+        sop_id=sop.id,
+        status=models.FrictionAnalysisStatus.pending.value,
+    )
+    db.add(friction_analysis)
 
     try:
+        db.flush()
         db.commit()
     except Exception:
         db.rollback()
@@ -434,6 +446,13 @@ def publish_sop(
 
     db.refresh(sop)
     background_tasks.add_task(process_embed_job, str(job.id))
+    try:
+        enqueue_friction_calculation(friction_analysis.id)
+    except Exception as exc:
+        friction_analysis.status = models.FrictionAnalysisStatus.failed.value
+        friction_analysis.error_message = f"Could not enqueue friction calculation: {exc}"[:2000]
+        friction_analysis.completed_at = datetime.now(UTC)
+        db.commit()
 
     return SopPublishResponse(
         id=str(sop.id),
@@ -441,6 +460,8 @@ def publish_sop(
         published_at=sop.published_at,
         library_url=f"/library/sops/{sop.id}",
         embedding_status=sop.embedding_status,
+        friction_analysis_id=str(friction_analysis.id),
+        friction_status=friction_analysis.status,
     )
 
 

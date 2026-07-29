@@ -813,6 +813,11 @@ def test_get_session_cross_tenant_returns_404():
 
 def test_publish_sop_success(monkeypatch):
     monkeypatch.setattr(main_module, "process_embed_job", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        main_module,
+        "enqueue_friction_calculation",
+        lambda analysis_id: f"task-{analysis_id}",
+    )
     fake_sop = SimpleNamespace(
         id=UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
         session_id=UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
@@ -841,6 +846,8 @@ def test_publish_sop_success(monkeypatch):
         assert fake_sop.status == main_module.models.SopStatus.published.value
         assert fake_sop.published_at is not None
         assert fake_sop.embedding_status == "pending"
+        assert body["friction_status"] == "pending"
+        assert any(isinstance(item, main_module.models.FrictionAnalysis) for item in db.added)
         assert any(
             isinstance(item, main_module.models.CodificationJob) and item.job_type == "embed"
             for item in db.added
@@ -852,6 +859,11 @@ def test_publish_sop_success(monkeypatch):
 
 def test_manager_publish_sop_returns_200(monkeypatch):
     monkeypatch.setattr(main_module, "process_embed_job", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        main_module,
+        "enqueue_friction_calculation",
+        lambda analysis_id: f"task-{analysis_id}",
+    )
     fake_sop = SimpleNamespace(
         id=UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
         session_id=UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),

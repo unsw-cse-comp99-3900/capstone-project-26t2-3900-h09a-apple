@@ -1,11 +1,18 @@
 'use client';
 
-import type { KmeansAnalysisResponse, SopLibraryItem } from '@h09a/types';
+import type { FrictionAnalysisUpdate, KmeansAnalysisResponse, SopLibraryItem } from '@h09a/types';
 import Link from 'next/link';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 
 import { useCurrentUser } from '@/contexts/auth-context';
-import { ApiError, getKmeansAnalysis, getPublishedSops, runKmeansAnalysis } from '@/lib/api';
+import {
+  ApiError,
+  createFrictionWsTicket,
+  frictionWebSocketUrl,
+  getKmeansAnalysis,
+  getPublishedSops,
+  runKmeansAnalysis,
+} from '@/lib/api';
 
 import styles from './variance.module.css';
 
@@ -36,6 +43,7 @@ export function VarianceDashboardClient() {
   const [loadingAnalysis, setLoadingAnalysis] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [frictionUpdate, setFrictionUpdate] = useState<FrictionAnalysisUpdate | null>(null);
   const analysisRequestId = useRef(0);
 
   useEffect(() => {
@@ -63,6 +71,46 @@ export function VarianceDashboardClient() {
 
     return () => {
       active = false;
+    };
+  }, [loadingUser, user?.role]);
+
+  useEffect(() => {
+    if (loadingUser || user?.role !== 'MANAGER') return;
+
+    let active = true;
+    let socket: WebSocket | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const scheduleReconnect = () => {
+      if (active) reconnectTimer = setTimeout(() => void connect(), 3_000);
+    };
+
+    const connect = async () => {
+      try {
+        const wsTicket = await createFrictionWsTicket();
+        if (!active) return;
+        socket = new WebSocket(frictionWebSocketUrl(wsTicket.ticket, wsTicket.ws_path));
+        socket.onmessage = (message) => {
+          try {
+            const update = JSON.parse(message.data as string) as Partial<FrictionAnalysisUpdate>;
+            if (update.event === 'friction_analysis.updated') {
+              setFrictionUpdate(update as FrictionAnalysisUpdate);
+            }
+          } catch {
+            // Ignore heartbeat or malformed messages; the next update remains usable.
+          }
+        };
+        socket.onclose = scheduleReconnect;
+      } catch {
+        scheduleReconnect();
+      }
+    };
+
+    void connect();
+    return () => {
+      active = false;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      socket?.close();
     };
   }, [loadingUser, user?.role]);
 
@@ -177,6 +225,15 @@ export function VarianceDashboardClient() {
           </button>
         </div>
       </header>
+
+      {frictionUpdate ? (
+        <p className={styles.notification} role="status">
+          Friction analysis {frictionUpdate.status} for SOP {frictionUpdate.sop_id}.
+          {frictionUpdate.status === 'completed'
+            ? ` Overall score: ${frictionUpdate.overall_score ?? 0}.`
+            : ''}
+        </p>
+      ) : null}
 
       <form className={styles.controls} onSubmit={(event) => void handleRefresh(event)}>
         <label className={styles.workflowField}>
