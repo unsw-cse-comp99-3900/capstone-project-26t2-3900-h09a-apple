@@ -318,6 +318,47 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return false;
   }
 
+  if (message.type === 'WALKTHROUGH_ASSISTANT_ASK') {
+    authenticatedFetch('/api/v1/assistant/walkthrough', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        question: message.question,
+        mode: message.mode ?? 'walkthrough',
+        page_url: message.page_url ?? null,
+        step: {
+          index: message.step?.index ?? 0,
+          total: message.step?.total ?? 1,
+          title: message.step?.title ?? 'Current step',
+          instruction: message.step?.instruction ?? '',
+        },
+      }),
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error('Assistant request failed');
+        }
+
+        const payload = await response.json();
+
+        sendResponse({
+          ok: true,
+          answer: payload.answer ?? '',
+        });
+      })
+      .catch((error) => {
+        console.error('Walkthrough assistant request failed:', error);
+        sendResponse({
+          ok: false,
+          error: error instanceof Error ? error.message : 'Assistant request failed',
+        });
+      });
+
+    return true;
+  }
+
   if (message.type === 'WALKTHROUGH_VISION_LOCATE') {
     locateElementViaVision(message, sender)
       .then((result) => {

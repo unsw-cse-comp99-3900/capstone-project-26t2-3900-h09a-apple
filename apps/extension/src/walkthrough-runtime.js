@@ -41,6 +41,13 @@
    *   event_type: 'wrong_target' | 'wrong_page' | 'empty_input' | 'selector_miss',
    *   occurred_at: number,
    * }>} */
+  let assistantExpanded = true;
+  let assistantMode = 'auto';
+  let assistantTab = 'prompt';
+  let assistantQuestion = '';
+  let assistantAnswer = '';
+  let assistantLoading = false;
+  let assistantError = '';
   let frictionEvents = [];
 
   /** @type {Array<{
@@ -631,17 +638,293 @@
           transition: top 0.12s ease, left 0.12s ease, width 0.12s ease, height 0.12s ease;
         }
         .highlight[hidden], .tooltip[hidden] { display: none !important; }
+        .assistant-tabs {
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          gap: 6px;
+          margin: 0 0 12px;
+        }
+
+        .assistant-tabs button {
+          min-height: 34px;
+          border-radius: 10px;
+          background: rgba(30, 41, 59, 0.72);
+          color: #cbd5e1;
+          font-size: 12px;
+          font-weight: 750;
+        }
+
+        .assistant-tabs button[data-active='true'] {
+          background: #ffffff;
+          color: #334155;
+        }
+
+        .qa-panel {
+          gap: 8px;
+          margin: 0 0 12px;
+        }
+
+        .qa-panel:not([hidden]) {
+          display: grid;
+        }
+
+        .qa-label {
+          color: #93c5fd;
+          font-size: 12px;
+          font-weight: 800;
+          text-transform: uppercase;
+          letter-spacing: 0.08em;
+        }
+
+        .qa-input {
+          width: 100%;
+          resize: vertical;
+          min-height: 76px;
+          box-sizing: border-box;
+          border: 1px solid rgba(147, 197, 253, 0.26);
+          border-radius: 12px;
+          padding: 10px 12px;
+          background: rgba(15, 23, 42, 0.72);
+          color: #f8fafc;
+          font: inherit;
+          outline: none;
+        }
+
+        .qa-input:focus {
+          border-color: rgba(129, 140, 248, 0.85);
+          box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.18);
+        }
+
+        .qa-answer {
+          margin: 4px 0 0;
+          padding: 10px 12px;
+          border-radius: 12px;
+          background: rgba(59, 130, 246, 0.14);
+          color: #dbeafe;
+        }
         .tooltip {
           position: fixed;
-          width: min(320px, calc(100vw - 24px));
-          max-width: 320px;
+          right: 24px;
+          bottom: 24px;
+          left: auto !important;
+          top: auto !important;
+          width: min(340px, calc(100vw - 32px));
+          max-width: 340px;
           padding: 14px;
-          border-radius: 12px;
+          overflow: visible;
+          border-radius: 18px;
           background: #0f172a;
           color: #f8fafc;
           font: 13px/1.45 ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif;
           box-shadow: 0 18px 40px rgb(15 23 42 / 35%);
           pointer-events: auto;
+        }
+
+        .assistant-orb {
+          position: absolute;
+          right: calc(100% + 12px);
+          bottom: 0;
+          display: grid;
+          width: 64px;
+          height: 64px;
+          place-items: center;
+          padding: 0;
+          border: 0;
+          border-radius: 22px;
+          background: linear-gradient(135deg, #6f8cff 0%, #6557f3 52%, #4b32c3 100%);
+          box-shadow:
+            0 18px 34px rgba(44, 58, 160, 0.28),
+            0 0 0 8px rgba(99, 102, 241, 0.08);
+          cursor: pointer;
+          transition:
+            transform 160ms ease,
+            box-shadow 160ms ease,
+            filter 160ms ease;
+          animation: orb-breathe 3.4s ease-in-out infinite;
+        }
+
+        .assistant-orb:hover {
+          transform: scale(1.04);
+          filter: brightness(1.04);
+          box-shadow:
+            0 22px 42px rgba(44, 58, 160, 0.34),
+            0 0 0 10px rgba(99, 102, 241, 0.1);
+        }
+
+        .assistant-orb:active {
+          transform: scale(0.97);
+        }
+
+        .orb-logo {
+          width: 50px;
+          height: 50px;
+          overflow: visible;
+        }
+
+        .orb-link {
+          fill: none;
+          stroke: rgba(255, 255, 255, 0.82);
+          stroke-width: 2.4;
+          stroke-linecap: round;
+          stroke-linejoin: round;
+          filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.28));
+        }
+
+        .orb-node {
+          fill: #746dff;
+          stroke: rgba(255, 255, 255, 0.9);
+          stroke-width: 2.4;
+          filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.22));
+        }
+
+        .orb-status-dot {
+          position: absolute;
+          right: 8px;
+          top: 8px;
+          width: 10px;
+          height: 10px;
+          border: 2px solid #ffffff;
+          border-radius: 999px;
+          background: #3fe7f3;
+          box-shadow: 0 0 12px rgba(63, 231, 243, 0.9);
+        }
+
+        .tooltip[data-loading='true'] .orb-logo {
+          filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.8));
+        }
+
+        .tooltip[data-loading='true'] .orb-node {
+          filter:
+            drop-shadow(0 0 4px rgba(255, 255, 255, 0.55))
+            drop-shadow(0 0 10px rgba(126, 116, 255, 0.35));
+        }
+
+        .tooltip[data-loading='true'] .orb-node-1 {
+          animation: orb-node-pulse 1600ms ease-in-out infinite;
+        }
+
+        .tooltip[data-loading='true'] .orb-node-2 {
+          animation: orb-node-pulse 1600ms ease-in-out 260ms infinite;
+        }
+
+        .tooltip[data-loading='true'] .orb-node-3 {
+          animation: orb-node-pulse 1600ms ease-in-out 520ms infinite;
+        }
+
+        .tooltip[data-loading='true'] .orb-status-dot {
+          animation: orb-status-pulse 1600ms ease-in-out infinite;
+        }
+
+        @keyframes orb-breathe {
+          0%, 100% {
+            box-shadow:
+              0 18px 34px rgba(44, 58, 160, 0.25),
+              0 0 0 7px rgba(99, 102, 241, 0.07);
+          }
+
+          50% {
+            box-shadow:
+              0 20px 38px rgba(44, 58, 160, 0.32),
+              0 0 0 11px rgba(99, 102, 241, 0.1);
+          }
+        }
+
+        @keyframes orb-node-pulse {
+          0%, 100% {
+            opacity: 0.46;
+            fill: #746dff;
+            stroke: rgba(255, 255, 255, 0.72);
+            filter:
+              drop-shadow(0 0 2px rgba(255, 255, 255, 0.25))
+              drop-shadow(0 0 6px rgba(120, 116, 255, 0.28));
+          }
+
+          50% {
+            opacity: 1;
+            fill: #8b86ff;
+            stroke: #ffffff;
+            filter:
+              drop-shadow(0 0 5px rgba(255, 255, 255, 0.95))
+              drop-shadow(0 0 14px rgba(120, 116, 255, 0.55));
+          }
+        }
+
+        @keyframes orb-status-pulse {
+          0%, 100% {
+            transform: scale(1);
+            opacity: 0.75;
+          }
+
+          50% {
+            transform: scale(1.25);
+            opacity: 1;
+          }
+        }
+
+        .tooltip[data-expanded='false'] {
+          width: 60px;
+          height: 60px;
+          padding: 0;
+          border-radius: 999px;
+          background: transparent;
+          box-shadow: none;
+        }
+
+        .tooltip[data-expanded='false'] .assistant-orb {
+          position: static;
+        }
+
+        .tooltip[data-expanded='false'] .assistant-panel {
+          display: none;
+        }
+
+        .assistant-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+          margin-bottom: 10px;
+        }
+
+        .assistant-title {
+          margin: 0;
+          color: #93c5fd;
+          font-size: 11px;
+          font-weight: 700;
+          letter-spacing: 0.04em;
+          text-transform: uppercase;
+        }
+
+        .assistant-collapse {
+          padding: 4px 8px;
+          border-radius: 8px;
+          background: #1e293b;
+          color: #f8fafc;
+        }
+
+        .mode-toggle {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 6px;
+          padding: 6px;
+          margin: 0 0 12px;
+          border-radius: 12px;
+          background: rgba(30, 41, 59, 0.9);
+        }
+
+        .mode-toggle button {
+          min-height: 32px;
+          padding: 6px 8px;
+          border-radius: 9px;
+          background: transparent;
+          color: #cbd5e1;
+          font-size: 12px;
+          font-weight: 700;
+        }
+
+        .mode-toggle button[data-active='true'] {
+          background: #ffffff;
+          color: #1e293b;
         }
         .eyebrow {
           margin: 0 0 6px;
@@ -702,15 +985,60 @@
       </style>
       <div class="backdrop" aria-hidden="true"></div>
       <div class="highlight" hidden></div>
-      <div class="tooltip" role="dialog" aria-live="polite" hidden>
-        <p class="eyebrow"></p>
-        <p class="instruction"></p>
-        <img class="preview" alt="Step screenshot preview" hidden />
-        <p class="fallback-note" hidden></p>
-        <div class="actions">
-          <button type="button" class="btn-secondary" data-action="previous">Previous</button>
-          <button type="button" class="btn-primary" data-action="next">Next</button>
-          <button type="button" class="btn-primary" data-action="finish" hidden>Finish</button>
+      <div class="tooltip" role="dialog" aria-live="polite" data-expanded="true" hidden>
+        <button type="button" class="assistant-orb" data-action="toggle" aria-label="Open walkthrough assistant">
+          <svg class="orb-logo" viewBox="0 0 44 44" aria-hidden="true">
+            <path class="orb-link" d="M9 29L21 15L34 28" />
+            <circle class="orb-node orb-node-1" cx="9" cy="29" r="4.2" />
+            <circle class="orb-node orb-node-2" cx="21" cy="15" r="4.2" />
+            <circle class="orb-node orb-node-3" cx="34" cy="28" r="4.2" />
+          </svg>
+          <span class="orb-status-dot" aria-hidden="true"></span>
+        </button>
+
+        <div class="assistant-panel">
+          <div class="assistant-header">
+            <p class="assistant-title">WorkTrace Guide</p>
+            <button type="button" class="assistant-collapse" data-action="toggle" aria-label="Collapse walkthrough assistant">
+              -
+            </button>
+          </div>
+
+          <div class="mode-toggle" role="group" aria-label="Walkthrough mode">
+            <button type="button" data-action="mode-auto" data-mode="auto">Auto Walkthrough</button>
+            <button type="button" data-action="mode-manual" data-mode="manual">Manual Guide</button>
+          </div>
+
+          <div class="assistant-tabs" role="tablist" aria-label="Assistant tools">
+            <button type="button" data-action="tab-prompt" data-tab="prompt">Prompt</button>
+            <button type="button" data-action="tab-qa" data-tab="qa">Q&A</button>
+            <button type="button" data-action="tab-voice" data-tab="voice">Voice</button>
+            <button type="button" data-action="tab-undo" data-tab="undo">Undo</button>
+          </div>
+
+          <p class="eyebrow"></p>
+          <p class="instruction"></p>
+          <div class="qa-panel" hidden>
+            <label class="qa-label" for="worktrace-assistant-question">Ask about this step</label>
+            <textarea
+              id="worktrace-assistant-question"
+              class="qa-input"
+              rows="3"
+              placeholder="Example: what should I click now?"
+            ></textarea>
+            <button type="button" class="btn-primary qa-submit" data-action="ask-assistant">
+              Ask
+            </button>
+            <p class="qa-answer" hidden></p>
+          </div>
+          <img class="preview" alt="Step screenshot preview" hidden />
+          <p class="fallback-note" hidden></p>
+
+          <div class="actions">
+            <button type="button" class="btn-secondary" data-action="previous">Previous</button>
+            <button type="button" class="btn-primary" data-action="next">Next</button>
+            <button type="button" class="btn-primary" data-action="finish" hidden>Finish</button>
+          </div>
         </div>
       </div>
     `;
@@ -722,7 +1050,33 @@
         return;
       }
       const action = button.getAttribute('data-action');
-      if (action === 'previous') {
+      if (action === 'toggle') {
+        assistantExpanded = !assistantExpanded;
+        tooltip.dataset.expanded = String(assistantExpanded);
+        tooltip.dataset.loading = String(assistantLoading);
+      } else if (action === 'tab-prompt') {
+        assistantTab = 'prompt';
+        render();
+      } else if (action === 'tab-qa') {
+        assistantTab = 'qa';
+        render();
+      } else if (action === 'tab-voice') {
+        assistantTab = 'voice';
+        render();
+      } else if (action === 'tab-undo') {
+        assistantTab = 'undo';
+        render();
+      } else if (action === 'ask-assistant') {
+        askAssistant();
+      } else if (action === 'mode-auto') {
+        assistantMode = 'auto';
+        render();
+      } else if (action === 'mode-manual') {
+        assistantMode = 'manual';
+        detachStepListener();
+        removeHighlight();
+        render();
+      } else if (action === 'previous') {
         handlePrevious();
       } else if (action === 'next') {
         handleNext();
@@ -811,25 +1165,11 @@
     });
   }
 
-  function placeTooltip(tooltip, anchorRect) {
-    const gap = 12;
-    const tooltipRect = tooltip.getBoundingClientRect();
-    const width = tooltipRect.width || 320;
-    const height = tooltipRect.height || 160;
-
-    let top = anchorRect.bottom + gap;
-    let left = anchorRect.left;
-
-    if (top + height > window.innerHeight - 8) {
-      top = Math.max(8, anchorRect.top - height - gap);
-    }
-    if (left + width > window.innerWidth - 8) {
-      left = Math.max(8, window.innerWidth - width - 8);
-    }
-    left = Math.max(8, left);
-
-    tooltip.style.top = `${top}px`;
-    tooltip.style.left = `${left}px`;
+  function placeTooltip(tooltip) {
+    tooltip.style.top = 'auto';
+    tooltip.style.left = 'auto';
+    tooltip.style.right = '24px';
+    tooltip.style.bottom = '24px';
   }
 
   function isWrongPage(step) {
@@ -883,6 +1223,11 @@
   }
 
   function refreshHighlight() {
+    if (assistantMode === 'manual') {
+      detachStepListener();
+      removeHighlight();
+      return;
+    }
     const step = getCurrentStep();
     if (!step) {
       detachStepListener();
@@ -1138,7 +1483,14 @@
     const previousBtn = root.querySelector('[data-action="previous"]');
     const nextBtn = root.querySelector('[data-action="next"]');
     const finishBtn = root.querySelector('[data-action="finish"]');
+    const autoModeBtn = root.querySelector('[data-action="mode-auto"]');
+    const manualModeBtn = root.querySelector('[data-action="mode-manual"]');
 
+    const tabs = root.querySelectorAll('[data-tab]');
+    const qaPanel = root.querySelector('.qa-panel');
+    const qaInput = root.querySelector('.qa-input');
+    const qaSubmit = root.querySelector('.qa-submit');
+    const qaAnswer = root.querySelector('.qa-answer');
     const stepNumber = step.step_number ?? activeState.stepIndex + 1;
     eyebrow.textContent = `Step ${activeState.stepIndex + 1} / ${steps.length}`;
     instruction.textContent = String(step.instruction ?? '');
@@ -1151,11 +1503,109 @@
     nextBtn.hidden = isLast;
     finishBtn.hidden = !isLast;
 
+    autoModeBtn.dataset.active = String(assistantMode === 'auto');
+    manualModeBtn.dataset.active = String(assistantMode === 'manual');
+    tooltip.dataset.expanded = String(assistantExpanded);
+    tooltip.dataset.loading = String(assistantLoading);
     tooltip.hidden = false;
     enterCurrentStep();
     reposition();
 
     tooltip.dataset.stepNumber = String(stepNumber);
+
+    tabs.forEach((tab) => {
+      tab.dataset.active = String(tab.dataset.tab === assistantTab);
+    });
+
+    if (qaPanel) {
+      qaPanel.hidden = assistantTab !== 'qa';
+    }
+
+    if (qaInput && qaInput.value !== assistantQuestion) {
+      qaInput.value = assistantQuestion;
+    }
+
+    if (qaSubmit) {
+      qaSubmit.textContent = assistantLoading ? 'Asking...' : 'Ask';
+      qaSubmit.disabled = assistantLoading;
+    }
+
+    if (qaAnswer) {
+      const message = assistantError || assistantAnswer;
+      qaAnswer.hidden = !message;
+      qaAnswer.textContent = message;
+    }
+  }
+
+  async function askAssistant() {
+    const host = ensureHost();
+    const tooltip = host.querySelector('.tooltip');
+    const input = tooltip?.querySelector('.qa-input');
+    const question = input?.value?.trim();
+
+    if (!question) {
+      assistantError = 'Please enter a question first.';
+      assistantAnswer = '';
+      render();
+      return;
+    }
+
+    const step = getCurrentStep();
+
+    if (!step) {
+      assistantError = 'No walkthrough step is currently active.';
+      assistantAnswer = '';
+      render();
+      return;
+    }
+
+    assistantQuestion = question;
+    assistantLoading = true;
+    assistantError = '';
+    assistantAnswer = '';
+    render();
+
+    try {
+      const steps = getSteps();
+
+      const payload = await new Promise((resolve, reject) => {
+        chrome.runtime?.sendMessage?.(
+          {
+            type: 'WALKTHROUGH_ASSISTANT_ASK',
+            question,
+            mode: assistantMode === 'manual' ? 'manual' : 'walkthrough',
+            page_url: window.location.href,
+            step: {
+              index: activeState.stepIndex,
+              total: steps.length,
+              title: step.title || step.instruction || 'Current step',
+              instruction: step.instruction || '',
+            },
+          },
+          (response) => {
+            if (chrome.runtime?.lastError) {
+              reject(new Error(chrome.runtime.lastError.message));
+              return;
+            }
+
+            if (!response?.ok) {
+              reject(new Error(response?.error || 'Assistant request failed.'));
+              return;
+            }
+
+            resolve(response);
+          },
+        );
+      });
+
+      assistantAnswer = payload.answer || 'No answer returned.';
+    } catch (error) {
+      console.error('Walkthrough assistant request failed:', error);
+      assistantError = 'Assistant is unavailable right now.';
+    } finally {
+      assistantLoading = false;
+      render();
+    }
   }
 
   function persistState(nextState) {
@@ -1206,12 +1656,19 @@
   function navigateForStep(step, resolvedUrls, liveUrl) {
     const recorded = stepPageUrl(step);
     const resolved = resolvePlaybackTargetUrl(recorded, resolvedUrls, liveUrl);
+
     if (!resolved.url) {
       return resolved;
     }
+
+    if (assistantMode !== 'auto') {
+      return resolved;
+    }
+
     if (needsNavigation(resolved.url)) {
       requestStepPage(resolved.url);
     }
+
     return resolved;
   }
 
@@ -1241,6 +1698,7 @@
     });
 
     navigateForStep(destinationStep, resolvedUrls, liveUrl);
+    render();
   }
 
   function handleNext() {
@@ -1265,6 +1723,7 @@
     });
 
     navigateForStep(steps[nextIndex], resolvedUrls, liveUrl);
+    render();
   }
 
   function handleFinish() {

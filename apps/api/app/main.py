@@ -53,6 +53,7 @@ from app.sop_service import (
 from app.storage import ObjectStorage, get_storage
 from app.walkthrough_routes import router as walkthrough_router
 from app.workflow_routes import router as workflow_router
+from app.assistant_routes import router as assistant_router
 
 load_dotenv()
 
@@ -85,7 +86,7 @@ app.include_router(analytics_router)
 app.include_router(friction_router)
 app.include_router(dashboard_router)
 app.include_router(sop_edit_router)
-
+app.include_router(assistant_router)
 
 @app.get("/health")
 @app.get("/api/v1/health")
