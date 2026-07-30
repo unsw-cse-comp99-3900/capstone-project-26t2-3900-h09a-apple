@@ -730,8 +730,13 @@
           place-items: center;
           padding: 0;
           border: 0;
-          border-radius: 22px;
-          background: linear-gradient(135deg, #6f8cff 0%, #6557f3 52%, #4b32c3 100%);
+          border-radius: 999px;
+          overflow: hidden;
+          isolation: isolate;
+          background:
+            radial-gradient(circle at 34% 28%, rgba(255, 255, 255, 0.34), transparent 26%),
+            radial-gradient(circle at 72% 76%, rgba(50, 35, 180, 0.42), transparent 38%),
+            linear-gradient(135deg, #7392ff 0%, #675af4 48%, #4b31c8 100%);
           box-shadow:
             0 18px 34px rgba(44, 58, 160, 0.28),
             0 0 0 8px rgba(99, 102, 241, 0.08);
@@ -741,6 +746,23 @@
             box-shadow 160ms ease,
             filter 160ms ease;
           animation: orb-breathe 3.4s ease-in-out infinite;
+        }
+
+        .assistant-orb::before {
+          content: '';
+          position: absolute;
+          inset: -35%;
+          z-index: 0;
+          pointer-events: none;
+          border-radius: inherit;
+          background:
+            radial-gradient(circle at 28% 36%, rgba(255, 255, 255, 0.26), transparent 20%),
+            radial-gradient(circle at 68% 42%, rgba(117, 226, 255, 0.18), transparent 24%),
+            radial-gradient(circle at 46% 72%, rgba(154, 126, 255, 0.28), transparent 26%);
+          filter: blur(2px);
+          opacity: 0.9;
+          transform: translate3d(-4%, -2%, 0) rotate(0deg);
+          animation: orb-ambient-shift 8400ms ease-in-out infinite;
         }
 
         .assistant-orb:hover {
@@ -759,60 +781,82 @@
           width: 50px;
           height: 50px;
           overflow: visible;
+          position: relative;
+          z-index: 1;
         }
 
         .orb-link {
           fill: none;
-          stroke: rgba(255, 255, 255, 0.82);
-          stroke-width: 2.4;
+          stroke: rgba(255, 255, 255, 0.72);
+          stroke-width: 2.3;
           stroke-linecap: round;
           stroke-linejoin: round;
-          filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.28));
+          filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.2));
         }
 
+        .tooltip[data-loading='false'] .orb-link {
+          animation: orb-idle-link-glow 3600ms ease-in-out infinite;
+        }
+
+        .tooltip[data-loading='false'] .orb-node {
+          animation: orb-idle-node-glow 3600ms ease-in-out infinite;
+        }
+        
+        .orb-flow {
+          fill: none;
+          stroke: #ffffff;
+          stroke-width: 2.8;
+          stroke-linecap: round;
+          stroke-linejoin: round;
+          stroke-dasharray: 22;
+          stroke-dashoffset: 22;
+          opacity: 0;
+          filter:
+            drop-shadow(0 0 5px rgba(255, 255, 255, 0.85))
+            drop-shadow(0 0 12px rgba(130, 125, 255, 0.55));
+        }
+        
         .orb-node {
-          fill: #746dff;
-          stroke: rgba(255, 255, 255, 0.9);
+          fill: #665ff0;
+          stroke: rgba(255, 255, 255, 0.72);
           stroke-width: 2.4;
-          filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.22));
-        }
-
-        .orb-status-dot {
-          position: absolute;
-          right: 8px;
-          top: 8px;
-          width: 10px;
-          height: 10px;
-          border: 2px solid #ffffff;
-          border-radius: 999px;
-          background: #3fe7f3;
-          box-shadow: 0 0 12px rgba(63, 231, 243, 0.9);
+          opacity: 1;
+          filter:
+            drop-shadow(0 0 3px rgba(255, 255, 255, 0.2))
+            drop-shadow(0 0 8px rgba(120, 116, 255, 0.14));
         }
 
         .tooltip[data-loading='true'] .orb-logo {
           filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.8));
         }
 
+        .tooltip[data-loading='true'] .orb-link,
         .tooltip[data-loading='true'] .orb-node {
-          filter:
-            drop-shadow(0 0 4px rgba(255, 255, 255, 0.55))
-            drop-shadow(0 0 10px rgba(126, 116, 255, 0.35));
+          animation: none;
         }
 
         .tooltip[data-loading='true'] .orb-node-1 {
-          animation: orb-node-pulse 1600ms ease-in-out infinite;
+          animation: orb-node-glow 2800ms ease-in-out infinite;
         }
 
         .tooltip[data-loading='true'] .orb-node-2 {
-          animation: orb-node-pulse 1600ms ease-in-out 260ms infinite;
+          animation: orb-node-glow 2800ms ease-in-out 520ms infinite;
         }
 
         .tooltip[data-loading='true'] .orb-node-3 {
-          animation: orb-node-pulse 1600ms ease-in-out 520ms infinite;
+          animation: orb-node-glow 2800ms ease-in-out 1040ms infinite;
         }
 
-        .tooltip[data-loading='true'] .orb-status-dot {
-          animation: orb-status-pulse 1600ms ease-in-out infinite;
+        .tooltip[data-loading='true'] .orb-flow-left {
+          animation: orb-flow-left 2800ms ease-in-out infinite;
+        }
+
+        .tooltip[data-loading='true'] .orb-flow-right {
+          animation: orb-flow-right 2800ms ease-in-out infinite;
+        }
+
+        .tooltip[data-loading='true'] .orb-link {
+          animation: none;
         }
 
         @keyframes orb-breathe {
@@ -829,38 +873,117 @@
           }
         }
 
-        @keyframes orb-node-pulse {
+        @keyframes orb-flow-left {
+          0% {
+            stroke-dashoffset: 22;
+            opacity: 0;
+          }
+
+          10% {
+            opacity: 1;
+          }
+
+          38% {
+            stroke-dashoffset: 0;
+            opacity: 1;
+          }
+
+          52%, 100% {
+            stroke-dashoffset: 0;
+            opacity: 0;
+          }
+        }
+
+        @keyframes orb-flow-right {
+          0%, 30% {
+            stroke-dashoffset: 22;
+            opacity: 0;
+          }
+
+          42% {
+            opacity: 1;
+          }
+
+          72% {
+            stroke-dashoffset: 0;
+            opacity: 1;
+          }
+
+          88%, 100% {
+            stroke-dashoffset: 0;
+            opacity: 0;
+          }
+        }
+
+        @keyframes orb-idle-link-glow {
           0%, 100% {
-            opacity: 0.46;
-            fill: #746dff;
-            stroke: rgba(255, 255, 255, 0.72);
+            stroke: rgba(255, 255, 255, 0.66);
             filter:
-              drop-shadow(0 0 2px rgba(255, 255, 255, 0.25))
-              drop-shadow(0 0 6px rgba(120, 116, 255, 0.28));
+              drop-shadow(0 0 3px rgba(255, 255, 255, 0.12))
+              drop-shadow(0 0 8px rgba(120, 116, 255, 0.12));
           }
 
           50% {
-            opacity: 1;
-            fill: #8b86ff;
+            stroke: rgba(255, 255, 255, 0.96);
+            filter:
+              drop-shadow(0 0 6px rgba(255, 255, 255, 0.56))
+              drop-shadow(0 0 14px rgba(120, 116, 255, 0.34));
+          }
+        }
+
+        @keyframes orb-idle-node-glow {
+          0%, 100% {
+            fill: #665ff0;
+            stroke: rgba(255, 255, 255, 0.74);
+            filter:
+              drop-shadow(0 0 2px rgba(255, 255, 255, 0.16))
+              drop-shadow(0 0 7px rgba(120, 116, 255, 0.12));
+          }
+
+          50% {
+            fill: #8a84ff;
             stroke: #ffffff;
             filter:
-              drop-shadow(0 0 5px rgba(255, 255, 255, 0.95))
-              drop-shadow(0 0 14px rgba(120, 116, 255, 0.55));
+              drop-shadow(0 0 5px rgba(255, 255, 255, 0.56))
+              drop-shadow(0 0 13px rgba(120, 116, 255, 0.34));
           }
         }
 
-        @keyframes orb-status-pulse {
+        @keyframes orb-node-glow {
           0%, 100% {
-            transform: scale(1);
-            opacity: 0.75;
+            fill: #665ff0;
+            stroke: rgba(255, 255, 255, 0.72);
+            filter:
+              drop-shadow(0 0 2px rgba(255, 255, 255, 0.16))
+              drop-shadow(0 0 7px rgba(120, 116, 255, 0.12));
+          }
+
+          32% {
+            fill: #dedcff;
+            stroke: #ffffff;
+            filter:
+              drop-shadow(0 0 5px rgba(255, 255, 255, 0.62))
+              drop-shadow(0 0 12px rgba(130, 125, 255, 0.35));
+          }
+
+          62% {
+            fill: #6f68f5;
+            stroke: rgba(255, 255, 255, 0.82);
+            filter:
+              drop-shadow(0 0 3px rgba(255, 255, 255, 0.28))
+              drop-shadow(0 0 8px rgba(120, 116, 255, 0.18));
+          }
+        }
+
+        @keyframes orb-ambient-shift {
+          0%, 100% {
+            transform: translate3d(-4%, -2%, 0) rotate(0deg);
           }
 
           50% {
-            transform: scale(1.25);
-            opacity: 1;
+            transform: translate3d(5%, 4%, 0) rotate(12deg);
           }
         }
-
         .tooltip[data-expanded='false'] {
           width: 60px;
           height: 60px;
@@ -989,11 +1112,13 @@
         <button type="button" class="assistant-orb" data-action="toggle" aria-label="Open walkthrough assistant">
           <svg class="orb-logo" viewBox="0 0 44 44" aria-hidden="true">
             <path class="orb-link" d="M9 29L21 15L34 28" />
+            <path class="orb-flow orb-flow-left" d="M9 29L21 15" />
+            <path class="orb-flow orb-flow-right" d="M21 15L34 28" />
             <circle class="orb-node orb-node-1" cx="9" cy="29" r="4.2" />
             <circle class="orb-node orb-node-2" cx="21" cy="15" r="4.2" />
             <circle class="orb-node orb-node-3" cx="34" cy="28" r="4.2" />
           </svg>
-          <span class="orb-status-dot" aria-hidden="true"></span>
+          
         </button>
 
         <div class="assistant-panel">
@@ -1013,7 +1138,7 @@
             <button type="button" data-action="tab-prompt" data-tab="prompt">Prompt</button>
             <button type="button" data-action="tab-qa" data-tab="qa">Q&A</button>
             <button type="button" data-action="tab-voice" data-tab="voice">Voice</button>
-            <button type="button" data-action="tab-undo" data-tab="undo">Undo</button>
+            <button type="button" data-action="tab-help" data-tab="help">Help</button>
           </div>
 
           <p class="eyebrow"></p>
@@ -1063,8 +1188,8 @@
       } else if (action === 'tab-voice') {
         assistantTab = 'voice';
         render();
-      } else if (action === 'tab-undo') {
-        assistantTab = 'undo';
+      } else if (action === 'tab-help') {
+        assistantTab = 'help';
         render();
       } else if (action === 'ask-assistant') {
         askAssistant();
@@ -1507,6 +1632,7 @@
     manualModeBtn.dataset.active = String(assistantMode === 'manual');
     tooltip.dataset.expanded = String(assistantExpanded);
     tooltip.dataset.loading = String(assistantLoading);
+    // tooltip.dataset.loading = 'true';
     tooltip.hidden = false;
     enterCurrentStep();
     reposition();

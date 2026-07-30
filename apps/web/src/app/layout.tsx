@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 
 import { AuthProvider } from '@/contexts/auth-context';
 import { ExtensionHandoffSync } from '@/components/extension-handoff-sync';
-import { FloatingAssistant } from '@/components/floating-assistant/floating-assistant';
+// import { FloatingAssistant } from '@/components/floating-assistant/floating-assistant';
 
 import './globals.css';
 
@@ -20,7 +20,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <AuthProvider>
           <ExtensionHandoffSync />
           {children}
-          <FloatingAssistant />
+          {/* <FloatingAssistant /> */}
         </AuthProvider>
       </body>
     </html>
