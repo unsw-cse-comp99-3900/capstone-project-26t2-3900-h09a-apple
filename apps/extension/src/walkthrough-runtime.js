@@ -1618,8 +1618,9 @@
     const qaAnswer = root.querySelector('.qa-answer');
     const stepNumber = step.step_number ?? activeState.stepIndex + 1;
     eyebrow.textContent = `Step ${activeState.stepIndex + 1} / ${steps.length}`;
+    protectAssistantTextInput(qaInput);
     instruction.textContent = String(step.instruction ?? '');
-
+    
     const isFirst = activeState.stepIndex <= 0;
     const isLast = activeState.stepIndex >= steps.length - 1;
 
@@ -2030,3 +2031,50 @@
     generalizePathname,
   };
 })();
+
+function stopPageFromStealingInput(event) {
+  event.stopPropagation();
+
+  if (typeof event.stopImmediatePropagation === 'function') {
+    event.stopImmediatePropagation();
+  }
+}
+
+function protectAssistantTextInput(input) {
+  [
+    'pointerdown',
+    'mousedown',
+    'mouseup',
+    'click',
+    'dblclick',
+    'keydown',
+    'keyup',
+    'keypress',
+    'beforeinput',
+    'input',
+    'compositionstart',
+    'compositionupdate',
+    'compositionend',
+    'paste',
+    'cut',
+    'copy',
+  ].forEach((eventName) => {
+    input.addEventListener(eventName, stopPageFromStealingInput, true);
+  });
+
+  input.addEventListener(
+    'pointerdown',
+    () => {
+      input.focus();
+    },
+    true,
+  );
+
+  input.addEventListener(
+    'click',
+    () => {
+      input.focus();
+    },
+    true,
+  );
+}
