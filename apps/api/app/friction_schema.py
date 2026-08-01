@@ -60,3 +60,38 @@ class FrictionWsTicketResponse(BaseModel):
     ticket: str
     expires_in_seconds: int
     ws_path: str = "/api/v1/analytics/friction/ws"
+
+
+class FrictionStepChartPoint(BaseModel):
+    """PII-free step score point for manager list/detail charts."""
+
+    step_number: int = Field(..., ge=1)
+    step_title: str | None = None
+    average_score: float = Field(..., ge=0, le=100)
+    variance_flag: bool = False
+
+
+class FrictionWorkflowSummary(BaseModel):
+    """One ranked workflow card for the variance dashboard list (H09AAPPLE-38)."""
+
+    workflow_id: UUID
+    title: str
+    status: str | None = None
+    overall_score: float | None = Field(default=None, ge=0, le=100)
+    session_count: int = Field(default=0, ge=0)
+    high_variance: bool = False
+    highest_friction_step: int | None = None
+    insight_teaser: str | None = None
+    insight_status: str = "pending"
+    steps: list[FrictionStepChartPoint] = Field(default_factory=list)
+
+
+class FrictionWorkflowListResponse(BaseModel):
+    workflows: list[FrictionWorkflowSummary] = Field(default_factory=list)
+
+
+class WorkflowInsightSummaryResponse(BaseModel):
+    workflow_id: UUID
+    status: str
+    summary: str | None = None
+    teaser: str | None = None

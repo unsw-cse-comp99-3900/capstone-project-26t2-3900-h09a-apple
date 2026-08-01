@@ -8,10 +8,13 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-worktrace}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    expose:
-      - '5432'
+    # Publish to host so local `pnpm dev` can use localhost (see apps/api/.env.example).
+    # Also join `local` because `backend` is internal and cannot publish host ports alone.
+    ports:
+      - '${POSTGRES_PORT:-5432}:5432'
     networks:
       - backend
+      - local
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-worktrace} -d ${POSTGRES_DB:-worktrace}']
       interval: 5s
@@ -22,12 +25,14 @@ services:
     image: redis:7-alpine
     restart: unless-stopped
     command: redis-server --appendonly yes
-    expose:
-      - '6379'
+    # Publish to host for local API/worker tooling outside Compose.
+    ports:
+      - '${REDIS_PORT:-6379}:6379'
     volumes:
       - redis_data:/data
     networks:
       - backend
+      - local
     healthcheck:
       test: ['CMD', 'redis-cli', 'ping']
       interval: 5s
@@ -143,5 +148,9 @@ volumes:
 
 networks:
   backend:
+    # Keep service-to-service traffic isolated from the public edge network.
     internal: true
   edge:
+  # Non-internal network so Postgres/Redis can publish ports to the host for
+  # hybrid local development (`pnpm dev` + Compose dependencies).
+  local:

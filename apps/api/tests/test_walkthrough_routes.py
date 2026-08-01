@@ -65,6 +65,7 @@ class WalkthroughFakeDb:
         self.completions: list[WalkthroughCompletion] = []
         self.friction_events: list[WalkthroughFrictionEvent] = []
         self.step_timings: list[WalkthroughStepTiming] = []
+        self.friction_analyses: list[models.FrictionAnalysis] = []
 
         self.pending = []
 
@@ -98,6 +99,9 @@ class WalkthroughFakeDb:
             elif isinstance(row, WalkthroughStepTiming):
                 self.step_timings.append(row)
 
+            elif isinstance(row, models.FrictionAnalysis):
+                self.friction_analyses.append(row)
+
         self.pending.clear()
         self.committed = True
 
@@ -109,8 +113,10 @@ class WalkthroughFakeDb:
 
 
 @pytest.fixture
-def walkthrough_db():
+def walkthrough_db(monkeypatch):
     db = WalkthroughFakeDb()
+    enqueued: list[str] = []
+    db.enqueued_friction_ids = enqueued
 
     previous_db = app.dependency_overrides.get(get_db)
     previous_user = app.dependency_overrides.get(get_current_user)
@@ -120,6 +126,10 @@ def walkthrough_db():
 
     app.dependency_overrides[get_db] = _override_db
     app.dependency_overrides[get_current_user] = lambda: _make_user()
+    monkeypatch.setattr(
+        "app.walkthrough_routes.enqueue_friction_calculation",
+        lambda analysis_id: enqueued.append(str(analysis_id)) or "task-id",
+    )
 
     yield db
 
@@ -225,6 +235,31 @@ def test_complete_creates_completion(walkthrough_db):
     assert completion.duration_seconds == 142
     assert completion.step_sequence == [1, 2, 1, 2, 3]
     assert completion.user_role == UserRole.employee.value
+
+
+def test_complete_enqueues_friction_recalculation_for_published_sop(walkthrough_db):
+    add_sop(walkthrough_db)
+
+    response = client.post("/api/v1/walkthroughs/complete", json=valid_payload())
+
+    assert response.status_code == 201
+    assert len(walkthrough_db.friction_analyses) == 1
+    assert walkthrough_db.friction_analyses[0].sop_id == SOP_ID
+    assert walkthrough_db.friction_analyses[0].status == (
+        models.FrictionAnalysisStatus.pending.value
+    )
+    assert walkthrough_db.enqueued_friction_ids == [str(walkthrough_db.friction_analyses[0].id)]
+
+
+def test_complete_skips_friction_enqueue_for_unpublished_sop(walkthrough_db):
+    sop = add_sop(walkthrough_db)
+    sop.status = models.SopStatus.approved.value
+
+    response = client.post("/api/v1/walkthroughs/complete", json=valid_payload())
+
+    assert response.status_code == 201
+    assert walkthrough_db.friction_analyses == []
+    assert walkthrough_db.enqueued_friction_ids == []
 
 
 def test_complete_snapshots_current_user_role(walkthrough_db):

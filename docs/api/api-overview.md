@@ -33,6 +33,13 @@ App factory: `apps/api/app/main.py` (`FastAPI(title="H09A Apple API", ...)`).
 Most product routes use the `/api/v1` prefix (auth, sessions, consent, feedback,
 walkthrough, workflows, analytics, and related routers).
 
+Manager variance dashboard helpers (H09AAPPLE-38):
+
+- `GET /api/v1/analytics/friction` - PII-free ranked workflow friction summaries
+- `GET /api/v1/workflows/{sop_id}/insight-summary` - executive insight + one-line teaser
+- `POST /api/v1/walkthroughs/complete` also enqueues an async friction recalculation
+  when the SOP is already `published`, so rankings refresh after new walkthrough evidence
+
 Health (no auth):
 
 - `GET /health`

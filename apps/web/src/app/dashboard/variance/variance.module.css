@@ -57,13 +57,15 @@
 }
 
 .notification {
-  margin: 0;
+  width: min(1120px, 100%);
+  margin: 0 auto 1rem;
   padding: 0.8rem 1rem;
   border: 1px solid #86b7a7;
   border-radius: 0.75rem;
   background: #edf8f4;
   color: #174f3d;
   font-weight: 600;
+  box-sizing: border-box;
 }
 
 .account {
@@ -417,4 +419,119 @@
   .workflowField {
     grid-column: auto;
   }
+
+  .workflowList {
+    grid-template-columns: 1fr;
+  }
+}
+
+.workflowList {
+  width: min(1120px, 100%);
+  margin: 0 auto;
+  display: grid;
+  gap: 1rem;
+}
+
+.workflowCard,
+.detailPanel {
+  display: grid;
+  gap: 0.9rem;
+  padding: 1.15rem 1.2rem 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  color: inherit;
+  text-decoration: none;
+  box-shadow: 0 1px 0 rgb(15 23 42 / 3%);
+  transition:
+    border-color 160ms ease,
+    transform 160ms ease,
+    box-shadow 160ms ease;
+}
+
+a.workflowCard:hover {
+  border-color: #c7d2fe;
+  transform: translateY(-1px);
+  box-shadow: 0 10px 24px rgb(79 70 229 / 8%);
+}
+
+.cardTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.cardTitle,
+.sectionTitle {
+  margin: 0;
+  font-size: 1.15rem;
+  letter-spacing: -0.02em;
+}
+
+.cardMeta {
+  margin: 0.35rem 0 0;
+  color: var(--slate);
+  font-size: 0.88rem;
+}
+
+.cardScoreBlock {
+  display: grid;
+  justify-items: end;
+  gap: 0.4rem;
+}
+
+.cardScore {
+  margin: 0;
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  color: #756eff;
+  line-height: 1;
+}
+
+.highVarianceBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.28rem 0.55rem;
+  border-radius: 999px;
+  background: #fff7ed;
+  color: #c2410c;
+  border: 1px solid #fdba74;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+
+.insightTeaser,
+.insightPanel p {
+  margin: 0;
+  color: #334155;
+  line-height: 1.5;
+}
+
+.insightPanel,
+.stepList {
+  border-top: 1px solid var(--border);
+  padding-top: 0.9rem;
+}
+
+.insightPanel h2,
+.sectionTitle {
+  margin: 0 0 0.55rem;
+}
+
+.stepList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.stepList li {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  color: #475569;
 }

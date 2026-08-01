@@ -6,7 +6,9 @@ import type {
   FeedbackNotificationListResponse,
   FeedbackStatsResponse,
   FrictionAnalysisResponse,
+  FrictionWorkflowListResponse,
   HealthResponse,
+  WorkflowInsightSummaryResponse,
   KmeansAnalysisRequest,
   KmeansAnalysisResponse,
   SessionCreateResponse,
@@ -200,6 +202,30 @@ export async function getFrictionAnalysis(sopId: string): Promise<FrictionAnalys
 
   if (!res.ok) {
     throw new ApiError(await errorMessage(res, 'Failed to load friction analysis'), res.status);
+  }
+
+  return res.json();
+}
+
+export async function getFrictionWorkflowList(): Promise<FrictionWorkflowListResponse> {
+  const res = await authedFetch('/api/v1/analytics/friction');
+
+  if (!res.ok) {
+    throw new ApiError(await errorMessage(res, 'Failed to load friction workflows'), res.status);
+  }
+
+  return res.json();
+}
+
+export async function getWorkflowInsightSummary(
+  workflowId: string,
+): Promise<WorkflowInsightSummaryResponse> {
+  const res = await authedFetch(
+    `/api/v1/workflows/${encodeURIComponent(workflowId)}/insight-summary`,
+  );
+
+  if (!res.ok) {
+    throw new ApiError(await errorMessage(res, 'Failed to load insight summary'), res.status);
   }
 
   return res.json();

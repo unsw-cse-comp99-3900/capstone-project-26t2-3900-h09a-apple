@@ -60,3 +60,34 @@ export interface FrictionAnalysisUpdate {
   employee_count: number;
   completed_at: string | null;
 }
+
+export interface FrictionStepChartPoint {
+  step_number: number;
+  step_title: string | null;
+  average_score: number;
+  variance_flag: boolean;
+}
+
+export interface FrictionWorkflowSummary {
+  workflow_id: string;
+  title: string;
+  status: FrictionAnalysisStatus | null;
+  overall_score: number | null;
+  session_count: number;
+  high_variance: boolean;
+  highest_friction_step: number | null;
+  insight_teaser: string | null;
+  insight_status: string;
+  steps: FrictionStepChartPoint[];
+}
+
+export interface FrictionWorkflowListResponse {
+  workflows: FrictionWorkflowSummary[];
+}
+
+export interface WorkflowInsightSummaryResponse {
+  workflow_id: string;
+  status: string;
+  summary: string | null;
+  teaser: string | null;
+}

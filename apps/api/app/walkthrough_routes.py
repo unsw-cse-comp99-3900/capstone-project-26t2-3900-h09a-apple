@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Annotated
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session as DBSession
@@ -8,6 +10,7 @@ from sqlalchemy.orm import Session as DBSession
 from app import models
 from app.auth.deps import filter_by_tenant, require_role
 from app.database import get_db
+from app.friction_tasks import enqueue_friction_calculation
 from app.models import User, UserRole
 from app.vision_locate_service import (
     VisionLocateError,
@@ -82,6 +85,7 @@ def complete_walkthrough(
         else str(current_user.role)
     )
 
+    friction_analysis: models.FrictionAnalysis | None = None
     try:
         completion = models.WalkthroughCompletion(
             tenant_id=current_user.tenant_id,
@@ -114,11 +118,33 @@ def complete_walkthrough(
                 )
             )
 
+        # Friction scores are driven by walkthrough evidence. Recompute after each
+        # completion on published SOPs so the variance dashboard stays current.
+        if sop.status == models.SopStatus.published.value:
+            friction_analysis = models.FrictionAnalysis(
+                id=uuid4(),
+                tenant_id=current_user.tenant_id,
+                sop_id=sop.id,
+                status=models.FrictionAnalysisStatus.pending.value,
+            )
+            db.add(friction_analysis)
+
         db.commit()
 
     except Exception:
         db.rollback()
         raise
+
+    if friction_analysis is not None:
+        try:
+            enqueue_friction_calculation(friction_analysis.id)
+        except Exception as exc:
+            friction_analysis.status = models.FrictionAnalysisStatus.failed.value
+            friction_analysis.error_message = (f"Could not enqueue friction calculation: {exc}")[
+                :2000
+            ]
+            friction_analysis.completed_at = datetime.now(UTC)
+            db.commit()
 
     return WalkthroughCompletionResponse(
         completion_id=completion.id,
