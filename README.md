@@ -6,6 +6,16 @@ Monorepo with a Next.js frontend (`apps/web`), a FastAPI backend (`apps/api`),
 a Chrome MV3 extension (`apps/extension`), and shared TypeScript types in
 `packages/types`.
 
+## Git workflow
+
+Feature work targets `develop`. Stable releases promote `develop` to `main`.
+See [docs/git-workflow.md](docs/git-workflow.md).
+
+## Engineering docs
+
+Assessment-oriented index (architecture, testing, privacy, CI, troubleshooting):
+[docs/teamwork-assessment-evidence.md](docs/teamwork-assessment-evidence.md).
+
 ## Requirements
 
 - Node 20+

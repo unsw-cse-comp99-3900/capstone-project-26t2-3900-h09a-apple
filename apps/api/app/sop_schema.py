@@ -59,6 +59,8 @@ class SopPublishResponse(BaseModel):
     published_at: datetime
     library_url: str
     embedding_status: str | None = None
+    friction_analysis_id: str
+    friction_status: str
 
 
 class SopEmbedResponse(BaseModel):

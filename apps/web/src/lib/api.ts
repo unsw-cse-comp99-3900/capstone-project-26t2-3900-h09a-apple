@@ -5,6 +5,7 @@ import type {
   ConsentType,
   FeedbackNotificationListResponse,
   FeedbackStatsResponse,
+  FrictionAnalysisResponse,
   HealthResponse,
   KmeansAnalysisRequest,
   KmeansAnalysisResponse,
@@ -192,6 +193,46 @@ export async function getKmeansAnalysis(workflowId: string): Promise<KmeansAnaly
   }
 
   return res.json();
+}
+
+export async function getFrictionAnalysis(sopId: string): Promise<FrictionAnalysisResponse> {
+  const res = await authedFetch(`/api/v1/analytics/friction/${encodeURIComponent(sopId)}`);
+
+  if (!res.ok) {
+    throw new ApiError(await errorMessage(res, 'Failed to load friction analysis'), res.status);
+  }
+
+  return res.json();
+}
+
+export type FrictionWsTicket = {
+  ticket: string;
+  expires_in_seconds: number;
+  ws_path: string;
+};
+
+export async function createFrictionWsTicket(): Promise<FrictionWsTicket> {
+  const res = await authedFetch('/api/v1/analytics/friction/ws-ticket', { method: 'POST' });
+  if (!res.ok) {
+    throw new ApiError(
+      await errorMessage(res, 'Failed to mint friction socket ticket'),
+      res.status,
+    );
+  }
+  return res.json();
+}
+
+export function frictionWebSocketUrl(
+  ticket: string,
+  wsPath = '/api/v1/analytics/friction/ws',
+): string {
+  const httpBase = (process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000').replace(
+    /\/$/,
+    '',
+  );
+  const wsBase = httpBase.replace(/^http/, 'ws');
+  const path = wsPath.startsWith('/') ? wsPath : `/${wsPath}`;
+  return `${wsBase}${path}?token=${encodeURIComponent(ticket)}`;
 }
 
 export async function getMyDrafts(): Promise<SopListResponse> {

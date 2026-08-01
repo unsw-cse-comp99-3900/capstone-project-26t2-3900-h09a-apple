@@ -1,0 +1,14 @@
+.git
+.github
+**/.env
+**/.env.*
+!**/.env.example
+**/.next
+**/.turbo
+**/.pytest_cache
+**/.venv
+**/__pycache__
+**/node_modules
+**/coverage
+**/dist
+agent-transcripts

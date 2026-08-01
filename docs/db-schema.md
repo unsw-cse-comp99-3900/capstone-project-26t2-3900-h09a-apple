@@ -583,6 +583,30 @@ reset can revoke sessions without a denylist-only design.
 
 ---
 
+## Friction analysis tables (H09AAPPLE-37)
+
+`friction_analysis` records one publish-triggered asynchronous calculation run
+for an SOP. It stores tenant/SOP ownership, pending/processing/completed/failed
+status, overall score, highest-friction step, employee count, algorithm version,
+bounded failure details, and lifecycle timestamps.
+
+`friction_employee_step_scores` stores one 0-100 result for each employee-step
+pair in a run, including the source completion, actual/expected duration,
+retries, path deviations, and high-IQR outlier flag. The
+`(analysis_id, employee_id, step_number)` tuple is unique.
+
+`friction_step_aggregates` stores the average, minimum, and maximum score for
+each step plus the best/worst employee benchmark and sample size. The
+`(analysis_id, step_number)` tuple is unique.
+
+All score columns are constrained to 0-100. Analysis deletion cascades to score
+and aggregate rows. SOP deletion cascades to its analyses; best/worst employee
+references become null if a user is deleted.
+
+**Revision:** `0016_friction_analysis`
+
+---
+
 ## Table: `password_reset_tokens` (H09AAPPLE-63)
 
 One-time password reset tokens. Only a SHA-256 hash (peppered with `SECRET_KEY`)
