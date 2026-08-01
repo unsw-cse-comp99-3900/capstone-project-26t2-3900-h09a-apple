@@ -35,10 +35,11 @@ walkthrough, workflows, analytics, and related routers).
 
 Manager variance dashboard helpers (H09AAPPLE-38):
 
-- `GET /api/v1/analytics/friction` - PII-free ranked workflow friction summaries
-- `GET /api/v1/workflows/{sop_id}/insight-summary` - executive insight + one-line teaser
-- `POST /api/v1/walkthroughs/complete` also enqueues an async friction recalculation
-  when the SOP is already `published`, so rankings refresh after new walkthrough evidence
+- `GET /api/v1/analytics/friction` - PII-free ranked workflow friction summaries (MANAGER)
+- `GET /api/v1/workflows/{sop_id}/insight-summary` - executive insight + one-line teaser (MANAGER)
+- Friction WS ticket / stream are MANAGER-only to match the variance UI
+- `POST /api/v1/walkthroughs/complete` still allows EMPLOYEE+ and enqueues async friction
+  recalculation when the SOP is already `published`
 
 Health (no auth):
 

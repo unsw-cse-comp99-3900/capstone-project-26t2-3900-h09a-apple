@@ -222,7 +222,7 @@ def _analysis_response(
 
 @router.get("", response_model=FrictionWorkflowListResponse)
 def list_friction_workflows(
-    current_user: Annotated[User, Depends(require_role(UserRole.reviewer))],
+    current_user: Annotated[User, Depends(require_role(UserRole.manager))],
     db: Annotated[DBSession, Depends(get_db)],
 ) -> FrictionWorkflowListResponse:
     """Ranked PII-free friction summaries for all published workflows."""
@@ -261,7 +261,7 @@ def list_friction_workflows(
 @router.get("/{sop_id}", response_model=FrictionAnalysisResponse)
 def get_latest_friction_analysis(
     sop_id: UUID,
-    current_user: Annotated[User, Depends(require_role(UserRole.reviewer))],
+    current_user: Annotated[User, Depends(require_role(UserRole.manager))],
     db: Annotated[DBSession, Depends(get_db)],
 ) -> FrictionAnalysisResponse:
     sop = (
@@ -290,7 +290,7 @@ def get_latest_friction_analysis(
 
 @router.post("/ws-ticket", response_model=FrictionWsTicketResponse)
 def create_friction_ws_ticket(
-    current_user: Annotated[User, Depends(require_role(UserRole.reviewer))],
+    current_user: Annotated[User, Depends(require_role(UserRole.manager))],
 ) -> FrictionWsTicketResponse:
     try:
         role = UserRole(current_user.role)
@@ -335,7 +335,7 @@ async def friction_updates(
     except ValueError:
         await websocket.close(code=4403)
         return
-    if role not in {UserRole.reviewer, UserRole.manager}:
+    if role is not UserRole.manager:
         await websocket.close(code=4403)
         return
 

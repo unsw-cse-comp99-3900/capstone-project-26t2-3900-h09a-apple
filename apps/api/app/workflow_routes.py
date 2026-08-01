@@ -28,7 +28,7 @@ router = APIRouter(
 )
 def get_workflow_insight_summary(
     workflow_id: str,
-    current_user: Annotated[User, Depends(require_role(UserRole.reviewer))],
+    current_user: Annotated[User, Depends(require_role(UserRole.manager))],
     db: Annotated[DBSession, Depends(get_db)],
 ) -> WorkflowInsightSummaryResponse:
     """Return the executive friction insight for a published SOP (workflow)."""
