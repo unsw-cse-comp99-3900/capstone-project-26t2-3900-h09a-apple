@@ -23,9 +23,24 @@ const authenticatedStorage = {
 function mockConsentApiFetch({
   statusAccepted = true,
   acceptedAt = '2026-07-01T00:00:00.000Z',
+  me = {
+    id: '11111111-1111-1111-1111-111111111111',
+    email: 'week6-reviewer@example.com',
+    display_name: 'Week6 Reviewer',
+    role: 'REVIEWER',
+    tenant_id: '22222222-2222-2222-2222-222222222222',
+  },
 } = {}) {
   globalThis.fetch = async (url, init = {}) => {
     const href = String(url);
+
+    if (href.includes('/api/v1/auth/me')) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => me,
+      };
+    }
 
     if (href.includes('/api/v1/consent/status')) {
       return {
@@ -457,6 +472,20 @@ test('start walkthrough fetches payload and persists session progress', async ()
   globalThis.fetch = async (url, init = {}) => {
     const href = String(url);
 
+    if (href.includes('/api/v1/auth/me')) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          id: '11111111-1111-1111-1111-111111111111',
+          email: 'week6-reviewer@example.com',
+          display_name: 'Week6 Reviewer',
+          role: 'REVIEWER',
+          tenant_id: '22222222-2222-2222-2222-222222222222',
+        }),
+      };
+    }
+
     if (href.includes('/api/v1/consent/status')) {
       return {
         ok: true,
@@ -526,4 +555,50 @@ test('start walkthrough fetches payload and persists session progress', async ()
   assert.equal(walkthroughStatusText.textContent, 'Idle');
   assert.equal(getSessionStorageValues().walkthroughState.status, 'idle');
   assert.equal(getSessionStorageValues().walkthroughPayload, null);
+});
+
+test('account chip shows initials, name, and email after login', async () => {
+  const { dom, simulateLogout } = setupPopupDom();
+  await loadPopupScript();
+  await flushPromises();
+  await flushPromises();
+
+  const accountChip = dom.window.document.querySelector('#accountChip');
+  const accountAvatar = dom.window.document.querySelector('#accountAvatar');
+  const accountName = dom.window.document.querySelector('#accountName');
+  const accountEmail = dom.window.document.querySelector('#accountEmail');
+  const accountRole = dom.window.document.querySelector('#accountRole');
+
+  assert.equal(accountChip.hidden, false);
+  assert.equal(accountAvatar.textContent, 'WR');
+  assert.equal(accountName.textContent, 'Week6 Reviewer');
+  assert.equal(accountEmail.textContent, 'week6-reviewer@example.com');
+  assert.equal(accountRole.hidden, false);
+  assert.equal(accountRole.textContent, 'REVIEWER');
+
+  await simulateLogout();
+  assert.equal(accountChip.hidden, true);
+});
+
+test('account chip normalizes hyphenated email locals to Week6 Manager / WM', async () => {
+  const { dom } = setupPopupDom();
+  mockConsentApiFetch({
+    me: {
+      id: '11111111-1111-1111-1111-111111111111',
+      email: 'week6-manager@example.com',
+      display_name: '',
+      role: 'MANAGER',
+      tenant_id: '22222222-2222-2222-2222-222222222222',
+    },
+  });
+  await loadPopupScript();
+  await flushPromises();
+  await flushPromises();
+
+  assert.equal(dom.window.document.querySelector('#accountAvatar').textContent, 'WM');
+  assert.equal(dom.window.document.querySelector('#accountName').textContent, 'Week6 Manager');
+  assert.equal(
+    dom.window.document.querySelector('#accountEmail').textContent,
+    'week6-manager@example.com',
+  );
 });

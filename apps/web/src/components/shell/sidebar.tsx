@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
 import { useCurrentUser } from '@/contexts/auth-context';
+import { avatarInitials } from '@/lib/user-display';
 
 import { visibleNavGroups, type NavItem } from './nav-items';
 import styles from './sidebar.module.css';
@@ -13,15 +14,6 @@ const COLLAPSE_KEY = 'wt.shell.collapsed';
 const RECENT_KEY = 'wt.shell.recentSops';
 
 type RecentSop = { id: string; title: string };
-
-function initials(displayName: string, email: string): string {
-  const source = displayName.trim() || email.split('@')[0] || 'U';
-  const parts = source.split(/\s+/).filter(Boolean);
-  if (parts.length >= 2) {
-    return `${parts[0]![0] ?? ''}${parts[1]![0] ?? ''}`.toUpperCase();
-  }
-  return source.slice(0, 2).toUpperCase();
-}
 
 function navGlyph(item: NavItem): string {
   switch (item.id) {
@@ -246,7 +238,7 @@ export function Sidebar() {
         <div className={styles.userRow}>
           <div className={styles.avatarWrap} aria-hidden>
             <span className={styles.avatarRing} />
-            <div className={styles.avatar}>{initials(displayName, user.email)}</div>
+            <div className={styles.avatar}>{avatarInitials(displayName, user.email)}</div>
           </div>
           <div className={styles.userMeta}>
             <div className={styles.userName}>{displayName}</div>

@@ -16,6 +16,7 @@ import { roleLandingPath } from '@/lib/auth/constants';
 import { isProtectedPath } from '@/lib/auth/protected-paths';
 import { silentRefreshAccessToken } from '@/lib/auth/session-refresh';
 import { broadcastExtensionLogout } from '@/lib/extension-logout';
+import { displayNameFromEmail } from '@/lib/user-display';
 
 type AuthContextValue = {
   user: AuthUser | null;
@@ -30,16 +31,6 @@ const PROACTIVE_REFRESH_MARGIN_MS = 60_000;
 const PROACTIVE_REFRESH_MIN_DELAY_MS = 5_000;
 
 type MePayload = AuthUser & { expires_in?: number | null };
-
-function displayNameFromEmail(email: string): string {
-  const local = email.split('@')[0]?.trim() || 'User';
-  return local
-    .replace(/[._-]+/g, ' ')
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
-    .join(' ');
-}
 
 async function fetchMe(): Promise<{ user: AuthUser | null; expiresIn: number | null }> {
   const response = await fetch('/api/auth/me', { cache: 'no-store' });

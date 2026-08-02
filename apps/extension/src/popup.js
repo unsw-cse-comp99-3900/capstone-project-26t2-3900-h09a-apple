@@ -27,9 +27,15 @@ import {
   syncConsentFromServer,
 } from './consent.js';
 import { hasSessionPayload } from './session-store.js';
+import { avatarInitials, displayNameFromEmail } from './user-display.js';
 
 const authSection = document.querySelector('#authSection');
 const recordingSection = document.querySelector('#recordingSection');
+const accountChip = document.querySelector('#accountChip');
+const accountAvatar = document.querySelector('#accountAvatar');
+const accountName = document.querySelector('#accountName');
+const accountEmail = document.querySelector('#accountEmail');
+const accountRole = document.querySelector('#accountRole');
 const signInButton = document.querySelector('#signInButton');
 const footerText = document.querySelector('#footerText');
 const form = document.querySelector('#recordingForm');
@@ -73,6 +79,86 @@ let isAuthenticated = false;
 let authReady = false;
 let currentUserId = null;
 let sessionStorageError = null;
+/** @type {{ email: string, display_name: string, role: string } | null} */
+let currentUserProfile = null;
+
+function clearAccountChip() {
+  currentUserProfile = null;
+  if (!accountChip) {
+    return;
+  }
+  accountChip.hidden = true;
+  if (accountAvatar) {
+    accountAvatar.textContent = '?';
+  }
+  if (accountName) {
+    accountName.textContent = '';
+  }
+  if (accountEmail) {
+    accountEmail.textContent = '';
+  }
+  if (accountRole) {
+    accountRole.hidden = true;
+    accountRole.textContent = '';
+  }
+}
+
+function renderAccountChip() {
+  if (!accountChip) {
+    return;
+  }
+
+  if (!isAuthenticated || !currentUserProfile) {
+    accountChip.hidden = true;
+    return;
+  }
+
+  const email = currentUserProfile.email || '';
+  const displayName = currentUserProfile.display_name || displayNameFromEmail(email) || 'User';
+  const role = (currentUserProfile.role || '').trim();
+
+  accountChip.hidden = false;
+  if (accountAvatar) {
+    accountAvatar.textContent = avatarInitials(displayName, email);
+  }
+  if (accountName) {
+    accountName.textContent = displayName;
+    accountName.title = displayName;
+  }
+  if (accountEmail) {
+    accountEmail.textContent = email;
+    accountEmail.title = email;
+  }
+  if (accountRole) {
+    if (role) {
+      accountRole.hidden = false;
+      accountRole.textContent = role;
+      accountRole.title = role;
+    } else {
+      accountRole.hidden = true;
+      accountRole.textContent = '';
+    }
+  }
+}
+
+async function loadCurrentUserProfile() {
+  try {
+    const response = await authenticatedFetch('/api/v1/auth/me');
+    if (!response.ok) {
+      currentUserProfile = null;
+      return;
+    }
+    const payload = await response.json();
+    const email = String(payload.email ?? '');
+    currentUserProfile = {
+      email,
+      display_name: String(payload.display_name ?? '') || displayNameFromEmail(email),
+      role: String(payload.role ?? ''),
+    };
+  } catch {
+    currentUserProfile = null;
+  }
+}
 
 function getLocalStorage(keys) {
   return new Promise((resolve) => {
@@ -126,6 +212,7 @@ async function refreshAuthState({ renderAfter = true } = {}) {
     // Drop cached consent on logout so the next account cannot reuse it.
     await clearLocalConsent();
     consentRecord = null;
+    clearAccountChip();
     if (renderAfter) {
       render();
     }
@@ -138,11 +225,18 @@ async function refreshAuthState({ renderAfter = true } = {}) {
   if (previousUserId !== currentUserId) {
     await clearLocalConsent();
     consentRecord = null;
+    currentUserProfile = null;
   }
 
   // Fresh login with the same user after the popup starts.
   if (!wasAuthenticated) {
     consentRecord = null;
+  }
+
+  const shouldReloadProfile =
+    !currentUserProfile || previousUserId !== currentUserId || !wasAuthenticated;
+  if (shouldReloadProfile) {
+    await loadCurrentUserProfile();
   }
 
   if (renderAfter) {
@@ -258,6 +352,7 @@ function render() {
   }
 
   setPanelVisibility(isAuthenticated);
+  renderAccountChip();
   footerText.textContent = isAuthenticated
     ? 'This preview keeps recording state on your device only.'
     : 'Sign in through the web app to connect this extension to your workspace.';
