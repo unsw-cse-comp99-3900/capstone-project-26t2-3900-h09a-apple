@@ -33,10 +33,15 @@ App factory: `apps/api/app/main.py` (`FastAPI(title="H09A Apple API", ...)`).
 Most product routes use the `/api/v1` prefix (auth, sessions, consent, feedback,
 walkthrough, workflows, analytics, and related routers).
 
-Manager variance dashboard helpers (H09AAPPLE-38):
+Manager variance dashboard helpers (H09AAPPLE-38 / H09AAPPLE-39):
 
 - `GET /api/v1/analytics/friction` - PII-free ranked workflow friction summaries (MANAGER)
 - `GET /api/v1/workflows/{sop_id}/insight-summary` - executive insight + one-line teaser (MANAGER)
+- `POST /api/v1/workflows/{sop_id}/friction/recalculate` - recompute friction scores for a
+  published SOP (MANAGER; synchronous so the detail page can refresh charts without reload)
+- `GET /api/v1/workflows/{sop_id}/cluster-timings` - per-cluster mean step timings for path
+  comparison and best-vs-average charts (MANAGER; bridges `workflow_clusters.member_session_ids`
+  → published SOPs → walkthrough step timings)
 - Friction WS ticket / stream are MANAGER-only to match the variance UI
 - `POST /api/v1/walkthroughs/complete` still allows EMPLOYEE+ and enqueues async friction
   recalculation when the SOP is already `published`

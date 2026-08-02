@@ -204,7 +204,7 @@ def cluster_workflow(
     if len(bundles) < MIN_SESSIONS_FOR_CLUSTERING:
         raise InsufficientClusterDataError(
             f"Need at least {MIN_SESSIONS_FOR_CLUSTERING} published sessions "
-            "with embedding_status=complete"
+            f"with embedding_status=complete (have {len(bundles)})"
         )
 
     pooled = [mean_pool_session_vector(list(bundle.step_vectors.values())) for bundle in bundles]

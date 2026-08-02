@@ -64,8 +64,56 @@ export interface FrictionAnalysisUpdate {
 export interface FrictionStepChartPoint {
   step_number: number;
   step_title: string | null;
+  instruction?: string | null;
   average_score: number;
   variance_flag: boolean;
+}
+
+export interface ClusterStepTiming {
+  step_number: number;
+  mean_duration_ms: number;
+}
+
+export interface ClusterTimingsCluster {
+  cluster_id: number;
+  member_count: number;
+  steps: ClusterStepTiming[];
+}
+
+export interface WorkflowClusterTimingsResponse {
+  workflow_id: string;
+  workflow_name: string;
+  best_cluster_id: number | null;
+  clusters: ClusterTimingsCluster[];
+  workflow_average: ClusterStepTiming[];
+}
+
+export interface ClusterSessionAssignment {
+  session_id: string;
+  sop_id: string;
+  cluster_id: number;
+  distance_to_centroid: number;
+  is_high_variance: boolean;
+}
+
+export interface StepVarianceItem {
+  step_number: number;
+  semantic_variance: number;
+}
+
+/** Response from POST /api/v1/workflows/{workflow_name}/cluster (H09AAPPLE-36). */
+export interface WorkflowClusterResponse {
+  workflow_id: string;
+  workflow_name: string;
+  run_id: string;
+  chosen_k: number;
+  chosen_silhouette: number;
+  silhouette_scores: Record<string, number>;
+  high_variance_threshold: number;
+  session_count: number;
+  assignments: ClusterSessionAssignment[];
+  step_variance: StepVarianceItem[];
+  elapsed_ms: number;
 }
 
 export interface FrictionWorkflowSummary {
@@ -90,4 +138,12 @@ export interface WorkflowInsightSummaryResponse {
   status: string;
   summary: string | null;
   teaser: string | null;
+}
+
+export interface FrictionRecalculateResponse {
+  workflow_id: string;
+  analysis_id: string;
+  status: string;
+  overall_score: number | null;
+  employee_count: number;
 }
