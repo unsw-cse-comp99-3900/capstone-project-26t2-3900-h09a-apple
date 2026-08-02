@@ -42,6 +42,16 @@ function pathMatches(pathname: string, href: string): boolean {
   if (href === '/dashboard') {
     return pathname === '/dashboard';
   }
+
+  // Rankings owns /dashboard/variance and /dashboard/variance/:workflowId,
+  // but not sibling routes like /dashboard/variance/clustering.
+  if (href === '/dashboard/variance') {
+    if (pathname === '/dashboard/variance') return true;
+    if (!pathname.startsWith('/dashboard/variance/')) return false;
+    const segment = pathname.slice('/dashboard/variance/'.length).split('/')[0] ?? '';
+    return segment.length > 0 && segment !== 'clustering';
+  }
+
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
@@ -119,19 +129,21 @@ export function Sidebar() {
 
   return (
     <aside className={`${styles.sidebar} ${collapsed ? styles.collapsed : ''}`}>
+      <button
+        type="button"
+        className={styles.edgeToggle}
+        onClick={toggleCollapsed}
+        aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+      >
+        <span className={styles.edgeChevron} aria-hidden />
+      </button>
+
       <div className={styles.brandRow}>
         <Link href="/dashboard" className={styles.brand}>
           <span className={styles.brandMark}>W</span>
           <span className={styles.brandText}>WorkTrace</span>
         </Link>
-        <button
-          type="button"
-          className={styles.collapseBtn}
-          onClick={toggleCollapsed}
-          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-        >
-          {collapsed ? '>' : '<'}
-        </button>
       </div>
 
       <div className={styles.navScroll}>
@@ -232,8 +244,9 @@ export function Sidebar() {
 
       <div className={styles.footer}>
         <div className={styles.userRow}>
-          <div className={styles.avatar} aria-hidden>
-            {initials(displayName, user.email)}
+          <div className={styles.avatarWrap} aria-hidden>
+            <span className={styles.avatarRing} />
+            <div className={styles.avatar}>{initials(displayName, user.email)}</div>
           </div>
           <div className={styles.userMeta}>
             <div className={styles.userName}>{displayName}</div>
