@@ -56,3 +56,19 @@ def test_employee_cannot_mint_friction_websocket_ticket():
             app.dependency_overrides[get_current_user] = previous_user
 
     assert response.status_code == 403
+
+
+def test_reviewer_cannot_mint_friction_websocket_ticket():
+    reviewer = _user(UserRole.reviewer)
+    previous_user = app.dependency_overrides.get(get_current_user)
+    app.dependency_overrides[get_current_user] = lambda: reviewer
+
+    try:
+        response = TestClient(app).post("/api/v1/analytics/friction/ws-ticket")
+    finally:
+        if previous_user is None:
+            app.dependency_overrides.pop(get_current_user, None)
+        else:
+            app.dependency_overrides[get_current_user] = previous_user
+
+    assert response.status_code == 403

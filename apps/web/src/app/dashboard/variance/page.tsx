@@ -1,5 +1,7 @@
 import { VarianceDashboardClient } from './variance-dashboard-client';
+import { loadFrictionWorkflowList } from '@/lib/server-api';
 
-export default function VarianceDashboardPage() {
-  return <VarianceDashboardClient />;
+export default async function VarianceDashboardPage() {
+  const initialList = await loadFrictionWorkflowList();
+  return <VarianceDashboardClient initialList={initialList} />;
 }

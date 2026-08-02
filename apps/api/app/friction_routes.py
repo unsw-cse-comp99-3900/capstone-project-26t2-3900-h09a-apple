@@ -17,6 +17,7 @@ from app.auth.jwt import (
     verify_access_or_ws_token,
 )
 from app.database import get_db
+from app.friction_insight import build_insight_summary, first_sentence, step_titles
 from app.friction_model import average_score
 from app.friction_notifications import friction_channel
 from app.friction_schema import (
@@ -24,6 +25,9 @@ from app.friction_schema import (
     FrictionEmployeeStepResponse,
     FrictionEmployeeSummary,
     FrictionStepAggregateResponse,
+    FrictionStepChartPoint,
+    FrictionWorkflowListResponse,
+    FrictionWorkflowSummary,
     FrictionWsTicketResponse,
 )
 from app.models import User, UserRole
@@ -31,16 +35,91 @@ from app.models import User, UserRole
 router = APIRouter(prefix="/api/v1/analytics/friction", tags=["friction"])
 
 
-def _step_titles(sop: models.Sop) -> dict[int, str]:
-    titles: dict[int, str] = {}
-    for index, step in enumerate(sop.steps, start=1):
-        try:
-            number = int(step.get("order", index))
-        except (TypeError, ValueError):
-            number = index
-        title = step.get("title")
-        titles[number] = str(title) if title else f"Step {number}"
-    return titles
+def _outlier_steps(db: DBSession, analysis_id: UUID) -> set[int]:
+    rows = (
+        db.query(models.FrictionEmployeeStepScore.step_number)
+        .filter(
+            models.FrictionEmployeeStepScore.analysis_id == analysis_id,
+            models.FrictionEmployeeStepScore.is_outlier.is_(True),
+        )
+        .distinct()
+        .all()
+    )
+    return {int(row[0]) for row in rows}
+
+
+def _step_chart_points(
+    db: DBSession,
+    analysis: models.FrictionAnalysis,
+    titles: dict[int, str],
+) -> tuple[list[FrictionStepChartPoint], bool]:
+    aggregates = (
+        db.query(models.FrictionStepAggregate)
+        .filter(models.FrictionStepAggregate.analysis_id == analysis.id)
+        .order_by(models.FrictionStepAggregate.step_number)
+        .all()
+    )
+    flagged = _outlier_steps(db, analysis.id)
+    points = [
+        FrictionStepChartPoint(
+            step_number=int(row.step_number),
+            step_title=titles.get(int(row.step_number)),
+            average_score=float(row.average_score),
+            variance_flag=int(row.step_number) in flagged,
+        )
+        for row in aggregates
+    ]
+    return points, any(point.variance_flag for point in points)
+
+
+def _workflow_summary(
+    db: DBSession,
+    sop: models.Sop,
+    analysis: models.FrictionAnalysis | None,
+) -> FrictionWorkflowSummary:
+    titles = step_titles(sop)
+    if analysis is None:
+        return FrictionWorkflowSummary(
+            workflow_id=sop.id,
+            title=sop.title,
+            status=None,
+            overall_score=None,
+            session_count=0,
+            high_variance=False,
+            highest_friction_step=None,
+            insight_teaser=None,
+            insight_status="pending",
+            steps=[],
+        )
+
+    steps, high_variance = _step_chart_points(db, analysis, titles)
+    insight_status = analysis.status
+    insight_teaser = None
+    if analysis.status == models.FrictionAnalysisStatus.completed.value:
+        summary = build_insight_summary(
+            sop_title=sop.title,
+            analysis=analysis,
+            step_titles=titles,
+        )
+        insight_teaser = first_sentence(summary) or summary
+        insight_status = "ready"
+    elif analysis.status == models.FrictionAnalysisStatus.failed.value:
+        insight_status = "failed"
+
+    return FrictionWorkflowSummary(
+        workflow_id=sop.id,
+        title=sop.title,
+        status=analysis.status,
+        overall_score=(
+            float(analysis.overall_score) if analysis.overall_score is not None else None
+        ),
+        session_count=int(analysis.employee_count or 0),
+        high_variance=high_variance,
+        highest_friction_step=analysis.highest_friction_step,
+        insight_teaser=insight_teaser,
+        insight_status=insight_status,
+        steps=steps,
+    )
 
 
 def _analysis_response(
@@ -74,7 +153,7 @@ def _analysis_response(
         db.query(models.User).filter(models.User.id.in_(employee_ids)).all() if employee_ids else []
     )
     emails = {user.id: user.email for user in users}
-    titles = _step_titles(sop)
+    titles = step_titles(sop)
 
     scores_by_employee: dict[UUID, list[models.FrictionEmployeeStepScore]] = defaultdict(list)
     for row in score_rows:
@@ -141,10 +220,48 @@ def _analysis_response(
     )
 
 
+@router.get("", response_model=FrictionWorkflowListResponse)
+def list_friction_workflows(
+    current_user: Annotated[User, Depends(require_role(UserRole.manager))],
+    db: Annotated[DBSession, Depends(get_db)],
+) -> FrictionWorkflowListResponse:
+    """Ranked PII-free friction summaries for all published workflows."""
+    sops = (
+        db.query(models.Sop)
+        .filter(
+            models.Sop.tenant_id == current_user.tenant_id,
+            models.Sop.status == models.SopStatus.published.value,
+        )
+        .order_by(models.Sop.title.asc())
+        .all()
+    )
+    summaries: list[FrictionWorkflowSummary] = []
+    for sop in sops:
+        analysis = (
+            db.query(models.FrictionAnalysis)
+            .filter(
+                models.FrictionAnalysis.sop_id == sop.id,
+                models.FrictionAnalysis.tenant_id == current_user.tenant_id,
+            )
+            .order_by(models.FrictionAnalysis.triggered_at.desc())
+            .first()
+        )
+        summaries.append(_workflow_summary(db, sop, analysis))
+
+    summaries.sort(
+        key=lambda item: (
+            item.overall_score is None,
+            -(item.overall_score or 0.0),
+            item.title.lower(),
+        )
+    )
+    return FrictionWorkflowListResponse(workflows=summaries)
+
+
 @router.get("/{sop_id}", response_model=FrictionAnalysisResponse)
 def get_latest_friction_analysis(
     sop_id: UUID,
-    current_user: Annotated[User, Depends(require_role(UserRole.reviewer))],
+    current_user: Annotated[User, Depends(require_role(UserRole.manager))],
     db: Annotated[DBSession, Depends(get_db)],
 ) -> FrictionAnalysisResponse:
     sop = (
@@ -173,7 +290,7 @@ def get_latest_friction_analysis(
 
 @router.post("/ws-ticket", response_model=FrictionWsTicketResponse)
 def create_friction_ws_ticket(
-    current_user: Annotated[User, Depends(require_role(UserRole.reviewer))],
+    current_user: Annotated[User, Depends(require_role(UserRole.manager))],
 ) -> FrictionWsTicketResponse:
     try:
         role = UserRole(current_user.role)
@@ -218,7 +335,7 @@ async def friction_updates(
     except ValueError:
         await websocket.close(code=4403)
         return
-    if role not in {UserRole.reviewer, UserRole.manager}:
+    if role is not UserRole.manager:
         await websocket.close(code=4403)
         return
 

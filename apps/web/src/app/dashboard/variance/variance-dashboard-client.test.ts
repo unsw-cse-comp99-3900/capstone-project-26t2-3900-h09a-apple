@@ -5,41 +5,36 @@ const dashboardSource = readFileSync(
   new URL('./variance-dashboard-client.tsx', import.meta.url),
   'utf-8',
 );
+const cardSource = readFileSync(new URL('./workflow-friction-card.tsx', import.meta.url), 'utf-8');
+const pageSource = readFileSync(new URL('./page.tsx', import.meta.url), 'utf-8');
 
-describe('variance dashboard client', () => {
-  it('loads published SOPs and cached analysis automatically', () => {
-    expect(dashboardSource).toContain('getPublishedSops()');
-    expect(dashboardSource).toContain('getKmeansAnalysis(workflowId)');
+describe('variance dashboard friction list (H09AAPPLE-38)', () => {
+  it('server-renders the initial friction list payload', () => {
+    expect(pageSource).toContain('loadFrictionWorkflowList');
+    expect(pageSource).toContain('initialList={initialList}');
+  });
+
+  it('loads ranked workflows for managers and keeps clustering secondary', () => {
+    expect(dashboardSource).toContain('getFrictionWorkflowList');
     expect(dashboardSource).toContain("user?.role !== 'MANAGER'");
+    expect(dashboardSource).toContain('/dashboard/variance/clustering');
+    expect(dashboardSource).toContain('WorkflowFrictionCard');
   });
 
-  it('runs a fresh analysis with manager-selected settings', () => {
-    expect(dashboardSource).toContain('runKmeansAnalysis({');
-    expect(dashboardSource).toContain('workflow_id: workflowId');
-    expect(dashboardSource).toContain('min_sessions: minSessions');
-  });
-
-  it('subscribes to asynchronous friction completion updates', () => {
-    expect(dashboardSource).toContain('const wsTicket = await createFrictionWsTicket()');
-    expect(dashboardSource).toContain(
-      'new WebSocket(frictionWebSocketUrl(wsTicket.ticket, wsTicket.ws_path))',
-    );
+  it('refreshes rankings when friction analysis updates arrive', () => {
+    expect(dashboardSource).toContain('createFrictionWsTicket');
     expect(dashboardSource).toContain("update.event === 'friction_analysis.updated'");
-    expect(dashboardSource).toContain('setFrictionUpdate');
+    expect(dashboardSource).toContain('void refreshList()');
   });
 
-  it('prevents stale cached requests from replacing a fresh analysis', () => {
-    expect(dashboardSource).toContain('const analysisRequestId = useRef(0)');
-    expect(dashboardSource).toContain('requestId === analysisRequestId.current');
-    expect(dashboardSource).toContain('loadingAnalysis ||');
-  });
-
-  it('renders result and empty-state sections', () => {
-    expect(dashboardSource).toContain('Silhouette score');
-    expect(dashboardSource).toContain('Characteristics');
-    expect(dashboardSource).toContain('Assignments');
-    expect(dashboardSource).toContain('Outliers');
-    expect(dashboardSource).toContain('No cached analysis');
-    expect(dashboardSource).toContain('{outlier.reason}');
+  it('renders card fields required by the ticket without employee identifiers', () => {
+    expect(cardSource).toContain('HIGH VARIANCE');
+    expect(cardSource).toContain('FrictionBarChart');
+    expect(cardSource).toContain('insight-teaser');
+    expect(cardSource).toContain('`/dashboard/variance/${workflow.workflow_id}`');
+    expect(cardSource).not.toContain('employee_id');
+    expect(cardSource).not.toContain('employee_email');
+    expect(dashboardSource).not.toContain('employee_id');
+    expect(dashboardSource).not.toContain('employee_email');
   });
 });
