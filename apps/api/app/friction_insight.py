@@ -17,6 +17,22 @@ def step_titles(sop: models.Sop) -> dict[int, str]:
     return titles
 
 
+def step_instructions(sop: models.Sop) -> dict[int, str]:
+    instructions: dict[int, str] = {}
+    for index, step in enumerate(sop.steps or [], start=1):
+        try:
+            number = int(step.get("order", index))
+        except (TypeError, ValueError):
+            number = index
+        instruction = step.get("instruction")
+        if instruction is None:
+            continue
+        text = str(instruction).strip()
+        if text:
+            instructions[number] = text
+    return instructions
+
+
 def first_sentence(text: str) -> str:
     """Return the first sentence for card teasers."""
     cleaned = " ".join(text.split()).strip()
@@ -51,19 +67,24 @@ def build_insight_summary(
     if score is None:
         return (
             f'Friction analysis for "{sop_title}" is not ready yet. '
-            "Publish completions and wait for scoring to finish."
+            "Publish completions and wait for scoring to finish. "
+            "Once scores land, managers can target the highest-friction steps."
         )
 
     if step_label is not None:
         return (
             f'"{sop_title}" shows the highest friction at {step_label}, '
-            f"with an aggregate score of {score:.0f} across {sessions} sessions."
+            f"with an aggregate score of {score:.0f} across {sessions} sessions. "
+            "Execution paths diverge most around this step and nearby hand-offs. "
+            "Align SOP instructions to the faster path to cut variance."
         )
 
     return (
         f'"{sop_title}" has an aggregate friction score of {score:.0f} '
-        f"across {sessions} sessions."
+        f"across {sessions} sessions. "
+        "Compare cluster timelines to see where paths diverge. "
+        "Prioritise SOP edits on steps with the largest timing gaps."
     )
 
 
-__all__ = ["build_insight_summary", "first_sentence", "step_titles"]
+__all__ = ["build_insight_summary", "first_sentence", "step_instructions", "step_titles"]

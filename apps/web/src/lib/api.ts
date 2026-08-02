@@ -8,6 +8,8 @@ import type {
   FrictionAnalysisResponse,
   FrictionWorkflowListResponse,
   HealthResponse,
+  WorkflowClusterResponse,
+  WorkflowClusterTimingsResponse,
   WorkflowInsightSummaryResponse,
   KmeansAnalysisRequest,
   KmeansAnalysisResponse,
@@ -226,6 +228,36 @@ export async function getWorkflowInsightSummary(
 
   if (!res.ok) {
     throw new ApiError(await errorMessage(res, 'Failed to load insight summary'), res.status);
+  }
+
+  return res.json();
+}
+
+export async function getWorkflowClusterTimings(
+  workflowId: string,
+): Promise<WorkflowClusterTimingsResponse> {
+  const res = await authedFetch(
+    `/api/v1/workflows/${encodeURIComponent(workflowId)}/cluster-timings`,
+  );
+
+  if (!res.ok) {
+    throw new ApiError(await errorMessage(res, 'Failed to load cluster timings'), res.status);
+  }
+
+  return res.json();
+}
+
+/** Run H36 embedding clustering. Path param is session workflow_name, not SOP UUID. */
+export async function clusterWorkflowByName(
+  workflowName: string,
+): Promise<WorkflowClusterResponse> {
+  const res = await authedFetch(
+    `/api/v1/workflows/${encodeURIComponent(workflowName)}/cluster`,
+    { method: 'POST' },
+  );
+
+  if (!res.ok) {
+    throw new ApiError(await errorMessage(res, 'Failed to generate path comparison'), res.status);
   }
 
   return res.json();

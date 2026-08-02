@@ -50,7 +50,7 @@ export function FrictionBarChart({ steps, height = 140 }: FrictionBarChartProps)
           />
           <Bar dataKey="score" radius={[6, 6, 0, 0]}>
             {data.map((entry) => (
-              <Cell key={entry.key} fill={entry.variance ? '#c2410c' : '#756eff'} />
+              <Cell key={entry.key} fill={entry.variance ? '#EF4444' : '#756eff'} />
             ))}
           </Bar>
         </BarChart>

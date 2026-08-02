@@ -13,13 +13,47 @@ from app.database import get_db
 from app.friction_insight import build_insight_summary, first_sentence, step_titles
 from app.friction_schema import WorkflowInsightSummaryResponse
 from app.models import User, UserRole
-from app.workflow_cluster_schema import WorkflowClusterResponse
+from app.workflow_cluster_schema import WorkflowClusterResponse, WorkflowClusterTimingsResponse
+from app.workflow_cluster_timings import load_workflow_cluster_timings
 from app.workflow_clustering import InsufficientClusterDataError, cluster_workflow
 
 router = APIRouter(
     prefix="/api/v1/workflows",
     tags=["workflows"],
 )
+
+
+@router.get(
+    "/{workflow_id}/cluster-timings",
+    response_model=WorkflowClusterTimingsResponse,
+)
+def get_workflow_cluster_timings(
+    workflow_id: str,
+    current_user: Annotated[User, Depends(require_role(UserRole.manager))],
+    db: Annotated[DBSession, Depends(get_db)],
+) -> WorkflowClusterTimingsResponse:
+    """Return per-cluster mean step timings for path comparison charts.
+
+    ``workflow_id`` is the published SOP UUID (same as the variance detail page).
+    Recording session IDs from ``workflow_clusters`` are bridged to walkthrough
+    completions via ``sops.session_id``.
+    """
+    try:
+        sop_id = UUID(unquote(workflow_id).strip())
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="workflow_id must be a SOP UUID",
+        ) from exc
+
+    payload = load_workflow_cluster_timings(
+        db,
+        tenant_id=current_user.tenant_id,
+        sop_id=sop_id,
+    )
+    if payload is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="SOP not found")
+    return payload
 
 
 @router.get(

@@ -17,7 +17,12 @@ from app.auth.jwt import (
     verify_access_or_ws_token,
 )
 from app.database import get_db
-from app.friction_insight import build_insight_summary, first_sentence, step_titles
+from app.friction_insight import (
+    build_insight_summary,
+    first_sentence,
+    step_instructions,
+    step_titles,
+)
 from app.friction_model import average_score
 from app.friction_notifications import friction_channel
 from app.friction_schema import (
@@ -52,6 +57,7 @@ def _step_chart_points(
     db: DBSession,
     analysis: models.FrictionAnalysis,
     titles: dict[int, str],
+    instructions: dict[int, str],
 ) -> tuple[list[FrictionStepChartPoint], bool]:
     aggregates = (
         db.query(models.FrictionStepAggregate)
@@ -64,6 +70,7 @@ def _step_chart_points(
         FrictionStepChartPoint(
             step_number=int(row.step_number),
             step_title=titles.get(int(row.step_number)),
+            instruction=instructions.get(int(row.step_number)),
             average_score=float(row.average_score),
             variance_flag=int(row.step_number) in flagged,
         )
@@ -78,6 +85,7 @@ def _workflow_summary(
     analysis: models.FrictionAnalysis | None,
 ) -> FrictionWorkflowSummary:
     titles = step_titles(sop)
+    instructions = step_instructions(sop)
     if analysis is None:
         return FrictionWorkflowSummary(
             workflow_id=sop.id,
@@ -92,7 +100,7 @@ def _workflow_summary(
             steps=[],
         )
 
-    steps, high_variance = _step_chart_points(db, analysis, titles)
+    steps, high_variance = _step_chart_points(db, analysis, titles, instructions)
     insight_status = analysis.status
     insight_teaser = None
     if analysis.status == models.FrictionAnalysisStatus.completed.value:

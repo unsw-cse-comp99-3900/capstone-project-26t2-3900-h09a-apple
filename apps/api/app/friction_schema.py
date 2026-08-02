@@ -67,6 +67,7 @@ class FrictionStepChartPoint(BaseModel):
 
     step_number: int = Field(..., ge=1)
     step_title: str | None = None
+    instruction: str | None = None
     average_score: float = Field(..., ge=0, le=100)
     variance_flag: bool = False
 
