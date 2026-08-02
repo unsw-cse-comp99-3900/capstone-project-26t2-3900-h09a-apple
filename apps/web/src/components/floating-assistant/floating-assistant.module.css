@@ -305,9 +305,9 @@
   }
 
   .panel,
-	.shell[data-maximized='true'] .panel {
-		width: calc(100vw - 88px);
-	}
+  .shell[data-maximized='true'] .panel {
+    width: calc(100vw - 88px);
+  }
 }
 
 .stepControls {

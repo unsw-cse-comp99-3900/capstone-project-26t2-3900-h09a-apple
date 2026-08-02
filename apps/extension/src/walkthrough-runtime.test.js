@@ -37,7 +37,18 @@ function loadRuntime({
         sentMessages.push(message);
         if (message.type === 'GET_TAB_ID') {
           callback?.({ ok: true, tabId });
+          return;
         }
+        if (message.type === 'WALKTHROUGH_VOICE_UPLOAD') {
+          callback?.({
+            ok: true,
+            feedbackId: 'feedback-1',
+            transcript: 'Mock transcript from upload.',
+            status: 'pending',
+          });
+          return;
+        }
+        callback?.({ ok: true });
       },
     },
     storage: {
@@ -771,4 +782,97 @@ test('click action auto advances', async () => {
   await flush();
 
   assert.equal(sessionValues().walkthroughState.stepIndex, 1);
+});
+
+test('voice tab records with MediaRecorder and uploads through background', async () => {
+  const payload = {
+    steps: [
+      {
+        step_number: 1,
+        instruction: 'Click Save',
+        css_selector: '#save-btn',
+      },
+    ],
+  };
+
+  const { window, document, flush, sentMessages } = loadRuntime({
+    walkthroughState: {
+      status: 'playing',
+      sopId: 'sop-voice-1',
+      stepIndex: 0,
+    },
+    walkthroughPayload: payload,
+  });
+  await flush();
+
+  class FakeMediaRecorder {
+    static isTypeSupported() {
+      return true;
+    }
+
+    constructor(stream, options = {}) {
+      this.stream = stream;
+      this.mimeType = options.mimeType || 'audio/webm';
+      this.state = 'inactive';
+      this.listeners = {};
+    }
+
+    addEventListener(type, handler) {
+      this.listeners[type] = handler;
+    }
+
+    start() {
+      this.state = 'recording';
+    }
+
+    stop() {
+      this.state = 'inactive';
+      this.listeners.dataavailable?.({
+        data: new window.Blob([new Uint8Array(512).fill(1)], { type: this.mimeType }),
+      });
+      this.listeners.stop?.();
+    }
+  }
+
+  Object.defineProperty(window.navigator, 'mediaDevices', {
+    configurable: true,
+    value: {
+      getUserMedia: async () => ({
+        getTracks: () => [{ stop() {} }],
+      }),
+    },
+  });
+  window.MediaRecorder = FakeMediaRecorder;
+
+  const root = document.getElementById('worktrace-walkthrough-host').shadowRoot;
+  root
+    .querySelector('[data-action="tab-voice"]')
+    .dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  await flush();
+
+  const voicePanel = root.querySelector('.voice-panel');
+  assert.equal(voicePanel.hidden, false);
+  assert.equal(root.querySelector('.qa-panel').hidden, true);
+
+  root
+    .querySelector('[data-action="voice-start"]')
+    .dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  await flush();
+
+  assert.match(root.querySelector('.voice-status').textContent, /Recording/i);
+  assert.equal(root.querySelector('.voice-stop').hidden, false);
+
+  root
+    .querySelector('[data-action="voice-stop"]')
+    .dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  await flush();
+  await flush();
+
+  const uploadMessage = sentMessages.find((message) => message.type === 'WALKTHROUGH_VOICE_UPLOAD');
+  assert.ok(uploadMessage);
+  assert.equal(uploadMessage.sopId, 'sop-voice-1');
+  assert.ok(uploadMessage.audioBase64);
+  assert.match(root.querySelector('.voice-status').textContent, /sent to your reviewer/i);
+  assert.equal(root.querySelector('.voice-transcript').hidden, false);
+  assert.match(root.querySelector('.voice-transcript').textContent, /Mock transcript/);
 });

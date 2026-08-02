@@ -48,6 +48,20 @@
   let assistantAnswer = '';
   let assistantLoading = false;
   let assistantError = '';
+  /** @type {'idle' | 'recording' | 'uploading' | 'done' | 'error'} */
+  let voiceStatus = 'idle';
+  let voiceError = '';
+  let voiceTranscript = '';
+  let voiceElapsedSeconds = 0;
+  /** @type {MediaRecorder | null} */
+  let mediaRecorder = null;
+  /** @type {MediaStream | null} */
+  let mediaStream = null;
+  /** @type {Blob[]} */
+  let recordedChunks = [];
+  /** @type {ReturnType<typeof setInterval> | null} */
+  let voiceTimerId = null;
+  let voiceRecordedAt = '';
   let frictionEvents = [];
 
   /** @type {Array<{
@@ -695,6 +709,55 @@
           box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.18);
         }
 
+        .voice-panel {
+          gap: 8px;
+          margin: 0 0 12px;
+        }
+
+        .voice-panel:not([hidden]) {
+          display: grid;
+        }
+
+        .voice-status {
+          margin: 0;
+          color: #cbd5e1;
+          font-size: 12px;
+        }
+
+        .voice-status[data-tone='recording'] {
+          color: #fca5a5;
+          font-weight: 700;
+        }
+
+        .voice-status[data-tone='done'] {
+          color: #86efac;
+        }
+
+        .voice-status[data-tone='error'] {
+          color: #fca5a5;
+        }
+
+        .voice-actions {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+        }
+
+        .voice-transcript {
+          margin: 4px 0 0;
+          padding: 10px 12px;
+          border-radius: 10px;
+          background: rgba(15, 23, 42, 0.72);
+          color: #e2e8f0;
+          font-size: 13px;
+          line-height: 1.45;
+          white-space: pre-wrap;
+        }
+
+        .voice-transcript[hidden] {
+          display: none !important;
+        }
+
         .qa-answer {
           margin: 4px 0 0;
           padding: 10px 12px;
@@ -1156,6 +1219,22 @@
             </button>
             <p class="qa-answer" hidden></p>
           </div>
+          <div class="voice-panel" hidden>
+            <p class="qa-label">Voice Feedback</p>
+            <p class="voice-status" data-tone="idle">Record a short note about this step for your reviewer.</p>
+            <div class="voice-actions">
+              <button type="button" class="btn-primary voice-start" data-action="voice-start">
+                Start recording
+              </button>
+              <button type="button" class="btn-primary voice-stop" data-action="voice-stop" hidden>
+                Stop &amp; upload
+              </button>
+              <button type="button" class="btn-secondary voice-reset" data-action="voice-reset" hidden>
+                Record again
+              </button>
+            </div>
+            <p class="voice-transcript" hidden></p>
+          </div>
           <img class="preview" alt="Step screenshot preview" hidden />
           <p class="fallback-note" hidden></p>
 
@@ -1193,6 +1272,13 @@
         render();
       } else if (action === 'ask-assistant') {
         askAssistant();
+      } else if (action === 'voice-start') {
+        void startVoiceRecording();
+      } else if (action === 'voice-stop') {
+        stopVoiceRecording();
+      } else if (action === 'voice-reset') {
+        resetVoiceUi();
+        render();
       } else if (action === 'mode-auto') {
         assistantMode = 'auto';
         render();
@@ -1223,6 +1309,7 @@
     // leaveCurrentStep() before any state transition that leads here.
     detachStepListener();
     removeHighlight();
+    discardVoiceRecording();
 
     if (hostEl) {
       hostEl.remove();
@@ -1616,11 +1703,17 @@
     const qaInput = root.querySelector('.qa-input');
     const qaSubmit = root.querySelector('.qa-submit');
     const qaAnswer = root.querySelector('.qa-answer');
+    const voicePanel = root.querySelector('.voice-panel');
+    const voiceStatusEl = root.querySelector('.voice-status');
+    const voiceStartBtn = root.querySelector('.voice-start');
+    const voiceStopBtn = root.querySelector('.voice-stop');
+    const voiceResetBtn = root.querySelector('.voice-reset');
+    const voiceTranscriptEl = root.querySelector('.voice-transcript');
     const stepNumber = step.step_number ?? activeState.stepIndex + 1;
     eyebrow.textContent = `Step ${activeState.stepIndex + 1} / ${steps.length}`;
     protectAssistantTextInput(qaInput);
     instruction.textContent = String(step.instruction ?? '');
-    
+
     const isFirst = activeState.stepIndex <= 0;
     const isLast = activeState.stepIndex >= steps.length - 1;
 
@@ -1648,6 +1741,10 @@
       qaPanel.hidden = assistantTab !== 'qa';
     }
 
+    if (voicePanel) {
+      voicePanel.hidden = assistantTab !== 'voice';
+    }
+
     if (qaInput && qaInput.value !== assistantQuestion) {
       qaInput.value = assistantQuestion;
     }
@@ -1661,6 +1758,290 @@
       const message = assistantError || assistantAnswer;
       qaAnswer.hidden = !message;
       qaAnswer.textContent = message;
+    }
+
+    if (voiceStatusEl) {
+      voiceStatusEl.dataset.tone = voiceStatus;
+      if (voiceStatus === 'recording') {
+        voiceStatusEl.textContent = `Recording… ${formatVoiceElapsed(voiceElapsedSeconds)}`;
+      } else if (voiceStatus === 'uploading') {
+        voiceStatusEl.textContent = 'Uploading voice feedback…';
+      } else if (voiceStatus === 'done') {
+        voiceStatusEl.textContent = 'Voice feedback sent to your reviewer.';
+      } else if (voiceStatus === 'error') {
+        voiceStatusEl.textContent = voiceError || 'Could not upload voice feedback.';
+      } else {
+        voiceStatusEl.textContent = 'Record a short note about this step for your reviewer.';
+      }
+    }
+
+    if (voiceStartBtn) {
+      voiceStartBtn.hidden = voiceStatus === 'recording' || voiceStatus === 'uploading';
+      voiceStartBtn.disabled = voiceStatus === 'uploading';
+      voiceStartBtn.textContent =
+        voiceStatus === 'done' || voiceStatus === 'error'
+          ? 'Start new recording'
+          : 'Start recording';
+    }
+
+    if (voiceStopBtn) {
+      voiceStopBtn.hidden = voiceStatus !== 'recording';
+      voiceStopBtn.disabled = false;
+    }
+
+    if (voiceResetBtn) {
+      // Kept for markup stability; primary restart path is "Start new recording".
+      voiceResetBtn.hidden = true;
+    }
+
+    if (voiceTranscriptEl) {
+      const showTranscript = voiceStatus === 'done' && Boolean(voiceTranscript);
+      voiceTranscriptEl.hidden = !showTranscript;
+      voiceTranscriptEl.textContent = showTranscript ? voiceTranscript : '';
+    }
+  }
+
+  function formatVoiceElapsed(totalSeconds) {
+    const seconds = Math.max(0, Number(totalSeconds) || 0);
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  }
+
+  function clearVoiceTimer() {
+    if (voiceTimerId != null) {
+      clearInterval(voiceTimerId);
+      voiceTimerId = null;
+    }
+  }
+
+  function stopMediaTracks() {
+    if (!mediaStream) {
+      return;
+    }
+    for (const track of mediaStream.getTracks()) {
+      track.stop();
+    }
+    mediaStream = null;
+  }
+
+  function resetVoiceUi() {
+    clearVoiceTimer();
+    const recorder = mediaRecorder;
+    mediaRecorder = null;
+    recordedChunks = [];
+    voiceStatus = 'idle';
+    voiceError = '';
+    voiceTranscript = '';
+    voiceElapsedSeconds = 0;
+    voiceRecordedAt = '';
+    stopMediaTracks();
+    if (recorder && recorder.state !== 'inactive') {
+      try {
+        recorder.stop();
+      } catch {
+        // Ignore stop races while resetting UI.
+      }
+    }
+  }
+
+  function discardVoiceRecording() {
+    resetVoiceUi();
+  }
+
+  function pickRecorderMimeType() {
+    if (typeof MediaRecorder === 'undefined') {
+      return '';
+    }
+    const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'];
+    for (const type of candidates) {
+      if (MediaRecorder.isTypeSupported?.(type)) {
+        return type;
+      }
+    }
+    return '';
+  }
+
+  function blobToBase64(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = String(reader.result || '');
+        const comma = result.indexOf(',');
+        resolve(comma >= 0 ? result.slice(comma + 1) : result);
+      };
+      reader.onerror = () => reject(reader.error || new Error('Failed to read audio'));
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  async function startVoiceRecording() {
+    if (voiceStatus === 'recording' || voiceStatus === 'uploading') {
+      return;
+    }
+
+    if (!activeState?.sopId) {
+      voiceStatus = 'error';
+      voiceError = 'No SOP is linked to this walkthrough.';
+      voiceTranscript = '';
+      render();
+      return;
+    }
+
+    if (!navigator?.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+      voiceStatus = 'error';
+      voiceError = 'This browser cannot record microphone audio.';
+      voiceTranscript = '';
+      render();
+      return;
+    }
+
+    try {
+      clearVoiceTimer();
+      stopMediaTracks();
+      recordedChunks = [];
+      voiceError = '';
+      voiceTranscript = '';
+      voiceElapsedSeconds = 0;
+      voiceRecordedAt = new Date().toISOString();
+
+      mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = pickRecorderMimeType();
+      mediaRecorder = mimeType
+        ? new MediaRecorder(mediaStream, { mimeType })
+        : new MediaRecorder(mediaStream);
+
+      mediaRecorder.addEventListener('dataavailable', (event) => {
+        if (event.data && event.data.size > 0) {
+          recordedChunks.push(event.data);
+        }
+      });
+
+      mediaRecorder.addEventListener('error', () => {
+        voiceStatus = 'error';
+        voiceError = 'Recording failed. Please try again.';
+        clearVoiceTimer();
+        stopMediaTracks();
+        mediaRecorder = null;
+        render();
+      });
+
+      mediaRecorder.addEventListener('stop', () => {
+        void finalizeVoiceRecording();
+      });
+
+      mediaRecorder.start();
+      voiceStatus = 'recording';
+      voiceTimerId = setInterval(() => {
+        voiceElapsedSeconds += 1;
+        const host = shadowRoot || ensureHost();
+        const statusEl = host.querySelector('.voice-status');
+        if (statusEl && voiceStatus === 'recording') {
+          statusEl.dataset.tone = 'recording';
+          statusEl.textContent = `Recording… ${formatVoiceElapsed(voiceElapsedSeconds)}`;
+        }
+      }, 1000);
+      render();
+    } catch (error) {
+      console.error('Walkthrough voice recording failed:', error);
+      stopMediaTracks();
+      mediaRecorder = null;
+      voiceStatus = 'error';
+      voiceError =
+        error?.name === 'NotAllowedError'
+          ? 'Microphone permission denied. Allow access and try again.'
+          : 'Could not start microphone recording.';
+      render();
+    }
+  }
+
+  function stopVoiceRecording() {
+    if (voiceStatus !== 'recording' || !mediaRecorder) {
+      return;
+    }
+    clearVoiceTimer();
+    voiceStatus = 'uploading';
+    render();
+    try {
+      mediaRecorder.stop();
+    } catch (error) {
+      console.error('Walkthrough voice stop failed:', error);
+      stopMediaTracks();
+      mediaRecorder = null;
+      voiceStatus = 'error';
+      voiceError = 'Could not finish the recording.';
+      render();
+    }
+  }
+
+  async function finalizeVoiceRecording() {
+    const chunks = recordedChunks.slice();
+    const mimeType = mediaRecorder?.mimeType || 'audio/webm';
+    stopMediaTracks();
+    mediaRecorder = null;
+    recordedChunks = [];
+
+    if (voiceStatus !== 'uploading') {
+      return;
+    }
+
+    const blob = new Blob(chunks, { type: mimeType || 'audio/webm' });
+    if (blob.size < 256) {
+      voiceStatus = 'error';
+      voiceError = 'Recording was too short. Please try again.';
+      render();
+      return;
+    }
+
+    const sopId = activeState?.sopId;
+    if (!sopId) {
+      voiceStatus = 'error';
+      voiceError = 'No SOP is linked to this walkthrough.';
+      render();
+      return;
+    }
+
+    try {
+      const audioBase64 = await blobToBase64(blob);
+      const extension = mimeType.includes('mp4') ? 'mp4' : 'webm';
+      const payload = await new Promise((resolve, reject) => {
+        chrome.runtime?.sendMessage?.(
+          {
+            type: 'WALKTHROUGH_VOICE_UPLOAD',
+            sopId,
+            audioBase64,
+            contentType: mimeType || 'audio/webm',
+            filename: `feedback.${extension}`,
+            recordedAt: voiceRecordedAt || new Date().toISOString(),
+          },
+          (response) => {
+            if (chrome.runtime?.lastError) {
+              reject(new Error(chrome.runtime.lastError.message));
+              return;
+            }
+            if (!response?.ok) {
+              reject(new Error(response?.error || 'Voice upload failed.'));
+              return;
+            }
+            resolve(response);
+          },
+        );
+      });
+
+      voiceStatus = 'done';
+      voiceError = '';
+      voiceTranscript =
+        payload.transcript || 'Uploaded. Your reviewer can listen in the review queue.';
+    } catch (error) {
+      console.error('Walkthrough voice upload failed:', error);
+      voiceStatus = 'error';
+      voiceError =
+        error instanceof Error && error.message
+          ? error.message
+          : 'Could not upload voice feedback.';
+      voiceTranscript = '';
+    } finally {
+      render();
     }
   }
 

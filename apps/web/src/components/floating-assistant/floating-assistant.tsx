@@ -44,15 +44,15 @@ function initialsFor(email: string): string {
 }
 
 export function FloatingAssistant() {
-    const { user, loading } = useCurrentUser();
-		const pathname = usePathname();
-		const [expanded, setExpanded] = useState(false);
-		const [maximized, setMaximized] = useState(false);
-		const [mode, setMode] = useState<AssistantMode>('auto');
-		const [tab, setTab] = useState<AssistantTab>('prompt');
-		const [sop, setSop] = useState<SopDetailPayload | null>(null);
-		const [activeStepIndex, setActiveStepIndex] = useState(0);
-		const [sopLoading, setSopLoading] = useState(false);
+  const { user, loading } = useCurrentUser();
+  const pathname = usePathname();
+  const [expanded, setExpanded] = useState(false);
+  const [maximized, setMaximized] = useState(false);
+  const [mode, setMode] = useState<AssistantMode>('auto');
+  const [tab, setTab] = useState<AssistantTab>('prompt');
+  const [sop, setSop] = useState<SopDetailPayload | null>(null);
+  const [activeStepIndex, setActiveStepIndex] = useState(0);
+  const [sopLoading, setSopLoading] = useState(false);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -70,47 +70,47 @@ export function FloatingAssistant() {
     return user.email.split('@')[0] || user.email;
   }, [user?.email]);
 
-	const orderedSteps = useMemo(() => {
-		return [...(sop?.steps ?? [])].sort((left, right) => left.order - right.order);
-	}, [sop?.steps]);
+  const orderedSteps = useMemo(() => {
+    return [...(sop?.steps ?? [])].sort((left, right) => left.order - right.order);
+  }, [sop?.steps]);
 
-	const currentStep = orderedSteps[activeStepIndex] ?? null;
+  const currentStep = orderedSteps[activeStepIndex] ?? null;
 
-	useEffect(() => {
-		const sopId = sopIdFromPath(pathname);
+  useEffect(() => {
+    const sopId = sopIdFromPath(pathname);
 
-		if (!sopId || !user) {
-			setSop(null);
-			setActiveStepIndex(0);
-			return;
-		}
+    if (!sopId || !user) {
+      setSop(null);
+      setActiveStepIndex(0);
+      return;
+    }
 
-		let cancelled = false;
-		setSopLoading(true);
+    let cancelled = false;
+    setSopLoading(true);
 
-		void getSop(sopId)
-			.then((payload) => {
-				if (!cancelled) {
-					setSop(payload);
-					setActiveStepIndex(0);
-				}
-			})
-			.catch(() => {
-				if (!cancelled) {
-					setSop(null);
-					setActiveStepIndex(0);
-				}
-			})
-			.finally(() => {
-				if (!cancelled) {
-					setSopLoading(false);
-				}
-			});
+    void getSop(sopId)
+      .then((payload) => {
+        if (!cancelled) {
+          setSop(payload);
+          setActiveStepIndex(0);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSop(null);
+          setActiveStepIndex(0);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setSopLoading(false);
+        }
+      });
 
-		return () => {
-			cancelled = true;
-		};
-	}, [pathname, user]);
+    return () => {
+      cancelled = true;
+    };
+  }, [pathname, user]);
   if (loading || !user) {
     return null;
   }
@@ -128,11 +128,11 @@ export function FloatingAssistant() {
         aria-label={expanded ? 'Collapse WorkTrace assistant' : 'Open WorkTrace assistant'}
         aria-expanded={expanded}
         onClick={() => {
-					setExpanded((current) => !current);
-					if (expanded) {
-						setMaximized(false);
-					}
-				}}
+          setExpanded((current) => !current);
+          if (expanded) {
+            setMaximized(false);
+          }
+        }}
       >
         <span className={styles.orbLetter}>W</span>
         <span className={styles.orbStatus} aria-hidden="true" />
@@ -154,25 +154,21 @@ export function FloatingAssistant() {
               <button
                 type="button"
                 onClick={() => {
-									setExpanded(false);
-									setMaximized(false);
-								}}
+                  setExpanded(false);
+                  setMaximized(false);
+                }}
                 aria-label="Minimize assistant"
               >
                 -
               </button>
               <button
-								type="button"
-								aria-label={maximized ? 'Restore assistant size' : 'Maximize assistant'}
-								onClick={() => setMaximized((current) => !current)}
-							>
-								{maximized ? '↙' : '+'}
-							</button>
-              <button
                 type="button"
-                onClick={() => setExpanded(false)}
-                aria-label="Close assistant"
+                aria-label={maximized ? 'Restore assistant size' : 'Maximize assistant'}
+                onClick={() => setMaximized((current) => !current)}
               >
+                {maximized ? '↙' : '+'}
+              </button>
+              <button type="button" onClick={() => setExpanded(false)} aria-label="Close assistant">
                 x
               </button>
             </div>
@@ -211,44 +207,44 @@ export function FloatingAssistant() {
 
           <div className={styles.content}>
             {tab === 'prompt' ? (
-							<div>
-								<p className={styles.kicker}>Prompt Coaching</p>
-								<h2>{sopLoading ? 'Loading SOP context...' : stepLabel(currentStep)}</h2>
-								<p>
-									{currentStep
-										? currentStep.instruction
-										: 'Open an SOP page to let the assistant read the current walkthrough step.'}
-								</p>
+              <div>
+                <p className={styles.kicker}>Prompt Coaching</p>
+                <h2>{sopLoading ? 'Loading SOP context...' : stepLabel(currentStep)}</h2>
+                <p>
+                  {currentStep
+                    ? currentStep.instruction
+                    : 'Open an SOP page to let the assistant read the current walkthrough step.'}
+                </p>
 
-								{currentStep ? (
-									<div className={styles.stepControls}>
-										<button
-											type="button"
-											disabled={activeStepIndex === 0}
-											onClick={() => setActiveStepIndex((index) => Math.max(0, index - 1))}
-										>
-											Previous
-										</button>
-										<span>
-											{activeStepIndex + 1} / {orderedSteps.length}
-										</span>
-										<button
-											type="button"
-											disabled={activeStepIndex >= orderedSteps.length - 1}
-											onClick={() =>
-												setActiveStepIndex((index) => Math.min(orderedSteps.length - 1, index + 1))
-											}
-										>
-											Next
-										</button>
-									</div>
-								) : null}
+                {currentStep ? (
+                  <div className={styles.stepControls}>
+                    <button
+                      type="button"
+                      disabled={activeStepIndex === 0}
+                      onClick={() => setActiveStepIndex((index) => Math.max(0, index - 1))}
+                    >
+                      Previous
+                    </button>
+                    <span>
+                      {activeStepIndex + 1} / {orderedSteps.length}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={activeStepIndex >= orderedSteps.length - 1}
+                      onClick={() =>
+                        setActiveStepIndex((index) => Math.min(orderedSteps.length - 1, index + 1))
+                      }
+                    >
+                      Next
+                    </button>
+                  </div>
+                ) : null}
 
-								<button className={styles.primaryAction} type="button">
-									Generate suggestion
-								</button>
-							</div>
-						) : null}
+                <button className={styles.primaryAction} type="button">
+                  Generate suggestion
+                </button>
+              </div>
+            ) : null}
 
             {tab === 'qa' ? (
               <div>

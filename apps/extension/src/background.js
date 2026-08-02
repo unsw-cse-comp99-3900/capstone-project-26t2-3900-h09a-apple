@@ -135,6 +135,73 @@ function parseScreenshotDataUrl(dataUrl) {
   };
 }
 
+function base64ToBlob(base64, contentType) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return new Blob([bytes], { type: contentType || 'application/octet-stream' });
+}
+
+async function uploadWalkthroughVoiceFeedback(message) {
+  const sopId = typeof message.sopId === 'string' ? message.sopId.trim() : '';
+  const audioBase64 = typeof message.audioBase64 === 'string' ? message.audioBase64.trim() : '';
+  const contentType =
+    typeof message.contentType === 'string' && message.contentType.trim()
+      ? message.contentType.trim()
+      : 'audio/webm';
+  const filename =
+    typeof message.filename === 'string' && message.filename.trim()
+      ? message.filename.trim()
+      : 'feedback.webm';
+
+  if (!sopId) {
+    throw new Error('Missing SOP id for voice upload');
+  }
+  if (!audioBase64) {
+    throw new Error('Missing audio payload for voice upload');
+  }
+
+  const audioBlob = base64ToBlob(audioBase64, contentType);
+  if (audioBlob.size < 1) {
+    throw new Error('Recorded audio is empty');
+  }
+
+  const form = new FormData();
+  form.append('audio', audioBlob, filename);
+  form.append('sop_id', sopId);
+  if (typeof message.recordedAt === 'string' && message.recordedAt.trim()) {
+    form.append('recorded_at', message.recordedAt.trim());
+  }
+
+  const response = await authenticatedFetch('/api/v1/feedback/voice', {
+    method: 'POST',
+    body: form,
+  });
+
+  if (!response.ok) {
+    const detail = await response.text();
+    if (response.status === 401) {
+      throw new Error('Sign in to the WorkTrace extension before sending voice feedback.');
+    }
+    throw new Error(
+      detail?.trim()
+        ? `Voice upload failed (${response.status}): ${detail.slice(0, 200)}`
+        : `Voice upload failed (${response.status})`,
+    );
+  }
+
+  const payload = await response.json();
+  return {
+    feedbackId: payload.feedback_id ?? null,
+    transcript: payload.transcript ?? '',
+    classification: payload.classification ?? null,
+    status: payload.status ?? null,
+    durationSeconds: payload.duration_seconds ?? null,
+  };
+}
+
 async function startWalkthroughFromSop(sopId) {
   const trimmedSopId = typeof sopId === 'string' ? sopId.trim() : '';
   if (!trimmedSopId) {
@@ -353,6 +420,25 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({
           ok: false,
           error: error instanceof Error ? error.message : 'Assistant request failed',
+        });
+      });
+
+    return true;
+  }
+
+  if (message.type === 'WALKTHROUGH_VOICE_UPLOAD') {
+    uploadWalkthroughVoiceFeedback(message)
+      .then((payload) => {
+        sendResponse({
+          ok: true,
+          ...payload,
+        });
+      })
+      .catch((error) => {
+        console.error('Walkthrough voice upload failed:', error);
+        sendResponse({
+          ok: false,
+          error: error instanceof Error ? error.message : 'Voice upload failed',
         });
       });
 

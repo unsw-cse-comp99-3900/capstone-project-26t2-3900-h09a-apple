@@ -54,6 +54,7 @@ def get_google_client_secret() -> str:
         raise SettingsError("GOOGLE_CLIENT_SECRET is not configured")
     return client_secret
 
+
 def get_openai_api_key() -> str:
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
