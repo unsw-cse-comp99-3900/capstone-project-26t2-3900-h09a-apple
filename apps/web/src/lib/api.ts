@@ -220,6 +220,37 @@ export async function getFrictionWorkflowList(): Promise<FrictionWorkflowListRes
   return res.json();
 }
 
+export type DashboardKpi = {
+  id: string;
+  label: string;
+  value: string;
+  delta: number;
+  unit?: string | null;
+};
+
+export type DashboardListItem = {
+  id: string;
+  title: string;
+  meta?: string;
+};
+
+export type DashboardSummary = {
+  role: string;
+  greeting: string;
+  kpis: DashboardKpi[];
+  primary_items: DashboardListItem[];
+};
+
+export async function getDashboardSummary(): Promise<DashboardSummary> {
+  const res = await authedFetch('/api/v1/dashboard/summary');
+
+  if (!res.ok) {
+    throw new ApiError(await errorMessage(res, 'Failed to load dashboard summary'), res.status);
+  }
+
+  return res.json();
+}
+
 export async function getWorkflowInsightSummary(
   workflowId: string,
 ): Promise<WorkflowInsightSummaryResponse> {
@@ -347,6 +378,56 @@ export async function publishSop(sopId: string): Promise<SopPublishResponse> {
 
   if (!res.ok) {
     throw new ApiError(await errorMessage(res, 'Failed to publish SOP'), res.status);
+  }
+
+  return res.json();
+}
+
+export type SopStepEditResponse = {
+  sop_id: string;
+  step_number: number;
+  instruction: string;
+  edit_id: string;
+  edited_at: string;
+};
+
+export type SopStepEditLogItem = {
+  id: string;
+  step_number: number;
+  editor_id: string | null;
+  before_text: string;
+  after_text: string;
+  created_at: string;
+};
+
+export async function patchSopStepInstruction(
+  sopId: string,
+  stepNumber: number,
+  instruction: string,
+): Promise<SopStepEditResponse> {
+  const res = await authedFetch(
+    `/api/v1/sops/${encodeURIComponent(sopId)}/steps/${encodeURIComponent(String(stepNumber))}`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ instruction }),
+    },
+  );
+
+  if (!res.ok) {
+    throw new ApiError(await errorMessage(res, 'Failed to save step description'), res.status);
+  }
+
+  return res.json();
+}
+
+export async function getSopStepEdits(
+  sopId: string,
+): Promise<{ sop_id: string; edits: SopStepEditLogItem[] }> {
+  const res = await authedFetch(`/api/v1/sops/${encodeURIComponent(sopId)}/step-edits`);
+
+  if (!res.ok) {
+    throw new ApiError(await errorMessage(res, 'Failed to load step edit history'), res.status);
   }
 
   return res.json();

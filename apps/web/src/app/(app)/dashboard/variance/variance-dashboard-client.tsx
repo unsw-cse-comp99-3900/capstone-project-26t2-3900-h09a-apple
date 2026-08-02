@@ -1,7 +1,6 @@
 'use client';
 
 import type { FrictionWorkflowListResponse } from '@h09a/types';
-import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 
 import { useCurrentUser } from '@/contexts/auth-context';
@@ -24,7 +23,7 @@ function errorText(error: unknown, fallback: string): string {
 }
 
 export function VarianceDashboardClient({ initialList = null }: VarianceDashboardClientProps) {
-  const { user, loading: loadingUser, logout } = useCurrentUser();
+  const { user, loading: loadingUser } = useCurrentUser();
   const [list, setList] = useState<FrictionWorkflowListResponse | null>(initialList);
   const [loadingList, setLoadingList] = useState(initialList === null);
   const [error, setError] = useState<string | null>(null);
@@ -123,11 +122,8 @@ export function VarianceDashboardClient({ initialList = null }: VarianceDashboar
   if (user.role !== 'MANAGER') {
     return (
       <main className={styles.page}>
-        <h1 className={styles.title}>Variance dashboard</h1>
-        <p className={styles.state}>This dashboard is available to manager accounts only.</p>
-        <button className={styles.secondaryButton} type="button" onClick={() => void logout()}>
-          Log out
-        </button>
+        <h1 className={styles.title}>Workflow rankings</h1>
+        <p className={styles.state}>This view is available to manager accounts only.</p>
       </main>
     );
   }
@@ -138,23 +134,12 @@ export function VarianceDashboardClient({ initialList = null }: VarianceDashboar
     <main className={styles.page}>
       <header className={styles.header}>
         <div>
-          <p className={styles.eyebrow}>Manager analytics</p>
-          <h1 className={styles.title}>Variance dashboard</h1>
+          <p className={styles.eyebrow}>Analytics</p>
+          <h1 className={styles.title}>Workflow rankings</h1>
           <p className={styles.lead}>
-            Ranked workflows by aggregate friction, with step charts and a one-line executive
-            insight so you can prioritise the highest-impact coaching.
+            Ranked workflows by aggregate friction. Open a row for step breakdown, or use the
+            sidebar for clustering and voice feedback.
           </p>
-        </div>
-        <div className={styles.account}>
-          <Link className={styles.secondaryButton} href="/dashboard/variance/clustering">
-            Clustering
-          </Link>
-          <Link className={styles.secondaryButton} href="/dashboard/feedback">
-            Voice feedback
-          </Link>
-          <button className={styles.secondaryButton} type="button" onClick={() => void logout()}>
-            Log out
-          </button>
         </div>
       </header>
 

@@ -19,9 +19,9 @@ function makeToken(role: string, exp?: number): string {
 
 describe('auth constants', () => {
   it('maps roles to landing pages', () => {
-    expect(roleLandingPath('EMPLOYEE')).toBe('/library');
-    expect(roleLandingPath('REVIEWER')).toBe('/review');
-    expect(roleLandingPath('MANAGER')).toBe('/dashboard/variance');
+    expect(roleLandingPath('EMPLOYEE')).toBe('/dashboard');
+    expect(roleLandingPath('REVIEWER')).toBe('/dashboard');
+    expect(roleLandingPath('MANAGER')).toBe('/dashboard');
   });
 
   it('decodes base64url jwt payload segments without Buffer', () => {

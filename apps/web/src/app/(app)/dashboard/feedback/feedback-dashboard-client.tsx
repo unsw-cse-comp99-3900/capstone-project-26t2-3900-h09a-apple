@@ -10,7 +10,7 @@ import { ApiError, getFeedbackStats } from '@/lib/api';
 import styles from './feedback-dashboard.module.css';
 
 export function FeedbackDashboardClient() {
-  const { user, loading, logout } = useCurrentUser();
+  const { user, loading } = useCurrentUser();
   const [stats, setStats] = useState<FeedbackStatsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loadingStats, setLoadingStats] = useState(true);
@@ -62,22 +62,15 @@ export function FeedbackDashboardClient() {
   }
 
   return (
-    <main className={styles.page}>
+    <div className={styles.page}>
       <header className={styles.header}>
         <div>
-          <p className={styles.eyebrow}>Manager workspace</p>
+          <p className={styles.eyebrow}>Analytics</p>
           <h1 className={styles.title}>Voice feedback</h1>
           <p className={styles.lead}>
-            Aggregated feedback by type and severity, with drill-down into open high-severity items.
+            Aggregated feedback by type and severity. Use the sidebar for rankings and clustering in
+            the same analytics family.
           </p>
-        </div>
-        <div className={styles.actions}>
-          <Link href="/dashboard/variance" className={styles.linkButton}>
-            Variance
-          </Link>
-          <button type="button" className={styles.secondaryButton} onClick={() => void logout()}>
-            Log out
-          </button>
         </div>
       </header>
 
@@ -133,6 +126,6 @@ export function FeedbackDashboardClient() {
           </section>
         </>
       ) : null}
-    </main>
+    </div>
   );
 }

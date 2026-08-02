@@ -486,6 +486,7 @@ def test_auth_me_returns_current_user(auth_db):
     body = response.json()
     assert body["id"] == str(user.id)
     assert body["email"] == user.email
+    assert body["display_name"]
     assert body["role"] == user.role
     assert body["tenant_id"] == str(user.tenant_id)
 

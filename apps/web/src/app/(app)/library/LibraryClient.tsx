@@ -9,13 +9,11 @@ import { getMyDrafts, getPublishedSops } from '@/lib/api';
 import SopCard from './SopCard';
 import EmptyState from './EmptyState';
 import styles from './library.module.css';
-import { useCurrentUser } from '@/contexts/auth-context';
 
 // Client-side SOP library with authenticated data loading.
 export default function LibraryClient() {
   const router = useRouter();
   const pathname = usePathname();
-  const { user, logout } = useCurrentUser();
 
   const [search, setSearch] = useState('');
 
@@ -113,24 +111,13 @@ export default function LibraryClient() {
     <div className={styles.container}>
       <div className={styles.hero}>
         <div>
-          <p className={styles.eyebrow}>Internal reference</p>
+          <p className={styles.eyebrow}>Workspace</p>
 
           <h1 className={styles.title}>SOP Library</h1>
 
           <p className={styles.subtitle}>
             Every procedure your team has recorded, ready to open and follow step by step.
           </p>
-        </div>
-
-        <div className={styles.userPanel}>
-          <div>
-            <p className={styles.userEmail}>{user?.email}</p>
-            <p className={styles.userRole}>{user?.role}</p>
-          </div>
-
-          <button type="button" className={styles.logoutButton} onClick={() => void logout()}>
-            Log out
-          </button>
         </div>
       </div>
 

@@ -31,6 +31,16 @@ const PROACTIVE_REFRESH_MIN_DELAY_MS = 5_000;
 
 type MePayload = AuthUser & { expires_in?: number | null };
 
+function displayNameFromEmail(email: string): string {
+  const local = email.split('@')[0]?.trim() || 'User';
+  return local
+    .replace(/[._-]+/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
 async function fetchMe(): Promise<{ user: AuthUser | null; expiresIn: number | null }> {
   const response = await fetch('/api/auth/me', { cache: 'no-store' });
   if (!response.ok) {
@@ -39,7 +49,10 @@ async function fetchMe(): Promise<{ user: AuthUser | null; expiresIn: number | n
   const body = (await response.json()) as MePayload;
   const { expires_in: expiresIn, ...user } = body;
   return {
-    user,
+    user: {
+      ...user,
+      display_name: user.display_name || displayNameFromEmail(user.email),
+    },
     expiresIn: typeof expiresIn === 'number' ? expiresIn : null,
   };
 }

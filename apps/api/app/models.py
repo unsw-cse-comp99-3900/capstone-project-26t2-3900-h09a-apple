@@ -509,6 +509,44 @@ class Sop(Base):
     )
 
 
+class SopStepEditLog(Base):
+    """Audit trail for reviewer SOP step description edits (H09AAPPLE-57)."""
+
+    __tablename__ = "sop_step_edit_logs"
+
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    tenant_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    sop_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("sops.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    step_number = Column(Integer, nullable=False)
+    editor_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    before_text = Column(Text, nullable=False)
+    after_text = Column(Text, nullable=False)
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=text("now()"),
+    )
+
+    __table_args__ = (
+        CheckConstraint("step_number >= 1", name="ck_sop_step_edit_logs_step_number_pos"),
+        Index("ix_sop_step_edit_logs_sop_created", "sop_id", "created_at"),
+    )
+
+
 class SopStepEmbedding(Base):
     __tablename__ = "sop_step_embedding"
 
@@ -1349,6 +1387,7 @@ __all__ = [
     "FrictionAnalysisStatus",
     "FrictionEmployeeStepScore",
     "FrictionStepAggregate",
+    "SopStepEditLog",
     "FeedbackClassification",
     "FeedbackPolarity",
     "FeedbackSeverity",

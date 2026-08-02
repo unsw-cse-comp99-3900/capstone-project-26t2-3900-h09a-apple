@@ -1,13 +1,15 @@
 .page {
-  --navy: #172033;
+  --navy: #1e293b;
   --slate: #64748b;
   --indigo: #4f46e5;
-  --border: #dfe5ee;
+  --indigo-border: #c7d2fe;
+  --border: #e2e8f0;
   --surface: #ffffff;
-  --background: #f5f7fb;
-  min-height: 100vh;
-  padding: 2.5rem 2rem 4rem;
-  background: var(--background);
+  --background: transparent;
+  width: min(1100px, 100%);
+  margin: 0 auto;
+  padding: 0 0 2.5rem;
+  background: transparent;
   color: var(--navy);
   font-family:
     Inter,
@@ -22,8 +24,8 @@
 .stateCard,
 .error,
 .state {
-  width: min(1120px, 100%);
-  margin-inline: auto;
+  width: 100%;
+  margin-inline: 0;
 }
 
 .header {
@@ -32,33 +34,39 @@
   justify-content: space-between;
   gap: 2rem;
   margin-bottom: 1.5rem;
+  padding: 2rem 2.25rem;
+  border-radius: 20px;
+  background: linear-gradient(135deg, #eef2ff 0%, #f7f8fc 60%, #ffffff 100%);
+  border: 1px solid var(--indigo-border);
 }
 
 .eyebrow {
   margin: 0;
   color: var(--indigo);
   font-size: 0.72rem;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
 
 .title {
-  margin: 0.35rem 0 0;
-  font-size: clamp(1.8rem, 4vw, 2.4rem);
-  letter-spacing: -0.03em;
+  margin: 0.5rem 0 0;
+  font-size: clamp(1.85rem, 3vw, 2.25rem);
+  font-weight: 800;
+  letter-spacing: -0.02em;
 }
 
 .lead {
-  max-width: 62ch;
-  margin: 0.65rem 0 0;
+  max-width: 52ch;
+  margin: 0.75rem 0 0;
   color: var(--slate);
-  line-height: 1.55;
+  font-size: 1rem;
+  line-height: 1.6;
 }
 
 .notification {
-  width: min(1120px, 100%);
-  margin: 0 auto 1rem;
+  width: 100%;
+  margin: 0 0 1rem;
   padding: 0.8rem 1rem;
   border: 1px solid #86b7a7;
   border-radius: 0.75rem;
@@ -426,8 +434,8 @@
 }
 
 .workflowList {
-  width: min(1120px, 100%);
-  margin: 0 auto;
+  width: 100%;
+  margin: 0;
   display: grid;
   gap: 1rem;
 }

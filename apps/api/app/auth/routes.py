@@ -227,11 +227,24 @@ def google_authorize(
     return RedirectResponse(authorization_url)
 
 
+def _display_name_from_email(email: str) -> str:
+    local = (email or "").split("@", 1)[0].strip()
+    if not local:
+        return "User"
+    parts = [
+        part for part in local.replace(".", " ").replace("_", " ").replace("-", " ").split() if part
+    ]
+    if not parts:
+        return local
+    return " ".join(part[:1].upper() + part[1:] for part in parts)
+
+
 @router.get("/me", response_model=MeResponse)
 def me(current_user: Annotated[User, Depends(get_current_user)]) -> MeResponse:
     return MeResponse(
         id=current_user.id,
         email=current_user.email,
+        display_name=_display_name_from_email(str(current_user.email)),
         role=_role_enum(current_user.role),
         tenant_id=current_user.tenant_id,
     )
