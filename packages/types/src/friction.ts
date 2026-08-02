@@ -139,3 +139,11 @@ export interface WorkflowInsightSummaryResponse {
   summary: string | null;
   teaser: string | null;
 }
+
+export interface FrictionRecalculateResponse {
+  workflow_id: string;
+  analysis_id: string;
+  status: string;
+  overall_score: number | null;
+  employee_count: number;
+}

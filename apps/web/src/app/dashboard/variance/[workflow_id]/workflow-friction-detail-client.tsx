@@ -15,6 +15,7 @@ import {
   getFrictionWorkflowList,
   getWorkflowClusterTimings,
   getWorkflowInsightSummary,
+  recalculateWorkflowFriction,
 } from '@/lib/api';
 
 import { BestVsAverageChart } from '../best-vs-average-chart';
@@ -40,6 +41,25 @@ export function WorkflowFrictionDetailClient({ workflowId }: WorkflowFrictionDet
   const [generating, setGenerating] = useState(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
   const [generateSuccess, setGenerateSuccess] = useState<string | null>(null);
+  const [recalculating, setRecalculating] = useState(false);
+  const [recalculateError, setRecalculateError] = useState<string | null>(null);
+  const [recalculateSuccess, setRecalculateSuccess] = useState<string | null>(null);
+
+  async function refreshDetailData(active = true): Promise<void> {
+    const [list, insightSummary, clusterTimings] = await Promise.all([
+      getFrictionWorkflowList(),
+      getWorkflowInsightSummary(workflowId),
+      getWorkflowClusterTimings(workflowId),
+    ]);
+    if (!active) return;
+    const match = list.workflows.find((item) => item.workflow_id === workflowId) ?? null;
+    setWorkflow(match);
+    setInsight(insightSummary);
+    setTimings(clusterTimings);
+    if (!match) {
+      setError('Workflow not found in published friction rankings.');
+    }
+  }
 
   useEffect(() => {
     if (loadingUser || user?.role !== 'MANAGER') {
@@ -50,21 +70,7 @@ export function WorkflowFrictionDetailClient({ workflowId }: WorkflowFrictionDet
     setLoading(true);
     setError(null);
 
-    void Promise.all([
-      getFrictionWorkflowList(),
-      getWorkflowInsightSummary(workflowId),
-      getWorkflowClusterTimings(workflowId),
-    ])
-      .then(([list, insightSummary, clusterTimings]) => {
-        if (!active) return;
-        const match = list.workflows.find((item) => item.workflow_id === workflowId) ?? null;
-        setWorkflow(match);
-        setInsight(insightSummary);
-        setTimings(clusterTimings);
-        if (!match) {
-          setError('Workflow not found in published friction rankings.');
-        }
-      })
+    void refreshDetailData(active)
       .catch((loadError: unknown) => {
         if (active) setError(errorText(loadError, 'Failed to load workflow friction detail.'));
       })
@@ -82,6 +88,12 @@ export function WorkflowFrictionDetailClient({ workflowId }: WorkflowFrictionDet
     const timer = window.setTimeout(() => setGenerateSuccess(null), 3500);
     return () => window.clearTimeout(timer);
   }, [generateSuccess]);
+
+  useEffect(() => {
+    if (!recalculateSuccess) return;
+    const timer = window.setTimeout(() => setRecalculateSuccess(null), 3500);
+    return () => window.clearTimeout(timer);
+  }, [recalculateSuccess]);
 
   const workflowName = timings?.workflow_name?.trim() || workflow?.title?.trim() || '';
   const hasClusters = Boolean(timings?.clusters.length);
@@ -106,6 +118,28 @@ export function WorkflowFrictionDetailClient({ workflowId }: WorkflowFrictionDet
       );
     } finally {
       setGenerating(false);
+    }
+  }
+
+  async function handleRecalculateFriction() {
+    if (recalculating) return;
+
+    setRecalculating(true);
+    setRecalculateError(null);
+    setRecalculateSuccess(null);
+
+    try {
+      const result = await recalculateWorkflowFriction(workflowId);
+      await refreshDetailData();
+      setRecalculateSuccess(
+        `Friction recalculated (score ${
+          result.overall_score === null ? '-' : result.overall_score.toFixed(0)
+        }, ${result.employee_count} session${result.employee_count === 1 ? '' : 's'}). Charts refreshed.`,
+      );
+    } catch (recalcErr: unknown) {
+      setRecalculateError(errorText(recalcErr, 'Failed to recalculate friction.'));
+    } finally {
+      setRecalculating(false);
     }
   }
 
@@ -203,6 +237,41 @@ export function WorkflowFrictionDetailClient({ workflowId }: WorkflowFrictionDet
                 <h2 className={styles.sectionTitle}>Friction heatmap</h2>
               </div>
             </div>
+
+            <div className={styles.generateRow}>
+              <button
+                className={styles.primaryButton}
+                type="button"
+                disabled={recalculating}
+                onClick={() => void handleRecalculateFriction()}
+              >
+                {recalculating ? 'Recalculating...' : 'Recalculate Friction'}
+              </button>
+              <p className={styles.chartHint}>
+                Recompute friction scores after new walkthroughs. Refreshes insight, heatmap, and
+                path charts without reloading the page.
+              </p>
+            </div>
+
+            {recalculateSuccess ? (
+              <p className={styles.successToast} role="status">
+                {recalculateSuccess}
+              </p>
+            ) : null}
+            {recalculateError ? (
+              <div className={styles.generateError} role="alert">
+                <p>{recalculateError}</p>
+                <button
+                  className={styles.secondaryButton}
+                  type="button"
+                  disabled={recalculating}
+                  onClick={() => void handleRecalculateFriction()}
+                >
+                  Retry
+                </button>
+              </div>
+            ) : null}
+
             <FrictionHeatmap steps={workflow.steps} />
           </section>
 

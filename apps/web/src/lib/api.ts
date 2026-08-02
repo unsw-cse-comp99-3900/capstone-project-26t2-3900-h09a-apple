@@ -8,6 +8,7 @@ import type {
   FrictionAnalysisResponse,
   FrictionWorkflowListResponse,
   HealthResponse,
+  FrictionRecalculateResponse,
   WorkflowClusterResponse,
   WorkflowClusterTimingsResponse,
   WorkflowInsightSummaryResponse,
@@ -228,6 +229,21 @@ export async function getWorkflowInsightSummary(
 
   if (!res.ok) {
     throw new ApiError(await errorMessage(res, 'Failed to load insight summary'), res.status);
+  }
+
+  return res.json();
+}
+
+export async function recalculateWorkflowFriction(
+  workflowId: string,
+): Promise<FrictionRecalculateResponse> {
+  const res = await authedFetch(
+    `/api/v1/workflows/${encodeURIComponent(workflowId)}/friction/recalculate`,
+    { method: 'POST' },
+  );
+
+  if (!res.ok) {
+    throw new ApiError(await errorMessage(res, 'Failed to recalculate friction'), res.status);
   }
 
   return res.json();

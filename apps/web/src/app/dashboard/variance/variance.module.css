@@ -630,30 +630,34 @@ a.workflowCard:hover {
   gap: 0.2rem;
   min-height: 72px;
   padding: 0.65rem 0.45rem;
-  border: 2px solid transparent;
+  border: 2px solid rgb(15 23 42 / 18%);
   border-radius: 10px;
   color: #fff;
   text-align: center;
   cursor: pointer;
   font: inherit;
-  box-shadow: inset 0 0 0 1px rgb(15 23 42 / 8%);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 22%);
 }
 
 .heatmapCellFlagged {
+  border-color: #ef4444;
   box-shadow:
-    inset 0 0 0 1px rgb(15 23 42 / 8%),
+    inset 0 0 0 1px rgb(255 255 255 / 18%),
     0 0 0 2px #ef4444;
 }
 
 .heatmapCellActive {
   border-color: #172033;
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 18%),
+    0 0 0 2px #172033;
 }
 
 .heatmapStep {
   font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.04em;
-  opacity: 0.92;
+  opacity: 0.95;
 }
 
 .heatmapScore {

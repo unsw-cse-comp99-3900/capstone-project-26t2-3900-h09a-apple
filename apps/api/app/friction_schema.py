@@ -96,3 +96,13 @@ class WorkflowInsightSummaryResponse(BaseModel):
     status: str
     summary: str | None = None
     teaser: str | None = None
+
+
+class FrictionRecalculateResponse(BaseModel):
+    """Result of an on-demand manager friction recalculation (H09AAPPLE-39)."""
+
+    workflow_id: UUID
+    analysis_id: UUID
+    status: str
+    overall_score: float | None = Field(default=None, ge=0, le=100)
+    employee_count: int = Field(default=0, ge=0)

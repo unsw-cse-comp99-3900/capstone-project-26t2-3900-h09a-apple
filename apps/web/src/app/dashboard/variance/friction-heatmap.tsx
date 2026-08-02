@@ -3,7 +3,7 @@
 import type { FrictionStepChartPoint } from '@h09a/types';
 import { useState } from 'react';
 
-import { frictionHeatColor, stepLabel } from './chart-utils';
+import { frictionHeatColor, frictionHeatTextColor, stepLabel } from './chart-utils';
 import styles from './variance.module.css';
 
 type FrictionHeatmapProps = {
@@ -32,7 +32,10 @@ export function FrictionHeatmap({ steps }: FrictionHeatmapProps) {
               className={`${styles.heatmapCell} ${step.variance_flag ? styles.heatmapCellFlagged : ''} ${
                 isActive ? styles.heatmapCellActive : ''
               }`}
-              style={{ backgroundColor: frictionHeatColor(step.average_score, step.variance_flag) }}
+              style={{
+                backgroundColor: frictionHeatColor(step.average_score, step.variance_flag),
+                color: frictionHeatTextColor(step.average_score, step.variance_flag),
+              }}
               onMouseEnter={() => setHovered(step.step_number)}
               onMouseLeave={() => setHovered(null)}
               onFocus={() => setHovered(step.step_number)}

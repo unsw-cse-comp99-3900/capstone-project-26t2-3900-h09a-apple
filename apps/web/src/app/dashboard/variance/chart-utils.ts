@@ -10,16 +10,43 @@ export function stepLabel(
   return step.step_title?.trim() || `Step ${step.step_number}`;
 }
 
+function lerp(start: number, end: number, t: number): number {
+  return start + (end - start) * t;
+}
+
+function mixRgb(
+  from: readonly [number, number, number],
+  to: readonly [number, number, number],
+  t: number,
+): string {
+  const clamped = Math.max(0, Math.min(1, t));
+  return `rgb(${Math.round(lerp(from[0], to[0], clamped))}, ${Math.round(
+    lerp(from[1], to[1], clamped),
+  )}, ${Math.round(lerp(from[2], to[2], clamped))})`;
+}
+
+/** Higher-contrast green → amber → red scale for at-a-glance friction. */
 export function frictionHeatColor(score: number, varianceFlag: boolean): string {
   if (varianceFlag) {
     return HIGH_VARIANCE_COLOR;
   }
-  const clamped = Math.max(0, Math.min(100, score)) / 100;
-  // Light green → amber → deep red by friction intensity.
-  const r = Math.round(34 + clamped * (220 - 34));
-  const g = Math.round(197 - clamped * (197 - 38));
-  const b = Math.round(94 - clamped * (94 - 38));
-  return `rgb(${r}, ${g}, ${b})`;
+  const clamped = Math.max(0, Math.min(100, score));
+  // Discrete-feeling bands so nearby scores stay visually distinct.
+  const low: readonly [number, number, number] = [22, 163, 74]; // green-600
+  const mid: readonly [number, number, number] = [245, 158, 11]; // amber-500
+  const high: readonly [number, number, number] = [185, 28, 28]; // red-700
+  if (clamped <= 50) {
+    return mixRgb(low, mid, clamped / 50);
+  }
+  return mixRgb(mid, high, (clamped - 50) / 50);
+}
+
+/** Dark text on light/mid cells; white on deep red / HIGH_VARIANCE. */
+export function frictionHeatTextColor(score: number, varianceFlag: boolean): string {
+  if (varianceFlag || score >= 55) {
+    return '#ffffff';
+  }
+  return '#14532d';
 }
 
 export function formatDurationMs(ms: number): string {

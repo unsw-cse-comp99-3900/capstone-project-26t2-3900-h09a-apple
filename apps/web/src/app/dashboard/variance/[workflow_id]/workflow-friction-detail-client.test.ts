@@ -52,4 +52,14 @@ describe('variance drill-down (H09AAPPLE-39)', () => {
     expect(detailSource).toContain('Retry');
     expect(detailSource).toContain('getWorkflowClusterTimings(workflowId)');
   });
+
+  it('lets managers recalculate friction and refresh charts without reload', () => {
+    expect(detailSource).toContain('recalculateWorkflowFriction');
+    expect(detailSource).toContain('Recalculate Friction');
+    expect(detailSource).toContain('Recalculating...');
+    expect(detailSource).toContain('refreshDetailData');
+    expect(detailSource).toContain('getFrictionWorkflowList');
+    expect(detailSource).toContain('getWorkflowInsightSummary');
+    expect(detailSource).toContain('getWorkflowClusterTimings');
+  });
 });
