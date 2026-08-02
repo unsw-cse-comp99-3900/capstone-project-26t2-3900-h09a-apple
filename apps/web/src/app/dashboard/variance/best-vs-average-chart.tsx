@@ -31,7 +31,8 @@ export function BestVsAverageChart({ steps, timings, height = 260 }: BestVsAvera
   const best =
     timings.best_cluster_id === null
       ? null
-      : (timings.clusters.find((cluster) => cluster.cluster_id === timings.best_cluster_id) ?? null);
+      : (timings.clusters.find((cluster) => cluster.cluster_id === timings.best_cluster_id) ??
+        null);
 
   if (!best || best.steps.length === 0 || timings.workflow_average.length === 0) {
     return (
@@ -107,7 +108,7 @@ export function BestVsAverageChart({ steps, timings, height = 260 }: BestVsAvera
                 ]
                   .filter(Boolean)
                   .join(' · ');
-                const instruction = point.instruction ? ` — ${point.instruction}` : '';
+                const instruction = point.instruction ? ` - ${point.instruction}` : '';
                 return `${point.label ?? ''}${flags ? ` (${flags})` : ''}${instruction}`;
               }}
             />

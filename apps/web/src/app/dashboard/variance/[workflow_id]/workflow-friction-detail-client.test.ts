@@ -5,18 +5,9 @@ const detailSource = readFileSync(
   new URL('./workflow-friction-detail-client.tsx', import.meta.url),
   'utf-8',
 );
-const heatmapSource = readFileSync(
-  new URL('../friction-heatmap.tsx', import.meta.url),
-  'utf-8',
-);
-const pathSource = readFileSync(
-  new URL('../path-comparison-chart.tsx', import.meta.url),
-  'utf-8',
-);
-const bestSource = readFileSync(
-  new URL('../best-vs-average-chart.tsx', import.meta.url),
-  'utf-8',
-);
+const heatmapSource = readFileSync(new URL('../friction-heatmap.tsx', import.meta.url), 'utf-8');
+const pathSource = readFileSync(new URL('../path-comparison-chart.tsx', import.meta.url), 'utf-8');
+const bestSource = readFileSync(new URL('../best-vs-average-chart.tsx', import.meta.url), 'utf-8');
 const utilsSource = readFileSync(new URL('../chart-utils.ts', import.meta.url), 'utf-8');
 
 describe('variance drill-down (H09AAPPLE-39)', () => {
@@ -47,7 +38,7 @@ describe('variance drill-down (H09AAPPLE-39)', () => {
   });
 
   it('highlights HIGH_VARIANCE in red and shows step instructions on hover', () => {
-    expect(utilsSource).toContain("#EF4444");
+    expect(utilsSource).toContain('#EF4444');
     expect(heatmapSource).toContain('instruction');
     expect(pathSource).toContain('HIGH_VARIANCE');
     expect(bestSource).toContain('HIGH_VARIANCE');

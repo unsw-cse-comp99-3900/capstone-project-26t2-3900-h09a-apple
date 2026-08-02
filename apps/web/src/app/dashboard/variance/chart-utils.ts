@@ -4,7 +4,9 @@ export const HIGH_VARIANCE_COLOR = '#EF4444';
 
 export const CLUSTER_LINE_COLORS = ['#4f46e5', '#0d9488', '#d97706', '#7c3aed'] as const;
 
-export function stepLabel(step: Pick<FrictionStepChartPoint, 'step_number' | 'step_title'>): string {
+export function stepLabel(
+  step: Pick<FrictionStepChartPoint, 'step_number' | 'step_title'>,
+): string {
   return step.step_title?.trim() || `Step ${step.step_number}`;
 }
 

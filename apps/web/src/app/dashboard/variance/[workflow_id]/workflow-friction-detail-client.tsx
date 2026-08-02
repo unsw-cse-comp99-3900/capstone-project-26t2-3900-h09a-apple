@@ -236,7 +236,10 @@ export function WorkflowFrictionDetailClient({ workflowId }: WorkflowFrictionDet
                 <p className={styles.chartHint}>
                   Generate path comparison timeline and best-path overlay. Requires ≥3 published
                   sessions with complete embeddings
-                  {workflow.session_count > 0 ? ` (friction list shows ${workflow.session_count})` : ''}.
+                  {workflow.session_count > 0
+                    ? ` (friction list shows ${workflow.session_count})`
+                    : ''}
+                  .
                 </p>
               ) : (
                 <p className={styles.chartHint}>

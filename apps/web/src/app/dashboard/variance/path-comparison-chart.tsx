@@ -90,7 +90,7 @@ export function PathComparisonChart({ steps, timings, height = 260 }: PathCompar
                   | { label?: string; instruction?: string; variance?: boolean }
                   | undefined;
                 if (!point) return '';
-                const instruction = point.instruction ? ` — ${point.instruction}` : '';
+                const instruction = point.instruction ? ` - ${point.instruction}` : '';
                 const variance = point.variance ? ' (HIGH VARIANCE)' : '';
                 return `${point.label ?? ''}${variance}${instruction}`;
               }}

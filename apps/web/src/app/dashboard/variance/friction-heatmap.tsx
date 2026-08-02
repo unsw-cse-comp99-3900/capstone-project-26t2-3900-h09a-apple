@@ -17,7 +17,8 @@ export function FrictionHeatmap({ steps }: FrictionHeatmapProps) {
     return <p className={styles.chartEmpty}>No step scores yet</p>;
   }
 
-  const active = hovered === null ? null : (steps.find((step) => step.step_number === hovered) ?? null);
+  const active =
+    hovered === null ? null : (steps.find((step) => step.step_number === hovered) ?? null);
 
   return (
     <div className={styles.heatmap} aria-label="Friction heatmap by step">

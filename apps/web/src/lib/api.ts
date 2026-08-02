@@ -251,10 +251,9 @@ export async function getWorkflowClusterTimings(
 export async function clusterWorkflowByName(
   workflowName: string,
 ): Promise<WorkflowClusterResponse> {
-  const res = await authedFetch(
-    `/api/v1/workflows/${encodeURIComponent(workflowName)}/cluster`,
-    { method: 'POST' },
-  );
+  const res = await authedFetch(`/api/v1/workflows/${encodeURIComponent(workflowName)}/cluster`, {
+    method: 'POST',
+  });
 
   if (!res.ok) {
     throw new ApiError(await errorMessage(res, 'Failed to generate path comparison'), res.status);
