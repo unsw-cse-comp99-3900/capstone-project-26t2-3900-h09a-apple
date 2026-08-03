@@ -6,6 +6,20 @@
  * getBoundingClientRect. Screenshots are preview + fallback only (H09AAPPLE-28).
  * Resolution chain: CSS → XPath → label, then H09AAPPLE-53 vision grid locate
  * on selector_miss (pixel overlay; manual Next). Full text+role is H09AAPPLE-29.
+ *
+ * H09AAPPLE-80 remaining (this file is the real ball; ignore apps/web floating-assistant):
+ * T0-2 confidence chip: done for Q&A answers
+ * T1-1 Prompt Coaching: done (local Use this / Edit only; no SOP writeback)
+ * T1-2 One-click recovery after wrong_target (task=recover) in Help/Undo tab
+ * T1-3 Smart step match (task=match_step) with URL-shape throttle >=10s
+ * T2-1 Privacy mask before capture + one-time stuck consent in chrome.storage.local
+ * T2-2 I'm stuck -> captureVisibleTab (reuse background) -> task=analyze
+ * T2-3 Voice: already shipped; polish only if needed
+ * T3-1 Page-level deviation soft hint (debounce; skip for now if noisy)
+ * T3-2 Buffer stuck_click into frictionEvents (upload on complete; add enum+migration)
+ * T3-3 Human handoff after 3 stuck or 2x low confidence
+ * T3-4 SOP drift signals (later)
+ * T3-5 Timeout detection: skip
  */
 (() => {
   const STORAGE_STATE_KEY = 'walkthroughState';
@@ -46,8 +60,18 @@
   let assistantTab = 'prompt';
   let assistantQuestion = '';
   let assistantAnswer = '';
+  let assistantConfidence = '';
+  let assistantConfidenceReason = '';
   let assistantLoading = false;
   let assistantError = '';
+  let coachSuggestion = '';
+  let coachConfidence = '';
+  let coachConfidenceReason = '';
+  let coachLoading = false;
+  let coachError = '';
+  let coachEditing = false;
+  /** @type {Record<number, string>} */
+  let instructionOverrides = {};
   /** @type {'idle' | 'recording' | 'uploading' | 'done' | 'error'} */
   let voiceStatus = 'idle';
   let voiceError = '';
@@ -673,13 +697,64 @@
           color: #334155;
         }
 
-        .qa-panel {
+        .qa-panel,
+        .prompt-panel {
           gap: 8px;
           margin: 0 0 12px;
         }
 
-        .qa-panel:not([hidden]) {
+        .qa-panel:not([hidden]),
+        .prompt-panel:not([hidden]) {
           display: grid;
+        }
+
+        .prompt-actions {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+        }
+
+        .coach-suggestion {
+          margin: 0;
+          padding: 10px 12px;
+          border-radius: 12px;
+          background: rgba(59, 130, 246, 0.14);
+          color: #dbeafe;
+          white-space: pre-wrap;
+        }
+
+        .coach-suggestion[hidden],
+        .coach-edit-input[hidden],
+        .coach-confidence[hidden],
+        .coach-error[hidden] {
+          display: none !important;
+        }
+
+        .coach-edit-input {
+          width: 100%;
+          resize: vertical;
+          min-height: 76px;
+          box-sizing: border-box;
+          border: 1px solid rgba(147, 197, 253, 0.26);
+          border-radius: 12px;
+          padding: 10px 12px;
+          background: rgba(15, 23, 42, 0.72);
+          color: #f8fafc;
+          font: inherit;
+          outline: none;
+        }
+
+        .coach-note {
+          margin: 0;
+          color: #94a3b8;
+          font-size: 11px;
+          line-height: 1.4;
+        }
+
+        .coach-error {
+          margin: 0;
+          color: #fca5a5;
+          font-size: 12px;
         }
 
         .qa-label {
@@ -755,6 +830,38 @@
         }
 
         .voice-transcript[hidden] {
+          display: none !important;
+        }
+
+        .qa-confidence {
+          display: inline-flex;
+          margin: 8px 0 0;
+          padding: 3px 8px;
+          border-radius: 999px;
+          background: rgba(148, 163, 184, 0.22);
+          color: #e2e8f0;
+          font-size: 11px;
+          font-weight: 700;
+          letter-spacing: 0.04em;
+          text-transform: uppercase;
+        }
+
+        .qa-confidence[data-level='high'] {
+          background: rgba(34, 197, 94, 0.2);
+          color: #bbf7d0;
+        }
+
+        .qa-confidence[data-level='medium'] {
+          background: rgba(234, 179, 8, 0.2);
+          color: #fde68a;
+        }
+
+        .qa-confidence[data-level='low'] {
+          background: rgba(248, 113, 113, 0.2);
+          color: #fecaca;
+        }
+
+        .qa-confidence[hidden] {
           display: none !important;
         }
 
@@ -1206,6 +1313,36 @@
 
           <p class="eyebrow"></p>
           <p class="instruction"></p>
+          <div class="prompt-panel" hidden>
+            <p class="qa-label">Prompt Coaching</p>
+            <p class="coach-note">
+              Rewrite this step more clearly for the current page. Use this only updates your local
+              guide text; it does not change the shared SOP.
+            </p>
+            <div class="prompt-actions">
+              <button type="button" class="btn-primary coach-generate" data-action="coach-generate">
+                Generate clearer instruction
+              </button>
+              <button type="button" class="btn-secondary coach-use" data-action="coach-use" hidden>
+                Use this
+              </button>
+              <button type="button" class="btn-secondary coach-edit-btn" data-action="coach-edit" hidden>
+                Edit
+              </button>
+              <button
+                type="button"
+                class="btn-secondary coach-cancel-edit"
+                data-action="coach-cancel-edit"
+                hidden
+              >
+                Cancel edit
+              </button>
+            </div>
+            <p class="qa-confidence coach-confidence" hidden></p>
+            <p class="coach-suggestion" hidden></p>
+            <textarea class="coach-edit-input" rows="3" hidden></textarea>
+            <p class="coach-error" hidden></p>
+          </div>
           <div class="qa-panel" hidden>
             <label class="qa-label" for="worktrace-assistant-question">Ask about this step</label>
             <textarea
@@ -1217,6 +1354,7 @@
             <button type="button" class="btn-primary qa-submit" data-action="ask-assistant">
               Ask
             </button>
+            <p class="qa-confidence" hidden></p>
             <p class="qa-answer" hidden></p>
           </div>
           <div class="voice-panel" hidden>
@@ -1271,7 +1409,15 @@
         assistantTab = 'help';
         render();
       } else if (action === 'ask-assistant') {
-        askAssistant();
+        void askAssistant();
+      } else if (action === 'coach-generate') {
+        void generateCoachSuggestion();
+      } else if (action === 'coach-use') {
+        adoptCoachSuggestion();
+      } else if (action === 'coach-edit') {
+        beginCoachEdit();
+      } else if (action === 'coach-cancel-edit') {
+        cancelCoachEdit();
       } else if (action === 'voice-start') {
         void startVoiceRecording();
       } else if (action === 'voice-stop') {
@@ -1563,6 +1709,12 @@
     // New step visit: allow a fresh selector_miss/wrong_page recording for it.
     missFrictionStepIndex = null;
     resetVisionLocateLocal();
+    coachSuggestion = '';
+    coachConfidence = '';
+    coachConfidenceReason = '';
+    coachError = '';
+    coachEditing = false;
+    coachLoading = false;
 
     const stepNumber = step.step_number ?? activeState.stepIndex + 1;
     lastEnteredStepIndex = activeState.stepIndex;
@@ -1699,10 +1851,20 @@
     const manualModeBtn = root.querySelector('[data-action="mode-manual"]');
 
     const tabs = root.querySelectorAll('[data-tab]');
+    const promptPanel = root.querySelector('.prompt-panel');
+    const coachGenerateBtn = root.querySelector('.coach-generate');
+    const coachUseBtn = root.querySelector('.coach-use');
+    const coachEditBtn = root.querySelector('.coach-edit-btn');
+    const coachCancelEditBtn = root.querySelector('.coach-cancel-edit');
+    const coachConfidenceEl = root.querySelector('.coach-confidence');
+    const coachSuggestionEl = root.querySelector('.coach-suggestion');
+    const coachEditInput = root.querySelector('.coach-edit-input');
+    const coachErrorEl = root.querySelector('.coach-error');
     const qaPanel = root.querySelector('.qa-panel');
     const qaInput = root.querySelector('.qa-input');
     const qaSubmit = root.querySelector('.qa-submit');
     const qaAnswer = root.querySelector('.qa-answer');
+    const qaConfidence = root.querySelector('.qa-confidence');
     const voicePanel = root.querySelector('.voice-panel');
     const voiceStatusEl = root.querySelector('.voice-status');
     const voiceStartBtn = root.querySelector('.voice-start');
@@ -1711,8 +1873,15 @@
     const voiceTranscriptEl = root.querySelector('.voice-transcript');
     const stepNumber = step.step_number ?? activeState.stepIndex + 1;
     eyebrow.textContent = `Step ${activeState.stepIndex + 1} / ${steps.length}`;
-    protectAssistantTextInput(qaInput);
-    instruction.textContent = String(step.instruction ?? '');
+    if (qaInput) {
+      protectAssistantTextInput(qaInput);
+    }
+    if (coachEditInput) {
+      protectAssistantTextInput(coachEditInput);
+    }
+    const override = instructionOverrides[activeState.stepIndex];
+    instruction.textContent =
+      typeof override === 'string' && override.trim() ? override : String(step.instruction ?? '');
 
     const isFirst = activeState.stepIndex <= 0;
     const isLast = activeState.stepIndex >= steps.length - 1;
@@ -1737,12 +1906,60 @@
       tab.dataset.active = String(tab.dataset.tab === assistantTab);
     });
 
+    if (promptPanel) {
+      promptPanel.hidden = assistantTab !== 'prompt';
+    }
+
     if (qaPanel) {
       qaPanel.hidden = assistantTab !== 'qa';
     }
 
     if (voicePanel) {
       voicePanel.hidden = assistantTab !== 'voice';
+    }
+
+    const hasCoachSuggestion = Boolean(coachSuggestion && !coachError);
+    if (coachGenerateBtn) {
+      coachGenerateBtn.disabled = coachLoading || assistantLoading;
+      coachGenerateBtn.textContent = coachLoading ? 'Generating…' : 'Generate clearer instruction';
+    }
+    if (coachUseBtn) {
+      coachUseBtn.hidden = !hasCoachSuggestion && !coachEditing;
+      coachUseBtn.disabled = coachLoading;
+    }
+    if (coachEditBtn) {
+      coachEditBtn.hidden = !hasCoachSuggestion || coachEditing;
+      coachEditBtn.disabled = coachLoading;
+    }
+    if (coachCancelEditBtn) {
+      coachCancelEditBtn.hidden = !coachEditing;
+    }
+    if (coachConfidenceEl) {
+      if (!hasCoachSuggestion || !coachConfidence || coachEditing) {
+        coachConfidenceEl.hidden = true;
+        coachConfidenceEl.textContent = '';
+        coachConfidenceEl.removeAttribute('data-level');
+        coachConfidenceEl.removeAttribute('title');
+      } else {
+        coachConfidenceEl.hidden = false;
+        coachConfidenceEl.dataset.level = coachConfidence;
+        coachConfidenceEl.textContent = `Confidence: ${coachConfidence}`;
+        coachConfidenceEl.title = coachConfidenceReason || '';
+      }
+    }
+    if (coachSuggestionEl) {
+      coachSuggestionEl.hidden = !hasCoachSuggestion || coachEditing;
+      coachSuggestionEl.textContent = coachSuggestion;
+    }
+    if (coachEditInput) {
+      coachEditInput.hidden = !coachEditing;
+      if (coachEditing && coachEditInput.value !== coachSuggestion) {
+        // Keep user edits while typing; seed once when entering edit mode.
+      }
+    }
+    if (coachErrorEl) {
+      coachErrorEl.hidden = !coachError;
+      coachErrorEl.textContent = coachError;
     }
 
     if (qaInput && qaInput.value !== assistantQuestion) {
@@ -1752,6 +1969,20 @@
     if (qaSubmit) {
       qaSubmit.textContent = assistantLoading ? 'Asking...' : 'Ask';
       qaSubmit.disabled = assistantLoading;
+    }
+
+    if (qaConfidence) {
+      if (assistantError || !assistantAnswer || !assistantConfidence) {
+        qaConfidence.hidden = true;
+        qaConfidence.textContent = '';
+        qaConfidence.removeAttribute('data-level');
+        qaConfidence.removeAttribute('title');
+      } else {
+        qaConfidence.hidden = false;
+        qaConfidence.dataset.level = assistantConfidence;
+        qaConfidence.textContent = `Confidence: ${assistantConfidence}`;
+        qaConfidence.title = assistantConfidenceReason || '';
+      }
     }
 
     if (qaAnswer) {
@@ -2045,6 +2276,38 @@
     }
   }
 
+  function requestAssistant(message) {
+    return new Promise((resolve, reject) => {
+      chrome.runtime?.sendMessage?.(message, (response) => {
+        if (chrome.runtime?.lastError) {
+          reject(new Error(chrome.runtime.lastError.message));
+          return;
+        }
+        if (!response?.ok) {
+          reject(new Error(response?.error || 'Assistant request failed.'));
+          return;
+        }
+        resolve(response);
+      });
+    });
+  }
+
+  function currentAssistantStepPayload() {
+    const step = getCurrentStep();
+    const steps = getSteps();
+    if (!step || !activeState) {
+      return null;
+    }
+    const override = instructionOverrides[activeState.stepIndex];
+    return {
+      index: activeState.stepIndex,
+      total: steps.length,
+      title: step.title || step.instruction || 'Current step',
+      instruction:
+        typeof override === 'string' && override.trim() ? override : step.instruction || '',
+    };
+  }
+
   async function askAssistant() {
     const host = ensureHost();
     const tooltip = host.querySelector('.tooltip');
@@ -2054,15 +2317,18 @@
     if (!question) {
       assistantError = 'Please enter a question first.';
       assistantAnswer = '';
+      assistantConfidence = '';
+      assistantConfidenceReason = '';
       render();
       return;
     }
 
-    const step = getCurrentStep();
-
-    if (!step) {
+    const stepPayload = currentAssistantStepPayload();
+    if (!stepPayload) {
       assistantError = 'No walkthrough step is currently active.';
       assistantAnswer = '';
+      assistantConfidence = '';
+      assistantConfidenceReason = '';
       render();
       return;
     }
@@ -2071,49 +2337,125 @@
     assistantLoading = true;
     assistantError = '';
     assistantAnswer = '';
+    assistantConfidence = '';
+    assistantConfidenceReason = '';
     render();
 
     try {
-      const steps = getSteps();
-
-      const payload = await new Promise((resolve, reject) => {
-        chrome.runtime?.sendMessage?.(
-          {
-            type: 'WALKTHROUGH_ASSISTANT_ASK',
-            question,
-            mode: assistantMode === 'manual' ? 'manual' : 'walkthrough',
-            page_url: window.location.href,
-            step: {
-              index: activeState.stepIndex,
-              total: steps.length,
-              title: step.title || step.instruction || 'Current step',
-              instruction: step.instruction || '',
-            },
-          },
-          (response) => {
-            if (chrome.runtime?.lastError) {
-              reject(new Error(chrome.runtime.lastError.message));
-              return;
-            }
-
-            if (!response?.ok) {
-              reject(new Error(response?.error || 'Assistant request failed.'));
-              return;
-            }
-
-            resolve(response);
-          },
-        );
+      const payload = await requestAssistant({
+        type: 'WALKTHROUGH_ASSISTANT_ASK',
+        task: 'qa',
+        question,
+        mode: assistantMode === 'manual' ? 'manual' : 'walkthrough',
+        page_url: window.location.href,
+        page_title: document.title || null,
+        step: stepPayload,
       });
 
       assistantAnswer = payload.answer || 'No answer returned.';
+      assistantConfidence = payload.confidence || 'medium';
+      assistantConfidenceReason = payload.confidence_reason || '';
     } catch (error) {
       console.error('Walkthrough assistant request failed:', error);
-      assistantError = 'Assistant is unavailable right now.';
+      assistantError =
+        error instanceof Error ? error.message : 'Assistant is unavailable right now.';
+      assistantConfidence = '';
+      assistantConfidenceReason = '';
     } finally {
       assistantLoading = false;
       render();
     }
+  }
+
+  async function generateCoachSuggestion() {
+    const stepPayload = currentAssistantStepPayload();
+    if (!stepPayload) {
+      coachError = 'No walkthrough step is currently active.';
+      coachSuggestion = '';
+      coachConfidence = '';
+      coachConfidenceReason = '';
+      render();
+      return;
+    }
+
+    coachLoading = true;
+    coachError = '';
+    coachSuggestion = '';
+    coachConfidence = '';
+    coachConfidenceReason = '';
+    coachEditing = false;
+    render();
+
+    try {
+      const payload = await requestAssistant({
+        type: 'WALKTHROUGH_ASSISTANT_ASK',
+        task: 'coach',
+        question: null,
+        mode: assistantMode === 'manual' ? 'manual' : 'walkthrough',
+        page_url: window.location.href,
+        page_title: document.title || null,
+        step: stepPayload,
+      });
+
+      coachSuggestion = (payload.answer || '').trim();
+      if (!coachSuggestion) {
+        coachError = 'No coaching suggestion returned.';
+        coachConfidence = '';
+        coachConfidenceReason = '';
+      } else {
+        coachConfidence = payload.confidence || 'medium';
+        coachConfidenceReason = payload.confidence_reason || '';
+      }
+    } catch (error) {
+      console.error('Walkthrough coach request failed:', error);
+      coachError = error instanceof Error ? error.message : 'Assistant is unavailable right now.';
+      coachSuggestion = '';
+      coachConfidence = '';
+      coachConfidenceReason = '';
+    } finally {
+      coachLoading = false;
+      render();
+    }
+  }
+
+  function beginCoachEdit() {
+    if (!coachSuggestion) {
+      return;
+    }
+    coachEditing = true;
+    render();
+    const host = ensureHost();
+    const input = host.querySelector('.coach-edit-input');
+    if (input) {
+      input.value = coachSuggestion;
+      input.focus();
+    }
+  }
+
+  function cancelCoachEdit() {
+    coachEditing = false;
+    render();
+  }
+
+  function adoptCoachSuggestion() {
+    if (!activeState) {
+      return;
+    }
+    const host = ensureHost();
+    const input = host.querySelector('.coach-edit-input');
+    const nextText = coachEditing
+      ? String(input?.value || '').trim()
+      : String(coachSuggestion || '').trim();
+    if (!nextText) {
+      coachError = 'Suggestion is empty.';
+      render();
+      return;
+    }
+    instructionOverrides[activeState.stepIndex] = nextText;
+    coachSuggestion = nextText;
+    coachEditing = false;
+    coachError = '';
+    render();
   }
 
   function persistState(nextState) {

@@ -1,3 +1,8 @@
+// H09AAPPLE-80 remaining (background side of extension ball):
+// T0: forwards task + confidence (done)
+// T2-2 reuse captureVisibleTab for stuck analyze (already used by vision locate)
+// T3-2/T3-3 optional notify hooks when handoff/stuck aggregates land
+
 import { assembleSession } from './session-assembly.js';
 import {
   deleteSessionPayload,
@@ -392,9 +397,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        question: message.question,
+        task: message.task ?? 'qa',
+        question: message.question ?? null,
         mode: message.mode ?? 'walkthrough',
         page_url: message.page_url ?? null,
+        page_title: message.page_title ?? null,
+        screenshot_b64: message.screenshot_b64 ?? null,
+        expected_target: message.expected_target ?? null,
+        actual_action: message.actual_action ?? null,
+        steps_summary: message.steps_summary ?? null,
         step: {
           index: message.step?.index ?? 0,
           total: message.step?.total ?? 1,
@@ -405,7 +416,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     })
       .then(async (response) => {
         if (!response.ok) {
-          throw new Error('Assistant request failed');
+          const detail = await response.text();
+          throw new Error(
+            response.status === 401 || response.status === 403
+              ? 'Sign in to the WorkTrace extension before using the assistant.'
+              : `Assistant request failed (${response.status}): ${detail.slice(0, 200)}`,
+          );
         }
 
         const payload = await response.json();
@@ -413,6 +429,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({
           ok: true,
           answer: payload.answer ?? '',
+          confidence: payload.confidence ?? 'medium',
+          confidence_reason: payload.confidence_reason ?? '',
         });
       })
       .catch((error) => {
