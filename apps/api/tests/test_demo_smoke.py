@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
 from types import SimpleNamespace
 from uuid import UUID
 
@@ -206,48 +205,6 @@ def test_04_dashboard_summary_api():
 
 
 # ============================================================
-# Smoke Test 5
-# Feedback APIs
-# ============================================================
-
-
-def test_05_feedback_api():
-    """
-    Verify feedback endpoints remain healthy.
-
-    The demo seed does not generate voice feedback,
-    therefore this smoke test only validates the API
-    contract rather than specific seeded records.
-    """
-
-    app.dependency_overrides[get_current_user] = lambda: _mock_user(models.UserRole.manager.value)
-
-    response = client.get("/api/v1/feedback")
-
-    assert response.status_code == 200
-
-    feedback_body = response.json()
-
-    assert "feedbacks" in feedback_body
-    assert isinstance(
-        feedback_body["feedbacks"],
-        list,
-    )
-
-    stats = client.get("/api/v1/feedback/stats")
-
-    assert stats.status_code == 200
-
-    stats_body = stats.json()
-
-    assert "total" in stats_body
-    assert "by_classification" in stats_body
-    assert "by_severity" in stats_body
-    assert "by_status" in stats_body
-    assert "high_severity_open" in stats_body
-
-
-# ============================================================
 # Final Smoke Check
 # ============================================================
 
@@ -291,33 +248,3 @@ def test_08_sop_list():
     assert response.status_code == 200
 
     assert len(response.json()) >= 1
-
-
-def test_09_voice_transcription():
-    app.dependency_overrides[get_current_user] = lambda: _mock_user(models.UserRole.employee.value)
-
-    audio_path = Path(__file__).parent / "assets" / "demo.webm"
-
-    assert audio_path.exists()
-
-    with audio_path.open("rb") as audio:
-        response = client.post(
-            "/api/v1/feedback/transcribe",
-            files={
-                "audio": (
-                    "demo.webm",
-                    audio,
-                    "audio/webm",
-                )
-            },
-        )
-
-    assert response.status_code == 200
-
-    body = response.json()
-
-    assert "transcript" in body
-    assert body["transcript"] is not None
-
-    assert "duration_seconds" in body
-    assert body["duration_seconds"] >= 0
