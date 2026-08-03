@@ -1611,6 +1611,20 @@
           font-size: 14px;
           font-weight: 600;
         }
+        .step-warning {
+          margin: -4px 0 10px;
+          color: #fbbf24;
+          font-size: 11px;
+          font-weight: 650;
+          line-height: 1.35;
+          display: -webkit-box;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+        }
+        .step-warning[hidden] {
+          display: none !important;
+        }
         .preview {
           display: block;
           width: 100%;
@@ -1692,6 +1706,7 @@
 
           <p class="eyebrow"></p>
           <p class="instruction"></p>
+          <p class="step-warning" hidden></p>
           <div class="prompt-panel" hidden>
             <p class="qa-label">Prompt Coaching</p>
             <p class="coach-note">
@@ -2299,6 +2314,7 @@
     const tooltip = root.querySelector('.tooltip');
     const eyebrow = root.querySelector('.eyebrow');
     const instruction = root.querySelector('.instruction');
+    const stepWarning = root.querySelector('.step-warning');
     const previousBtn = root.querySelector('[data-action="previous"]');
     const nextBtn = root.querySelector('[data-action="next"]');
     const finishBtn = root.querySelector('[data-action="finish"]');
@@ -2358,6 +2374,20 @@
     const override = instructionOverrides[activeState.stepIndex];
     instruction.textContent =
       typeof override === 'string' && override.trim() ? override : String(step.instruction ?? '');
+
+    if (stepWarning) {
+      const warningText =
+        typeof step.warning === 'string' && step.warning.trim() ? step.warning.trim() : '';
+      if (warningText) {
+        stepWarning.hidden = false;
+        stepWarning.textContent = `Warning: ${warningText}`;
+        stepWarning.title = warningText;
+      } else {
+        stepWarning.hidden = true;
+        stepWarning.textContent = '';
+        stepWarning.removeAttribute('title');
+      }
+    }
 
     const isFirst = activeState.stepIndex <= 0;
     const isLast = activeState.stepIndex >= steps.length - 1;

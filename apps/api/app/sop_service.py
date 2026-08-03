@@ -19,6 +19,34 @@ class WalkthroughDataError(Exception):
     """Published SOP data cannot be converted into a walkthrough payload."""
 
 
+def _warning_text_for_step(step: dict, warnings: object) -> str | None:
+    """Join SopWarning messages that share source_event_ids with this step."""
+    if not isinstance(warnings, list) or not warnings:
+        return None
+
+    raw_ids = step.get("source_event_ids") or []
+    if not isinstance(raw_ids, list) or not raw_ids:
+        return None
+
+    step_event_ids = {str(event_id) for event_id in raw_ids}
+    messages: list[str] = []
+    for warning in warnings:
+        if not isinstance(warning, dict):
+            continue
+        warning_ids = warning.get("source_event_ids") or []
+        if not isinstance(warning_ids, list):
+            continue
+        if not step_event_ids.intersection(str(event_id) for event_id in warning_ids):
+            continue
+        message = warning.get("message")
+        if isinstance(message, str) and message.strip():
+            messages.append(message.strip())
+
+    if not messages:
+        return None
+    return " ".join(messages)
+
+
 def _parse_event_ids(source_event_ids: list[str]) -> list[int]:
     parsed: list[int] = []
     for event_id in source_event_ids:
@@ -285,6 +313,7 @@ def build_walkthrough_payload(sop: models.Sop, db: DBSession) -> WalkthroughPayl
                 anchor_mode=anchor_mode,
                 expected_action=expected_action,
                 expected_url=expected_url,
+                warning=_warning_text_for_step(step, sop.warnings),
             )
         )
 
