@@ -201,6 +201,32 @@
   font-size: 0.9rem;
 }
 
+.filterWarning {
+  margin: 1rem 0 0;
+  padding: 0.75rem 1rem;
+  border-radius: 12px;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  color: #92400e;
+  font-size: 0.9rem;
+}
+
+.inlineRetry {
+  margin-left: 0.35rem;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: #b45309;
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.inlineRetry:hover {
+  color: #92400e;
+}
+
 .stateSlot {
   margin-top: 1.5rem;
 }

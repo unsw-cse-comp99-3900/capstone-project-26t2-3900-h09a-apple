@@ -65,6 +65,7 @@ export default function LibraryClient() {
   const [error, setError] = useState<string | null>(null);
   const [lastRefreshedAt, setLastRefreshedAt] = useState<Date | null>(null);
   const [launchError, setLaunchError] = useState<string | null>(null);
+  const [mineFilterWarning, setMineFilterWarning] = useState<string | null>(null);
 
   const [tab, setTab] = useState<LibraryTab>('published');
 
@@ -95,6 +96,7 @@ export default function LibraryClient() {
     setLoading(true);
     setError(null);
     setLaunchError(null);
+    setMineFilterWarning(null);
 
     try {
       if (tab === 'published') {
@@ -104,12 +106,17 @@ export default function LibraryClient() {
         try {
           const minePublished = await getMyPublishedSops();
           setMinePublishedIds(new Set(minePublished.sops.map((sop) => sop.id)));
+          setMineFilterWarning(null);
         } catch {
           setMinePublishedIds(new Set());
+          setMineFilterWarning(
+            'Could not load which published procedures are yours. The Mine filter may show 0 until you try again.',
+          );
         }
       } else {
         const drafts = await getMyDrafts();
         setDraftSops(drafts.sops);
+        setMineFilterWarning(null);
       }
 
       setLastRefreshedAt(new Date());
@@ -253,6 +260,15 @@ export default function LibraryClient() {
           <span className={styles.countMeta}> · {formatRefreshedAt(lastRefreshedAt)}</span>
         </p>
       </div>
+
+      {mineFilterWarning ? (
+        <p className={styles.filterWarning} role="status">
+          {mineFilterWarning}{' '}
+          <button type="button" className={styles.inlineRetry} onClick={() => void load()}>
+            Try again
+          </button>
+        </p>
+      ) : null}
 
       {launchError ? (
         <p className={styles.launchError} role="alert">
