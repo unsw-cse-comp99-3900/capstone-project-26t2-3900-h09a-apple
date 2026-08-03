@@ -1,6 +1,6 @@
 // H09AAPPLE-80 remaining (background side of extension ball):
 // T0: forwards task + confidence (done)
-// T2-2 reuse captureVisibleTab for stuck analyze (already used by vision locate)
+// T2-2 captureVisibleTab for stuck analyze: WALKTHROUGH_CAPTURE_VISIBLE
 // T3-2/T3-3 optional notify hooks when handoff/stuck aggregates land
 
 import { assembleSession } from './session-assembly.js';
@@ -388,6 +388,39 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       tabId: sender.tab?.id ?? null,
     });
     return false;
+  }
+
+  if (message.type === 'WALKTHROUGH_CAPTURE_VISIBLE') {
+    const tabId = message.tabId ?? sender.tab?.id ?? null;
+    if (tabId == null) {
+      sendResponse({ ok: false, error: 'Missing tab id for screenshot capture.' });
+      return false;
+    }
+
+    chrome.tabs
+      .get(tabId)
+      .then(async (tab) => {
+        if (!tab?.windowId) {
+          throw new Error('Walkthrough tab is not available for capture.');
+        }
+        const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, {
+          format: SCREENSHOT_FORMAT,
+          quality: VISION_CAPTURE_QUALITY,
+        });
+        sendResponse({
+          ok: true,
+          screenshot_b64: dataUrl,
+        });
+      })
+      .catch((error) => {
+        console.error('Walkthrough visible capture failed:', error);
+        sendResponse({
+          ok: false,
+          error: error instanceof Error ? error.message : 'Screenshot capture failed.',
+        });
+      });
+
+    return true;
   }
 
   if (message.type === 'WALKTHROUGH_ASSISTANT_ASK') {

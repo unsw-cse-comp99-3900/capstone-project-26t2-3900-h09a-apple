@@ -10,10 +10,10 @@
  * H09AAPPLE-80 remaining (this file is the real ball; ignore apps/web floating-assistant):
  * T0-2 confidence chip: done for Q&A answers
  * T1-1 Prompt Coaching: done (local Use this / Edit only; no SOP writeback)
- * T1-2 One-click recovery after wrong_target (task=recover) in Help/Undo tab
- * T1-3 Smart step match (task=match_step) with URL-shape throttle >=10s
- * T2-1 Privacy mask before capture + one-time stuck consent in chrome.storage.local
- * T2-2 I'm stuck -> captureVisibleTab (reuse background) -> task=analyze
+ * T1-2 One-click recovery after wrong_target (task=recover) in Help tab: done
+ * T1-3 Smart step match (task=match_step) with URL-shape throttle >=10s: done
+ * T2-1 Privacy mask before capture + one-time stuck consent in chrome.storage.local: done
+ * T2-2 I'm stuck -> captureVisibleTab (reuse background) -> task=analyze: done
  * T2-3 Voice: already shipped; polish only if needed
  * T3-1 Page-level deviation soft hint (debounce; skip for now if noisy)
  * T3-2 Buffer stuck_click into frictionEvents (upload on complete; add enum+migration)
@@ -24,7 +24,27 @@
 (() => {
   const STORAGE_STATE_KEY = 'walkthroughState';
   const STORAGE_PAYLOAD_KEY = 'walkthroughPayload';
+  const STUCK_CONSENT_KEY = 'stuckScreenshotConsent';
   const HOST_ID = 'worktrace-walkthrough-host';
+  const PRIVACY_MASK_ATTR = 'data-worktrace-privacy-mask';
+  const PRIVACY_MASK_SELECTORS = [
+    'input[type="password"]',
+    'input[type="email"]',
+    'input[type="tel"]',
+    'input[autocomplete="email"]',
+    'input[autocomplete="tel"]',
+    'input[autocomplete="cc-number"]',
+    'input[autocomplete="cc-csc"]',
+    'input[autocomplete="cc-exp"]',
+    'input[name*="password"]',
+    'input[name*="Password"]',
+    'input[name*="ssn"]',
+    'input[name*="SSN"]',
+    'textarea[name*="password"]',
+    'textarea[name*="Password"]',
+    '[data-sensitive="true"]',
+    '[data-pii="true"]',
+  ];
 
   /** @type {{ status: string, sopId: string | null, stepIndex: number, tabId?: number | null } | null} */
   let activeState = null;
@@ -70,6 +90,32 @@
   let coachLoading = false;
   let coachError = '';
   let coachEditing = false;
+  let recoverAnswer = '';
+  let recoverConfidence = '';
+  let recoverConfidenceReason = '';
+  let recoverLoading = false;
+  let recoverError = '';
+  let wrongTargetPending = false;
+  let lastExpectedTarget = '';
+  let lastActualAction = '';
+  /** @type {number | null} */
+  let matchStepIndex = null;
+  let matchStepReason = '';
+  let matchStepLoading = false;
+  let matchStepError = '';
+  let lastMatchUrlShape = '';
+  let lastMatchStepAt = 0;
+  const MATCH_STEP_THROTTLE_MS = 10_000;
+  let analyzeAnswer = '';
+  let analyzeConfidence = '';
+  let analyzeConfidenceReason = '';
+  let analyzeLoading = false;
+  let analyzeError = '';
+  /** @type {boolean | null} null = not loaded yet */
+  let stuckConsentAccepted = null;
+  let stuckConsentPromptVisible = false;
+  /** @type {HTMLElement[]} */
+  let privacyMaskOverlays = [];
   /** @type {Record<number, string>} */
   let instructionOverrides = {};
   /** @type {'idle' | 'recording' | 'uploading' | 'done' | 'error'} */
@@ -142,6 +188,223 @@
       return step.instruction.trim().slice(0, 500);
     }
     return '';
+  }
+
+  function describeClickedElement(target) {
+    if (!(target instanceof Element)) {
+      return 'Clicked outside the highlighted target';
+    }
+    const tag = target.tagName.toLowerCase();
+    const label =
+      target.getAttribute('aria-label') ||
+      target.getAttribute('title') ||
+      (typeof target.innerText === 'string'
+        ? target.innerText.replace(/\s+/g, ' ').trim().slice(0, 80)
+        : '') ||
+      target.getAttribute('name') ||
+      target.id ||
+      tag;
+    return `Clicked <${tag}> ${label}`.trim();
+  }
+
+  function resetRecoverState() {
+    recoverAnswer = '';
+    recoverConfidence = '';
+    recoverConfidenceReason = '';
+    recoverError = '';
+    recoverLoading = false;
+    wrongTargetPending = false;
+    lastExpectedTarget = '';
+    lastActualAction = '';
+  }
+
+  function resetMatchStepState() {
+    matchStepIndex = null;
+    matchStepReason = '';
+    matchStepError = '';
+    matchStepLoading = false;
+  }
+
+  function resetAnalyzeState() {
+    analyzeAnswer = '';
+    analyzeConfidence = '';
+    analyzeConfidenceReason = '';
+    analyzeError = '';
+    analyzeLoading = false;
+    stuckConsentPromptVisible = false;
+  }
+
+  function readStuckConsent() {
+    return new Promise((resolve) => {
+      if (!chrome.storage?.local) {
+        resolve(false);
+        return;
+      }
+      chrome.storage.local.get([STUCK_CONSENT_KEY], (result) => {
+        resolve(result?.[STUCK_CONSENT_KEY]?.accepted === true);
+      });
+    });
+  }
+
+  function saveStuckConsent() {
+    return new Promise((resolve) => {
+      const record = {
+        accepted: true,
+        acceptedAt: new Date().toISOString(),
+      };
+      if (!chrome.storage?.local) {
+        stuckConsentAccepted = true;
+        resolve(record);
+        return;
+      }
+      chrome.storage.local.set({ [STUCK_CONSENT_KEY]: record }, () => {
+        stuckConsentAccepted = true;
+        resolve(record);
+      });
+    });
+  }
+
+  function collectPrivacyMaskTargets() {
+    /** @type {Element[]} */
+    const targets = [];
+    const seen = new Set();
+    for (const selector of PRIVACY_MASK_SELECTORS) {
+      let nodes;
+      try {
+        nodes = document.querySelectorAll(selector);
+      } catch {
+        continue;
+      }
+      nodes.forEach((node) => {
+        if (!(node instanceof Element) || seen.has(node)) {
+          return;
+        }
+        if (hostEl && (node === hostEl || hostEl.contains(node))) {
+          return;
+        }
+        const rect = node.getBoundingClientRect();
+        if (rect.width < 2 || rect.height < 2) {
+          return;
+        }
+        seen.add(node);
+        targets.push(node);
+      });
+    }
+    return targets;
+  }
+
+  function applyPrivacyMask() {
+    removePrivacyMask();
+    const overlays = [];
+    for (const target of collectPrivacyMaskTargets()) {
+      const rect = target.getBoundingClientRect();
+      const overlay = document.createElement('div');
+      overlay.setAttribute(PRIVACY_MASK_ATTR, '1');
+      overlay.setAttribute('aria-hidden', 'true');
+      overlay.style.cssText = [
+        'position:fixed',
+        `top:${Math.max(0, rect.top - 2)}px`,
+        `left:${Math.max(0, rect.left - 2)}px`,
+        `width:${rect.width + 4}px`,
+        `height:${rect.height + 4}px`,
+        'background:#0f172a',
+        'border-radius:6px',
+        'z-index:2147483646',
+        'pointer-events:none',
+        'box-shadow:inset 0 0 0 1px rgba(148,163,184,0.35)',
+      ].join(';');
+      document.documentElement.appendChild(overlay);
+      overlays.push(overlay);
+    }
+    privacyMaskOverlays = overlays;
+    return overlays;
+  }
+
+  function removePrivacyMask() {
+    for (const overlay of privacyMaskOverlays) {
+      overlay.remove();
+    }
+    privacyMaskOverlays = [];
+    document.querySelectorAll(`[${PRIVACY_MASK_ATTR}]`).forEach((node) => node.remove());
+  }
+
+  function waitForPaint() {
+    return new Promise((resolve) => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(resolve);
+      });
+    });
+  }
+
+  async function captureVisibleTabMasked() {
+    const previousVisibility = hostEl ? hostEl.style.visibility : '';
+    try {
+      applyPrivacyMask();
+      if (hostEl) {
+        hostEl.style.visibility = 'hidden';
+      }
+      await waitForPaint();
+      const response = await new Promise((resolve, reject) => {
+        chrome.runtime?.sendMessage?.(
+          {
+            type: 'WALKTHROUGH_CAPTURE_VISIBLE',
+            tabId: activeState?.tabId ?? myTabId ?? null,
+          },
+          (payload) => {
+            if (chrome.runtime?.lastError) {
+              reject(new Error(chrome.runtime.lastError.message));
+              return;
+            }
+            if (!payload?.ok) {
+              reject(new Error(payload?.error || 'Screenshot capture failed.'));
+              return;
+            }
+            resolve(payload);
+          },
+        );
+      });
+      return typeof response.screenshot_b64 === 'string' ? response.screenshot_b64 : null;
+    } finally {
+      removePrivacyMask();
+      if (hostEl) {
+        hostEl.style.visibility = previousVisibility;
+      }
+    }
+  }
+
+  function urlShapeKey(href) {
+    try {
+      const url = new URL(href);
+      return `${url.origin}${generalizePathname(url.pathname)}`;
+    } catch {
+      return String(href || '');
+    }
+  }
+
+  function buildStepsSummary() {
+    return getSteps()
+      .map((step, index) => {
+        const title = step.title || step.instruction || `Step ${index + 1}`;
+        const page = stepPageUrl(step) || 'no url';
+        return `${index + 1}. ${title} | ${page}`;
+      })
+      .join('\n');
+  }
+
+  function parseMatchStepAnswer(raw) {
+    const text = String(raw || '').trim();
+    const match = text.match(/MATCH:\s*(null|\d+)\s*[-:]\s*(.+)$/im);
+    if (!match) {
+      return { stepIndex: null, reason: text };
+    }
+    if (match[1].toLowerCase() === 'null') {
+      return { stepIndex: null, reason: match[2].trim() };
+    }
+    const oneBased = Number(match[1]);
+    if (!Number.isFinite(oneBased) || oneBased < 1) {
+      return { stepIndex: null, reason: match[2].trim() };
+    }
+    return { stepIndex: oneBased - 1, reason: match[2].trim() };
   }
 
   function resetVisionLocateLocal() {
@@ -528,7 +791,19 @@
       ) {
         return;
       }
+      const step = getCurrentStep();
+      lastExpectedTarget = describeStepForVision(step) || 'highlighted target';
+      lastActualAction = describeClickedElement(
+        event.target instanceof Element ? event.target : null,
+      );
+      const firstOffer = !wrongTargetPending;
+      wrongTargetPending = true;
+      if (firstOffer) {
+        assistantExpanded = true;
+        assistantTab = 'help';
+      }
       recordFriction('wrong_target');
+      render();
     };
 
     document.addEventListener('click', handler, { capture: true, signal });
@@ -698,14 +973,118 @@
         }
 
         .qa-panel,
-        .prompt-panel {
+        .prompt-panel,
+        .help-panel {
           gap: 8px;
           margin: 0 0 12px;
         }
 
         .qa-panel:not([hidden]),
-        .prompt-panel:not([hidden]) {
+        .prompt-panel:not([hidden]),
+        .help-panel:not([hidden]) {
           display: grid;
+        }
+
+        .help-note,
+        .help-hint {
+          margin: 0;
+          color: #cbd5e1;
+          font-size: 12px;
+          line-height: 1.45;
+        }
+
+        .help-hint {
+          padding: 8px 10px;
+          border-radius: 10px;
+          background: rgba(251, 191, 36, 0.14);
+          color: #fde68a;
+        }
+
+        .recover-answer {
+          margin: 0;
+          padding: 10px 12px;
+          border-radius: 12px;
+          background: rgba(59, 130, 246, 0.14);
+          color: #dbeafe;
+          white-space: pre-wrap;
+        }
+
+        .recover-answer[hidden],
+        .recover-confidence[hidden],
+        .recover-error[hidden],
+        .help-hint[hidden] {
+          display: none;
+        }
+
+        .recover-error {
+          margin: 0;
+          color: #fca5a5;
+          font-size: 12px;
+        }
+
+        .match-suggestion {
+          margin: 0;
+          padding: 10px 12px;
+          border-radius: 12px;
+          background: rgba(52, 211, 153, 0.14);
+          color: #bbf7d0;
+          white-space: pre-wrap;
+        }
+
+        .match-suggestion[hidden],
+        .match-error[hidden],
+        .match-jump[hidden] {
+          display: none;
+        }
+
+        .match-error {
+          margin: 0;
+          color: #fca5a5;
+          font-size: 12px;
+        }
+
+        .help-actions {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+        }
+
+        .stuck-divider {
+          margin: 4px 0 0;
+          border: 0;
+          border-top: 1px solid rgba(148, 163, 184, 0.28);
+        }
+
+        .stuck-consent {
+          margin: 0;
+          padding: 10px 12px;
+          border-radius: 12px;
+          background: rgba(148, 163, 184, 0.14);
+          color: #e2e8f0;
+          font-size: 12px;
+          line-height: 1.45;
+        }
+
+        .stuck-consent[hidden],
+        .analyze-answer[hidden],
+        .analyze-confidence[hidden],
+        .analyze-error[hidden] {
+          display: none;
+        }
+
+        .analyze-answer {
+          margin: 0;
+          padding: 10px 12px;
+          border-radius: 12px;
+          background: rgba(59, 130, 246, 0.14);
+          color: #dbeafe;
+          white-space: pre-wrap;
+        }
+
+        .analyze-error {
+          margin: 0;
+          color: #fca5a5;
+          font-size: 12px;
         }
 
         .prompt-actions {
@@ -1354,7 +1733,7 @@
             <button type="button" class="btn-primary qa-submit" data-action="ask-assistant">
               Ask
             </button>
-            <p class="qa-confidence" hidden></p>
+            <p class="qa-confidence qa-confidence-chip" hidden></p>
             <p class="qa-answer" hidden></p>
           </div>
           <div class="voice-panel" hidden>
@@ -1372,6 +1751,63 @@
               </button>
             </div>
             <p class="voice-transcript" hidden></p>
+          </div>
+          <div class="help-panel" hidden>
+            <p class="qa-label">Recovery</p>
+            <p class="help-note">
+              If you clicked away from the highlighted target, get a short path back to this step.
+            </p>
+            <p class="help-hint" hidden></p>
+            <div class="help-actions">
+              <button type="button" class="btn-primary recover-generate" data-action="recover-generate">
+                Get recovery steps
+              </button>
+              <button type="button" class="btn-secondary match-generate" data-action="match-generate">
+                Find my step
+              </button>
+            </div>
+            <p class="qa-confidence recover-confidence" hidden></p>
+            <p class="recover-answer" hidden></p>
+            <p class="recover-error" hidden></p>
+            <p class="match-suggestion" hidden></p>
+            <button type="button" class="btn-primary match-jump" data-action="match-jump" hidden>
+              Jump to matched step
+            </button>
+            <p class="match-error" hidden></p>
+            <hr class="stuck-divider" />
+            <p class="qa-label">I am stuck</p>
+            <p class="help-note">
+              Capture this page (passwords and sensitive fields are covered) and ask WorkTrace AI what
+              to do next.
+            </p>
+            <p class="stuck-consent" hidden>
+              This takes a screenshot of the visible tab and sends it to WorkTrace AI for this step
+              only. Sensitive fields are covered before capture. Accept once to enable.
+            </p>
+            <div class="help-actions">
+              <button type="button" class="btn-primary stuck-analyze" data-action="stuck-analyze">
+                I am stuck
+              </button>
+              <button
+                type="button"
+                class="btn-primary stuck-consent-accept"
+                data-action="stuck-consent-accept"
+                hidden
+              >
+                Accept screenshot help
+              </button>
+              <button
+                type="button"
+                class="btn-secondary stuck-consent-cancel"
+                data-action="stuck-consent-cancel"
+                hidden
+              >
+                Not now
+              </button>
+            </div>
+            <p class="qa-confidence analyze-confidence" hidden></p>
+            <p class="analyze-answer" hidden></p>
+            <p class="analyze-error" hidden></p>
           </div>
           <img class="preview" alt="Step screenshot preview" hidden />
           <p class="fallback-note" hidden></p>
@@ -1418,6 +1854,20 @@
         beginCoachEdit();
       } else if (action === 'coach-cancel-edit') {
         cancelCoachEdit();
+      } else if (action === 'recover-generate') {
+        void generateRecoverSuggestion();
+      } else if (action === 'match-generate') {
+        void requestStepMatch({ force: true });
+      } else if (action === 'match-jump') {
+        jumpToMatchedStep();
+      } else if (action === 'stuck-analyze') {
+        void handleStuckAnalyzeClick();
+      } else if (action === 'stuck-consent-accept') {
+        void acceptStuckConsentAndAnalyze();
+      } else if (action === 'stuck-consent-cancel') {
+        stuckConsentPromptVisible = false;
+        analyzeError = '';
+        render();
       } else if (action === 'voice-start') {
         void startVoiceRecording();
       } else if (action === 'voice-stop') {
@@ -1456,6 +1906,7 @@
     detachStepListener();
     removeHighlight();
     discardVoiceRecording();
+    removePrivacyMask();
 
     if (hostEl) {
       hostEl.remove();
@@ -1577,6 +2028,7 @@
 
     if (isWrongPage(step)) {
       recordFriction('wrong_page');
+      void requestStepMatch({ force: false });
     }
   }
 
@@ -1715,6 +2167,9 @@
     coachError = '';
     coachEditing = false;
     coachLoading = false;
+    resetRecoverState();
+    resetMatchStepState();
+    resetAnalyzeState();
 
     const stepNumber = step.step_number ?? activeState.stepIndex + 1;
     lastEnteredStepIndex = activeState.stepIndex;
@@ -1864,8 +2319,29 @@
     const qaInput = root.querySelector('.qa-input');
     const qaSubmit = root.querySelector('.qa-submit');
     const qaAnswer = root.querySelector('.qa-answer');
-    const qaConfidence = root.querySelector('.qa-confidence');
+    // Must scope to Q&A panel: several chips reuse .qa-confidence (coach/recover/analyze).
+    const qaConfidence =
+      qaPanel?.querySelector('.qa-confidence-chip') ??
+      qaPanel?.querySelector('.qa-confidence') ??
+      null;
     const voicePanel = root.querySelector('.voice-panel');
+    const helpPanel = root.querySelector('.help-panel');
+    const helpHint = root.querySelector('.help-hint');
+    const recoverGenerateBtn = root.querySelector('.recover-generate');
+    const recoverConfidenceEl = root.querySelector('.recover-confidence');
+    const recoverAnswerEl = root.querySelector('.recover-answer');
+    const recoverErrorEl = root.querySelector('.recover-error');
+    const matchGenerateBtn = root.querySelector('.match-generate');
+    const matchSuggestionEl = root.querySelector('.match-suggestion');
+    const matchJumpBtn = root.querySelector('.match-jump');
+    const matchErrorEl = root.querySelector('.match-error');
+    const stuckAnalyzeBtn = root.querySelector('.stuck-analyze');
+    const stuckConsentEl = root.querySelector('.stuck-consent');
+    const stuckConsentAcceptBtn = root.querySelector('.stuck-consent-accept');
+    const stuckConsentCancelBtn = root.querySelector('.stuck-consent-cancel');
+    const analyzeConfidenceEl = root.querySelector('.analyze-confidence');
+    const analyzeAnswerEl = root.querySelector('.analyze-answer');
+    const analyzeErrorEl = root.querySelector('.analyze-error');
     const voiceStatusEl = root.querySelector('.voice-status');
     const voiceStartBtn = root.querySelector('.voice-start');
     const voiceStopBtn = root.querySelector('.voice-stop');
@@ -1916,6 +2392,131 @@
 
     if (voicePanel) {
       voicePanel.hidden = assistantTab !== 'voice';
+    }
+
+    if (helpPanel) {
+      helpPanel.hidden = assistantTab !== 'help';
+    }
+
+    if (helpHint) {
+      if (wrongTargetPending && lastActualAction) {
+        helpHint.hidden = false;
+        helpHint.textContent = lastExpectedTarget
+          ? `Off target: expected "${lastExpectedTarget}". ${lastActualAction}.`
+          : lastActualAction;
+      } else {
+        helpHint.hidden = true;
+        helpHint.textContent = '';
+      }
+    }
+
+    if (recoverGenerateBtn) {
+      recoverGenerateBtn.disabled = recoverLoading || assistantLoading || coachLoading;
+      recoverGenerateBtn.textContent = recoverLoading ? 'Getting recovery…' : 'Get recovery steps';
+    }
+
+    const hasRecoverAnswer = Boolean(recoverAnswer && !recoverError);
+    if (recoverConfidenceEl) {
+      if (!hasRecoverAnswer || !recoverConfidence) {
+        recoverConfidenceEl.hidden = true;
+        recoverConfidenceEl.textContent = '';
+        recoverConfidenceEl.removeAttribute('data-level');
+        recoverConfidenceEl.removeAttribute('title');
+      } else {
+        recoverConfidenceEl.hidden = false;
+        recoverConfidenceEl.dataset.level = recoverConfidence;
+        recoverConfidenceEl.textContent = `Confidence: ${recoverConfidence}`;
+        recoverConfidenceEl.title = recoverConfidenceReason || '';
+      }
+    }
+
+    if (recoverAnswerEl) {
+      recoverAnswerEl.hidden = !hasRecoverAnswer;
+      recoverAnswerEl.textContent = recoverAnswer;
+    }
+
+    if (recoverErrorEl) {
+      recoverErrorEl.hidden = !recoverError;
+      recoverErrorEl.textContent = recoverError;
+    }
+
+    if (matchGenerateBtn) {
+      matchGenerateBtn.disabled =
+        matchStepLoading || recoverLoading || assistantLoading || coachLoading;
+      matchGenerateBtn.textContent = matchStepLoading ? 'Finding step…' : 'Find my step';
+    }
+
+    const hasMatchSuggestion =
+      !matchStepError && (matchStepIndex != null || Boolean(matchStepReason));
+    if (matchSuggestionEl) {
+      if (!hasMatchSuggestion) {
+        matchSuggestionEl.hidden = true;
+        matchSuggestionEl.textContent = '';
+      } else if (matchStepIndex != null) {
+        matchSuggestionEl.hidden = false;
+        matchSuggestionEl.textContent = `Possible match: step ${matchStepIndex + 1}. ${matchStepReason}`;
+      } else {
+        matchSuggestionEl.hidden = false;
+        matchSuggestionEl.textContent = matchStepReason || 'No clear matching step on this page.';
+      }
+    }
+
+    if (matchJumpBtn) {
+      const canJump =
+        matchStepIndex != null &&
+        activeState &&
+        matchStepIndex !== activeState.stepIndex &&
+        matchStepIndex >= 0 &&
+        matchStepIndex < steps.length;
+      matchJumpBtn.hidden = !canJump;
+      matchJumpBtn.disabled = matchStepLoading;
+    }
+
+    if (matchErrorEl) {
+      matchErrorEl.hidden = !matchStepError;
+      matchErrorEl.textContent = matchStepError;
+    }
+
+    const busyForStuck =
+      analyzeLoading || matchStepLoading || recoverLoading || assistantLoading || coachLoading;
+    if (stuckAnalyzeBtn) {
+      stuckAnalyzeBtn.hidden = stuckConsentPromptVisible;
+      stuckAnalyzeBtn.disabled = busyForStuck;
+      stuckAnalyzeBtn.textContent = analyzeLoading ? 'Analyzing…' : 'I am stuck';
+    }
+    if (stuckConsentEl) {
+      stuckConsentEl.hidden = !stuckConsentPromptVisible;
+    }
+    if (stuckConsentAcceptBtn) {
+      stuckConsentAcceptBtn.hidden = !stuckConsentPromptVisible;
+      stuckConsentAcceptBtn.disabled = busyForStuck;
+    }
+    if (stuckConsentCancelBtn) {
+      stuckConsentCancelBtn.hidden = !stuckConsentPromptVisible;
+      stuckConsentCancelBtn.disabled = analyzeLoading;
+    }
+
+    const hasAnalyzeAnswer = Boolean(analyzeAnswer && !analyzeError);
+    if (analyzeConfidenceEl) {
+      if (!hasAnalyzeAnswer || !analyzeConfidence) {
+        analyzeConfidenceEl.hidden = true;
+        analyzeConfidenceEl.textContent = '';
+        analyzeConfidenceEl.removeAttribute('data-level');
+        analyzeConfidenceEl.removeAttribute('title');
+      } else {
+        analyzeConfidenceEl.hidden = false;
+        analyzeConfidenceEl.dataset.level = analyzeConfidence;
+        analyzeConfidenceEl.textContent = `Confidence: ${analyzeConfidence}`;
+        analyzeConfidenceEl.title = analyzeConfidenceReason || '';
+      }
+    }
+    if (analyzeAnswerEl) {
+      analyzeAnswerEl.hidden = !hasAnalyzeAnswer;
+      analyzeAnswerEl.textContent = analyzeAnswer;
+    }
+    if (analyzeErrorEl) {
+      analyzeErrorEl.hidden = !analyzeError;
+      analyzeErrorEl.textContent = analyzeError;
     }
 
     const hasCoachSuggestion = Boolean(coachSuggestion && !coachError);
@@ -2414,6 +3015,233 @@
       coachConfidenceReason = '';
     } finally {
       coachLoading = false;
+      render();
+    }
+  }
+
+  async function requestStepMatch({ force = false } = {}) {
+    const stepPayload = currentAssistantStepPayload();
+    if (!stepPayload || !activeState) {
+      return;
+    }
+
+    const shape = urlShapeKey(window.location.href);
+    const now = Date.now();
+    if (
+      !force &&
+      shape &&
+      shape === lastMatchUrlShape &&
+      now - lastMatchStepAt < MATCH_STEP_THROTTLE_MS
+    ) {
+      return;
+    }
+
+    lastMatchUrlShape = shape;
+    lastMatchStepAt = now;
+    matchStepLoading = true;
+    matchStepError = '';
+    if (force) {
+      assistantExpanded = true;
+      assistantTab = 'help';
+    }
+    render();
+
+    try {
+      const payload = await requestAssistant({
+        type: 'WALKTHROUGH_ASSISTANT_ASK',
+        task: 'match_step',
+        question: null,
+        mode: assistantMode === 'manual' ? 'manual' : 'walkthrough',
+        page_url: window.location.href,
+        page_title: document.title || null,
+        steps_summary: buildStepsSummary(),
+        step: stepPayload,
+      });
+
+      const parsed = parseMatchStepAnswer(payload.answer || '');
+      const steps = getSteps();
+      if (parsed.stepIndex != null && parsed.stepIndex >= 0 && parsed.stepIndex < steps.length) {
+        matchStepIndex = parsed.stepIndex;
+        matchStepReason = parsed.reason || 'Page shape matches this step.';
+        matchStepError = '';
+        if (!force && matchStepIndex !== activeState.stepIndex) {
+          assistantExpanded = true;
+          assistantTab = 'help';
+        }
+      } else {
+        matchStepIndex = null;
+        matchStepReason = parsed.reason || 'No clear matching step on this page.';
+        matchStepError = '';
+      }
+    } catch (error) {
+      console.error('Walkthrough match_step request failed:', error);
+      matchStepIndex = null;
+      matchStepReason = '';
+      matchStepError =
+        error instanceof Error ? error.message : 'Assistant is unavailable right now.';
+    } finally {
+      matchStepLoading = false;
+      render();
+    }
+  }
+
+  function jumpToMatchedStep() {
+    if (!activeState || matchStepIndex == null) {
+      return;
+    }
+    const steps = getSteps();
+    if (matchStepIndex < 0 || matchStepIndex >= steps.length) {
+      return;
+    }
+    if (matchStepIndex === activeState.stepIndex) {
+      return;
+    }
+    persistState({
+      ...activeState,
+      stepIndex: matchStepIndex,
+    });
+  }
+
+  async function ensureStuckConsentLoaded() {
+    if (stuckConsentAccepted != null) {
+      return stuckConsentAccepted;
+    }
+    stuckConsentAccepted = await readStuckConsent();
+    return stuckConsentAccepted;
+  }
+
+  async function handleStuckAnalyzeClick() {
+    assistantExpanded = true;
+    assistantTab = 'help';
+    analyzeError = '';
+    const accepted = await ensureStuckConsentLoaded();
+    if (!accepted) {
+      stuckConsentPromptVisible = true;
+      render();
+      return;
+    }
+    await runStuckAnalyze();
+  }
+
+  async function acceptStuckConsentAndAnalyze() {
+    await saveStuckConsent();
+    stuckConsentPromptVisible = false;
+    await runStuckAnalyze();
+  }
+
+  async function runStuckAnalyze() {
+    const stepPayload = currentAssistantStepPayload();
+    if (!stepPayload) {
+      analyzeError = 'No walkthrough step is currently active.';
+      analyzeAnswer = '';
+      analyzeConfidence = '';
+      analyzeConfidenceReason = '';
+      render();
+      return;
+    }
+
+    analyzeLoading = true;
+    analyzeError = '';
+    analyzeAnswer = '';
+    analyzeConfidence = '';
+    analyzeConfidenceReason = '';
+    render();
+
+    try {
+      const screenshotB64 = await captureVisibleTabMasked();
+      if (!screenshotB64) {
+        throw new Error('Screenshot capture returned an empty image.');
+      }
+
+      const step = getCurrentStep();
+      const payload = await requestAssistant({
+        type: 'WALKTHROUGH_ASSISTANT_ASK',
+        task: 'analyze',
+        question: 'I am stuck on this step.',
+        mode: assistantMode === 'manual' ? 'manual' : 'walkthrough',
+        page_url: window.location.href,
+        page_title: document.title || null,
+        screenshot_b64: screenshotB64,
+        expected_target: describeStepForVision(step) || null,
+        actual_action: lastActualAction || 'User clicked I am stuck',
+        steps_summary: buildStepsSummary(),
+        step: stepPayload,
+      });
+
+      analyzeAnswer = (payload.answer || '').trim();
+      if (!analyzeAnswer) {
+        analyzeError = 'No stuck analysis returned.';
+        analyzeConfidence = '';
+        analyzeConfidenceReason = '';
+      } else {
+        analyzeConfidence = payload.confidence || 'medium';
+        analyzeConfidenceReason = payload.confidence_reason || '';
+      }
+    } catch (error) {
+      console.error('Walkthrough stuck analyze failed:', error);
+      analyzeError = error instanceof Error ? error.message : 'Assistant is unavailable right now.';
+      analyzeAnswer = '';
+      analyzeConfidence = '';
+      analyzeConfidenceReason = '';
+    } finally {
+      analyzeLoading = false;
+      render();
+    }
+  }
+
+  async function generateRecoverSuggestion() {
+    const stepPayload = currentAssistantStepPayload();
+    if (!stepPayload) {
+      recoverError = 'No walkthrough step is currently active.';
+      recoverAnswer = '';
+      recoverConfidence = '';
+      recoverConfidenceReason = '';
+      render();
+      return;
+    }
+
+    const step = getCurrentStep();
+    const expectedTarget =
+      lastExpectedTarget || describeStepForVision(step) || 'highlighted target';
+    const actualAction = lastActualAction || 'User requested recovery help for the current step';
+
+    recoverLoading = true;
+    recoverError = '';
+    recoverAnswer = '';
+    recoverConfidence = '';
+    recoverConfidenceReason = '';
+    render();
+
+    try {
+      const payload = await requestAssistant({
+        type: 'WALKTHROUGH_ASSISTANT_ASK',
+        task: 'recover',
+        question: null,
+        mode: assistantMode === 'manual' ? 'manual' : 'walkthrough',
+        page_url: window.location.href,
+        page_title: document.title || null,
+        expected_target: expectedTarget,
+        actual_action: actualAction,
+        step: stepPayload,
+      });
+
+      recoverAnswer = (payload.answer || '').trim();
+      if (!recoverAnswer) {
+        recoverError = 'No recovery steps returned.';
+        recoverConfidence = '';
+        recoverConfidenceReason = '';
+      } else {
+        recoverConfidence = payload.confidence || 'medium';
+        recoverConfidenceReason = payload.confidence_reason || '';
+      }
+    } catch (error) {
+      console.error('Walkthrough recover request failed:', error);
+      recoverError = error instanceof Error ? error.message : 'Assistant is unavailable right now.';
+      recoverAnswer = '';
+      recoverConfidence = '';
+      recoverConfidenceReason = '';
+    } finally {
+      recoverLoading = false;
       render();
     }
   }

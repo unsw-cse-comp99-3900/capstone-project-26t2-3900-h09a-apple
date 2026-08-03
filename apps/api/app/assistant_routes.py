@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 from typing import Annotated, Any
 
@@ -17,8 +18,9 @@ from app.settings import SettingsError, get_openai_api_key, get_openai_model
 
 # H09AAPPLE-80 remaining (extension ball is source of truth; do not extend web floating-assistant):
 # T0-1/T0-2: done on this endpoint (task dispatch + confidence + auth)
+# T1-2 recover prompt: done (extension Help tab wires task=recover)
 # T1-4 role is already injected into shared context via current_user
-# T2-2 vision path for task=analyze (optional OPENAI_VISION_MODEL)
+# T2-2 vision path for task=analyze: uses OPENAI_VISION_MODEL / WALKTHROUGH_VISION_MODEL when set
 # T3-3 handoff_summary notify reviewer/manager after response
 
 router = APIRouter(prefix="/api/v1/assistant", tags=["assistant"])
@@ -176,6 +178,17 @@ def _user_message_content(payload: WalkthroughAssistantRequest, prompt: str) -> 
     return prompt
 
 
+def resolve_assistant_model(payload: WalkthroughAssistantRequest) -> str:
+    """Prefer a vision-capable model when analyze includes a screenshot."""
+    if payload.task == "analyze" and payload.screenshot_b64:
+        vision_model = (
+            os.getenv("WALKTHROUGH_VISION_MODEL") or os.getenv("OPENAI_VISION_MODEL") or ""
+        ).strip()
+        if vision_model:
+            return vision_model
+    return get_openai_model()
+
+
 @router.post("/walkthrough", response_model=WalkthroughAssistantResponse)
 async def walkthrough_assistant(
     payload: WalkthroughAssistantRequest,
@@ -183,7 +196,7 @@ async def walkthrough_assistant(
 ) -> WalkthroughAssistantResponse:
     try:
         api_key = get_openai_api_key()
-        model = get_openai_model()
+        model = resolve_assistant_model(payload)
     except SettingsError as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -196,7 +209,7 @@ async def walkthrough_assistant(
         client = AsyncOpenAI(api_key=api_key)
         role = str(current_user.role)
         prompt = build_walkthrough_assistant_prompt(payload, role=role)
-        max_tokens = 180 if payload.task == "qa" else 320
+        max_tokens = 180 if payload.task == "qa" else 360 if payload.task == "analyze" else 320
 
         completion = await client.chat.completions.create(
             model=model,

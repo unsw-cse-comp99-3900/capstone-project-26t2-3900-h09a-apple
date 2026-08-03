@@ -6,6 +6,7 @@ from pydantic import ValidationError
 from app.assistant_routes import (
     build_walkthrough_assistant_prompt,
     parse_confidence_footer,
+    resolve_assistant_model,
 )
 from app.assistant_schema import WalkthroughAssistantRequest
 
@@ -69,6 +70,36 @@ def test_build_prompt_for_recover_includes_targets():
     assert "recovery path" in prompt.lower() or "off the expected" in prompt.lower()
     assert "Expected target: Submit button" in prompt
     assert "Actual action: Clicked Settings" in prompt
+
+
+def test_build_prompt_for_match_step_includes_summary():
+    prompt = build_walkthrough_assistant_prompt(
+        _payload(
+            task="match_step",
+            question=None,
+            steps_summary="1. Open form | https://example.com/new\n2. Submit | https://example.com/done",
+        ),
+        role="EMPLOYEE",
+    )
+    assert "MATCH:" in prompt
+    assert "1. Open form" in prompt
+
+
+def test_resolve_assistant_model_prefers_vision_for_analyze_screenshot(monkeypatch):
+    monkeypatch.setenv("OPENAI_MODEL", "gpt-4o-mini")
+    monkeypatch.setenv("OPENAI_VISION_MODEL", "gpt-4o")
+    monkeypatch.delenv("WALKTHROUGH_VISION_MODEL", raising=False)
+    model = resolve_assistant_model(
+        _payload(task="analyze", question=None, screenshot_b64="data:image/jpeg;base64,abc")
+    )
+    assert model == "gpt-4o"
+
+
+def test_resolve_assistant_model_keeps_default_without_screenshot(monkeypatch):
+    monkeypatch.setenv("OPENAI_MODEL", "gpt-4o-mini")
+    monkeypatch.setenv("OPENAI_VISION_MODEL", "gpt-4o")
+    model = resolve_assistant_model(_payload(task="analyze", question=None, screenshot_b64=None))
+    assert model == "gpt-4o-mini"
 
 
 def test_parse_confidence_footer_strips_line():
