@@ -70,6 +70,8 @@
   let myTabId = null;
   /** @type {AbortController | null} */
   let currentStepListener = null;
+  /** @type {Element | null} element the current step listener is bound to */
+  let currentListeningElement = null;
   /** @type {Array<{
    *   step_number: number,
    *   event_type: 'wrong_target' | 'wrong_page' | 'empty_input' | 'selector_miss',
@@ -760,11 +762,78 @@
 
   function detachStepListener() {
     if (!currentStepListener) {
+      currentListeningElement = null;
       return;
     }
 
     currentStepListener.abort();
     currentStepListener = null;
+    currentListeningElement = null;
+  }
+
+  function associatedLabelText(element) {
+    if (!(element instanceof Element)) {
+      return '';
+    }
+    if (element.id) {
+      try {
+        const escaped =
+          typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
+            ? CSS.escape(element.id)
+            : element.id.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+        const byFor = document.querySelector(`label[for="${escaped}"]`);
+        if (byFor?.textContent) {
+          return byFor.textContent.replace(/\s+/g, ' ').trim();
+        }
+      } catch {
+        // ignore invalid id selectors
+      }
+    }
+    const wrapped = element.closest('label');
+    if (wrapped?.textContent) {
+      return wrapped.textContent.replace(/\s+/g, ' ').trim();
+    }
+    return '';
+  }
+
+  function isClickOnStepTarget(targetElement, eventTarget) {
+    if (!(eventTarget instanceof Node) || !(targetElement instanceof Element)) {
+      return false;
+    }
+    if (eventTarget === targetElement || targetElement.contains(eventTarget)) {
+      return true;
+    }
+    if (!(eventTarget instanceof Element)) {
+      return false;
+    }
+    if (eventTarget.tagName === 'LABEL') {
+      const htmlFor = eventTarget.getAttribute('for');
+      if (htmlFor && targetElement.id === htmlFor) {
+        return true;
+      }
+      if (eventTarget.contains(targetElement)) {
+        return true;
+      }
+    }
+    if (targetElement.tagName === 'LABEL') {
+      const htmlFor = targetElement.getAttribute('for');
+      if (htmlFor && eventTarget.id === htmlFor) {
+        return true;
+      }
+      if (targetElement.contains(eventTarget)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function clearWrongTargetOffer() {
+    if (!wrongTargetPending && !lastActualAction) {
+      return;
+    }
+    wrongTargetPending = false;
+    lastActualAction = '';
+    lastExpectedTarget = '';
   }
 
   /**
@@ -777,12 +846,6 @@
    */
   function attachWrongTargetListener(targetElement, signal) {
     const handler = (event) => {
-      if (
-        event.target instanceof Node &&
-        (event.target === targetElement || targetElement.contains(event.target))
-      ) {
-        return;
-      }
       // Ignore clicks on our own tooltip/overlay (Previous/Next/Finish etc.).
       if (
         hostEl &&
@@ -791,7 +854,41 @@
       ) {
         return;
       }
+
+      if (isClickOnStepTarget(targetElement, event.target)) {
+        if (wrongTargetPending) {
+          clearWrongTargetOffer();
+          render();
+        }
+        return;
+      }
+
+      // Prefer the live highlighted element if resolve just moved.
+      if (
+        currentHighlightRestore?.element &&
+        currentHighlightRestore.element !== targetElement &&
+        isClickOnStepTarget(currentHighlightRestore.element, event.target)
+      ) {
+        if (wrongTargetPending) {
+          clearWrongTargetOffer();
+          render();
+        }
+        return;
+      }
+
       const step = getCurrentStep();
+      const expected = (describeStepForVision(step) || '').trim().toLowerCase();
+      const labelText = associatedLabelText(
+        event.target instanceof Element ? event.target : null,
+      ).toLowerCase();
+      if (expected && labelText && (labelText.includes(expected) || expected.includes(labelText))) {
+        if (wrongTargetPending) {
+          clearWrongTargetOffer();
+          render();
+        }
+        return;
+      }
+
       lastExpectedTarget = describeStepForVision(step) || 'highlighted target';
       lastActualAction = describeClickedElement(
         event.target instanceof Element ? event.target : null,
@@ -815,14 +912,17 @@
       return;
     }
 
-    // Already listening on this element.
-    if (currentStepListener && currentHighlightRestore?.element === element) {
+    // Bind to the concrete element. Do not use currentHighlightRestore here:
+    // applyHighlight may already point at `element` while listeners are still
+    // attached to a previous node after DOM re-resolve.
+    if (currentStepListener && currentListeningElement === element) {
       return;
     }
 
     detachStepListener();
 
     currentStepListener = new AbortController();
+    currentListeningElement = element;
     const { signal } = currentStepListener;
 
     const advance = () => {
@@ -1000,15 +1100,6 @@
           color: #fde68a;
         }
 
-        .recover-answer {
-          margin: 0;
-          padding: 10px 12px;
-          border-radius: 12px;
-          background: rgba(59, 130, 246, 0.14);
-          color: #dbeafe;
-          white-space: pre-wrap;
-        }
-
         .recover-answer[hidden],
         .recover-confidence[hidden],
         .recover-error[hidden],
@@ -1072,9 +1163,13 @@
           display: none;
         }
 
-        .analyze-answer {
+        .analyze-answer,
+        .recover-answer {
           margin: 0;
+          max-height: 7.5em;
           padding: 10px 12px;
+          overflow-x: hidden;
+          overflow-y: auto;
           border-radius: 12px;
           background: rgba(59, 130, 246, 0.14);
           color: #dbeafe;
@@ -1257,16 +1352,36 @@
           bottom: 24px;
           left: auto !important;
           top: auto !important;
+          display: flex;
+          flex-direction: column;
           width: min(340px, calc(100vw - 32px));
           max-width: 340px;
+          max-height: min(72vh, 640px);
           padding: 14px;
-          overflow: visible;
+          overflow: hidden;
           border-radius: 18px;
           background: #0f172a;
           color: #f8fafc;
           font: 13px/1.45 ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif;
           box-shadow: 0 18px 40px rgb(15 23 42 / 35%);
           pointer-events: auto;
+        }
+
+        .assistant-panel {
+          display: flex;
+          flex: 1 1 auto;
+          flex-direction: column;
+          min-height: 0;
+          overflow-x: hidden;
+          overflow-y: auto;
+          overscroll-behavior: contain;
+        }
+
+        .assistant-panel .actions {
+          position: sticky;
+          bottom: 0;
+          padding-top: 8px;
+          background: linear-gradient(180deg, transparent, #0f172a 28%);
         }
 
         .assistant-orb {
@@ -1534,9 +1649,12 @@
           }
         }
         .tooltip[data-expanded='false'] {
+          display: block;
           width: 60px;
           height: 60px;
+          max-height: none;
           padding: 0;
+          overflow: visible;
           border-radius: 999px;
           background: transparent;
           box-shadow: none;
@@ -1769,9 +1887,7 @@
           </div>
           <div class="help-panel" hidden>
             <p class="qa-label">Recovery</p>
-            <p class="help-note">
-              If you clicked away from the highlighted target, get a short path back to this step.
-            </p>
+            <p class="help-note">Off-target click? Recover or jump to a better step.</p>
             <p class="help-hint" hidden></p>
             <div class="help-actions">
               <button type="button" class="btn-primary recover-generate" data-action="recover-generate">
@@ -1791,13 +1907,9 @@
             <p class="match-error" hidden></p>
             <hr class="stuck-divider" />
             <p class="qa-label">I am stuck</p>
-            <p class="help-note">
-              Capture this page (passwords and sensitive fields are covered) and ask WorkTrace AI what
-              to do next.
-            </p>
+            <p class="help-note">Screenshot this page (sensitive fields covered) for AI help.</p>
             <p class="stuck-consent" hidden>
-              This takes a screenshot of the visible tab and sends it to WorkTrace AI for this step
-              only. Sensitive fields are covered before capture. Accept once to enable.
+              Sends one masked screenshot to WorkTrace AI for this step. Accept once to enable.
             </p>
             <div class="help-actions">
               <button type="button" class="btn-primary stuck-analyze" data-action="stuck-analyze">
@@ -2147,16 +2259,13 @@
       }
     }
 
-    if (showPreview && tooltip.dataset.anchorMode !== 'vision') {
-      preview.hidden = false;
-      preview.src = step.screenshot_url;
-    } else if (showPreview && tooltip.dataset.anchorMode === 'vision') {
-      // Prefer live vision highlight; keep screenshot available but collapsed.
+    // Help tab is already dense; keep the step screenshot out of the way.
+    if (assistantTab === 'help' || !showPreview || tooltip.dataset.anchorMode === 'vision') {
       preview.hidden = true;
       preview.removeAttribute('src');
     } else {
-      preview.hidden = true;
-      preview.removeAttribute('src');
+      preview.hidden = false;
+      preview.src = step.screenshot_url;
     }
   }
 
