@@ -39,7 +39,15 @@ Tenant scoping is enforced in route handlers via `filter_by_tenant` in
 - CI: `pnpm --filter @h09a/web test` plus lint, typecheck, format, build
 
 Examples: API client / auth retry helpers, consent storage, SOP viewer,
-session review client helpers, variance dashboard client.
+session review client helpers, variance dashboard client,
+`apps/web/src/app/(app)/library/library-search.test.ts` (substring /
+multi-word ranking and filter chips), and
+`apps/web/src/lib/extension-bridge.test.ts` (`START_WALKTHROUGH` messaging).
+
+Library search and chip filters run client-side over the published (or draft)
+SOP list already fetched for `/library`. There is no Playwright (or other
+browser E2E) coverage for Library Play today; end-to-end launch is validated
+manually with the loaded Chrome extension.
 
 ### Extension
 
@@ -47,7 +55,8 @@ session review client helpers, variance dashboard client.
 - CI job `extension`: format, lint, typecheck, test, build
 
 Covers walkthrough runtime, session assembly, auth/consent helpers, content
-bridge behaviour, and related unit logic.
+bridge behaviour (including `START_WALKTHROUGH` handling), and related unit
+logic.
 
 ### Desktop storage package
 
