@@ -1,0 +1,160 @@
+.page {
+  --navy: #1e293b;
+  --slate: #64748b;
+  --indigo: #4f46e5;
+  --indigo-border: #c7d2fe;
+  --border: #e2e8f0;
+  width: min(1100px, 100%);
+  margin: 0 auto;
+  padding: 0 0 2.5rem;
+  color: var(--navy);
+  font-family:
+    Inter,
+    system-ui,
+    -apple-system,
+    sans-serif;
+}
+
+.header {
+  margin: 0 0 1.5rem;
+  padding: 2rem 2.25rem;
+  border-radius: 20px;
+  background: linear-gradient(135deg, #eef2ff 0%, #f7f8fc 60%, #ffffff 100%);
+  border: 1px solid var(--indigo-border);
+}
+
+.eyebrow {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--indigo);
+}
+
+.title {
+  margin: 0.5rem 0 0;
+  font-size: clamp(1.85rem, 3vw, 2.25rem);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.lead {
+  margin: 0.75rem 0 0;
+  max-width: 52ch;
+  color: var(--slate);
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+.muted {
+  margin: 0 0 1rem;
+  color: var(--slate);
+}
+
+.error {
+  margin: 0 0 1rem;
+  color: #b91c1c;
+  font-weight: 600;
+}
+
+.tiles {
+  margin: 0 0 1.25rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.85rem;
+}
+
+.tile {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 1.1rem 1.2rem;
+}
+
+.tileLabel {
+  margin: 0;
+  color: var(--slate);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.tileValue {
+  margin: 0.4rem 0 0;
+  font-size: 1.7rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.panel {
+  margin: 0;
+  padding: 1.35rem 1.5rem;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+}
+
+.panel h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1.05rem;
+}
+
+.list {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.card {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.cardTitle {
+  margin: 0;
+  font-weight: 700;
+}
+
+.meta {
+  margin: 0.35rem 0 0;
+  color: var(--slate);
+  font-size: 0.85rem;
+}
+
+.transcript {
+  margin: 0.5rem 0 0;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.linkButton,
+.secondaryButton {
+  border-radius: 999px;
+  padding: 0.5rem 1rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+  text-decoration: none;
+  border: 1px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.linkButton {
+  display: inline-flex;
+  background: #4f46e5;
+  color: #fff;
+}
+
+.secondaryButton {
+  background: #fff;
+  border-color: var(--border);
+  color: var(--navy);
+}

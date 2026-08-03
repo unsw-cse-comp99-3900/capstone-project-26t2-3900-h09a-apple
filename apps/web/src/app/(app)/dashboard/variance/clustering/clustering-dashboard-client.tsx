@@ -1,7 +1,6 @@
 'use client';
 
 import type { FrictionAnalysisUpdate, KmeansAnalysisResponse, SopLibraryItem } from '@h09a/types';
-import Link from 'next/link';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 
 import { useCurrentUser } from '@/contexts/auth-context';
@@ -33,7 +32,7 @@ function errorText(error: unknown, fallback: string): string {
 }
 
 export function ClusteringDashboardClient() {
-  const { user, loading: loadingUser, logout } = useCurrentUser();
+  const { user, loading: loadingUser } = useCurrentUser();
   const [sops, setSops] = useState<SopLibraryItem[]>([]);
   const [workflowId, setWorkflowId] = useState('');
   const [k, setK] = useState(DEFAULT_K);
@@ -195,11 +194,8 @@ export function ClusteringDashboardClient() {
   if (user.role !== 'MANAGER') {
     return (
       <main className={styles.page}>
-        <h1 className={styles.title}>Variance dashboard</h1>
-        <p className={styles.state}>This dashboard is available to manager accounts only.</p>
-        <button className={styles.secondaryButton} type="button" onClick={() => void logout()}>
-          Log out
-        </button>
+        <h1 className={styles.title}>Clustering</h1>
+        <p className={styles.state}>This view is available to manager accounts only.</p>
       </main>
     );
   }
@@ -208,24 +204,12 @@ export function ClusteringDashboardClient() {
     <main className={styles.page}>
       <header className={styles.header}>
         <div>
-          <p className={styles.eyebrow}>Manager analytics</p>
-          <h1 className={styles.title}>Clustering analysis</h1>
+          <p className={styles.eyebrow}>Analytics</p>
+          <h1 className={styles.title}>Clustering</h1>
           <p className={styles.lead}>
-            Compare employee workflow sessions, identify behavioural clusters, and review unusual
-            executions.
+            Compare walkthrough sessions, identify behavioural clusters, and review unusual
+            executions under the same analytics family as workflow rankings.
           </p>
-        </div>
-        <div className={styles.account}>
-          <Link className={styles.secondaryButton} href="/dashboard/variance">
-            Friction list
-          </Link>
-          <Link className={styles.secondaryButton} href="/dashboard/feedback">
-            Voice feedback
-          </Link>
-          <span>{user.email}</span>
-          <button className={styles.secondaryButton} type="button" onClick={() => void logout()}>
-            Log out
-          </button>
         </div>
       </header>
 

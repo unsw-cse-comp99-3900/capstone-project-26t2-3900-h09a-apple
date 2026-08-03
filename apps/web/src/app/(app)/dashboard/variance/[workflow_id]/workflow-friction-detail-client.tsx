@@ -32,7 +32,7 @@ function errorText(error: unknown, fallback: string): string {
 }
 
 export function WorkflowFrictionDetailClient({ workflowId }: WorkflowFrictionDetailClientProps) {
-  const { user, loading: loadingUser, logout } = useCurrentUser();
+  const { user, loading: loadingUser } = useCurrentUser();
   const [workflow, setWorkflow] = useState<FrictionWorkflowSummary | null>(null);
   const [insight, setInsight] = useState<WorkflowInsightSummaryResponse | null>(null);
   const [timings, setTimings] = useState<WorkflowClusterTimingsResponse | null>(null);
@@ -178,7 +178,7 @@ export function WorkflowFrictionDetailClient({ workflowId }: WorkflowFrictionDet
     <main className={styles.page}>
       <header className={styles.header}>
         <div>
-          <p className={styles.eyebrow}>Step-level breakdown</p>
+          <p className={styles.eyebrow}>Analytics</p>
           <h1 className={styles.title}>{workflow?.title ?? 'Workflow friction'}</h1>
           <p className={styles.lead}>
             Heatmap, path timelines, and best-vs-average overlays for SOP coaching. Employee
@@ -189,9 +189,6 @@ export function WorkflowFrictionDetailClient({ workflowId }: WorkflowFrictionDet
           <Link className={styles.secondaryButton} href="/dashboard/variance">
             Back to rankings
           </Link>
-          <button className={styles.secondaryButton} type="button" onClick={() => void logout()}>
-            Log out
-          </button>
         </div>
       </header>
 

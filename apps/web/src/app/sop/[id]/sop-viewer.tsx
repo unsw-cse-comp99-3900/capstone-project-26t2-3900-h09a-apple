@@ -1,5 +1,6 @@
 import type { SopDetailPayload, SopStepResponse, SopWarning } from '@h09a/types';
 import Image from 'next/image';
+import Link from 'next/link';
 import React from 'react';
 import styles from './sop-viewer.module.css';
 import { formatTimeEstimate } from '@/lib/time-estimate';
@@ -227,14 +228,19 @@ export function SopViewer({ sop }: SopViewerProps) {
   return (
     <main className={styles.pageShell}>
       <section className={styles.hero}>
-        <div>
+        <div className={styles.heroTop}>
+          <Link href="/library" className={styles.backButton}>
+            ← Back to library
+          </Link>
+          <div className={styles.heroActions}>
+            <div className={styles.aiBadge}>AI generated</div>
+            <StartWalkthroughButton sopId={sop.id} />
+          </div>
+        </div>
+        <div className={styles.heroCopyBlock}>
           <p className={styles.eyebrow}>WorkTrace SOP draft</p>
           <h1>{sop.title}</h1>
           <p className={styles.heroCopy}>{sop.summary}</p>
-        </div>
-        <div className={styles.heroActions}>
-          <div className={styles.aiBadge}>AI generated</div>
-          <StartWalkthroughButton sopId={sop.id} />
         </div>
       </section>
 

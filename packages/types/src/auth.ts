@@ -3,6 +3,8 @@ export type UserRole = 'EMPLOYEE' | 'REVIEWER' | 'MANAGER';
 export type AuthUser = {
   id: string;
   email: string;
+  /** Human-readable label for shell identity (derived when no profile name exists). */
+  display_name: string;
   role: UserRole;
   tenant_id: string;
 };

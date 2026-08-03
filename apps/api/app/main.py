@@ -15,6 +15,7 @@ from app.analytics_routes import router as analytics_router
 from app.auth.deps import filter_by_tenant, require_role
 from app.auth.routes import router as auth_router
 from app.consent_routes import router as consent_router
+from app.dashboard_routes import router as dashboard_router
 from app.database import get_db
 from app.feedback_routes import notifications_router
 from app.feedback_routes import router as feedback_router
@@ -27,6 +28,7 @@ from app.session_schema import (
     SessionPayload,
     SessionStatusResponse,
 )
+from app.sop_edit_routes import router as sop_edit_router
 from app.sop_embeddings import enqueue_embed_job, process_embed_job
 from app.sop_generator_selector import get_sop_generator
 from app.sop_schema import (
@@ -81,6 +83,8 @@ app.include_router(walkthrough_router)
 app.include_router(workflow_router)
 app.include_router(analytics_router)
 app.include_router(friction_router)
+app.include_router(dashboard_router)
+app.include_router(sop_edit_router)
 
 
 @app.get("/health")

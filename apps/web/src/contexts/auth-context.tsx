@@ -16,6 +16,7 @@ import { roleLandingPath } from '@/lib/auth/constants';
 import { isProtectedPath } from '@/lib/auth/protected-paths';
 import { silentRefreshAccessToken } from '@/lib/auth/session-refresh';
 import { broadcastExtensionLogout } from '@/lib/extension-logout';
+import { displayNameFromEmail } from '@/lib/user-display';
 
 type AuthContextValue = {
   user: AuthUser | null;
@@ -39,7 +40,10 @@ async function fetchMe(): Promise<{ user: AuthUser | null; expiresIn: number | n
   const body = (await response.json()) as MePayload;
   const { expires_in: expiresIn, ...user } = body;
   return {
-    user,
+    user: {
+      ...user,
+      display_name: user.display_name || displayNameFromEmail(user.email),
+    },
     expiresIn: typeof expiresIn === 'number' ? expiresIn : null,
   };
 }

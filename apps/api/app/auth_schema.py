@@ -108,6 +108,7 @@ class ResetPasswordResponse(BaseModel):
 class MeResponse(BaseModel):
     id: UUID
     email: NormalizedEmail
+    display_name: str
     role: UserRole
     tenant_id: UUID
 

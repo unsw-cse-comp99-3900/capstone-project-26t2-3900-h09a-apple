@@ -2,15 +2,17 @@
   --navy: #1e293b;
   --slate: #64748b;
   --indigo: #4f46e5;
+  --indigo-light: #eef2ff;
+  --indigo-border: #c7d2fe;
   --border: #e2e8f0;
-  --page-bg: #f7f8fc;
+  --page-bg: transparent;
   --card-bg: #ffffff;
   --danger: #b91c1c;
 
-  min-height: 100vh;
-  background: var(--page-bg);
+  width: min(1100px, 100%);
+  margin: 0 auto;
   color: var(--navy);
-  padding: 2.5rem 2rem 4rem;
+  padding: 0 0 2.5rem;
   font-family:
     'Inter',
     system-ui,
@@ -18,9 +20,27 @@
     sans-serif;
 }
 
+.embedded {
+  --navy: #1e293b;
+  --slate: #64748b;
+  --indigo: #4f46e5;
+  --indigo-light: #eef2ff;
+  --indigo-border: #c7d2fe;
+  --border: #e2e8f0;
+  --card-bg: #ffffff;
+  --danger: #b91c1c;
+  width: 100%;
+  margin: 0;
+  color: var(--navy);
+  padding: 0;
+}
+
 .header {
-  max-width: 960px;
-  margin: 0 auto 1.75rem;
+  margin: 0 0 1.5rem;
+  padding: 2rem 2.25rem;
+  border-radius: 20px;
+  background: linear-gradient(135deg, #eef2ff 0%, #f7f8fc 60%, #ffffff 100%);
+  border: 1px solid var(--indigo-border);
   display: flex;
   justify-content: space-between;
   gap: 1.5rem;
@@ -37,8 +57,8 @@
 }
 
 .title {
-  margin: 0.4rem 0 0;
-  font-size: 2rem;
+  margin: 0.5rem 0 0;
+  font-size: clamp(1.85rem, 3vw, 2.25rem);
   font-weight: 800;
   letter-spacing: -0.02em;
 }
@@ -47,7 +67,8 @@
   margin: 0.75rem 0 0;
   max-width: 48ch;
   color: var(--slate);
-  line-height: 1.55;
+  font-size: 1rem;
+  line-height: 1.6;
 }
 
 .headerActions {
@@ -65,21 +86,18 @@
 }
 
 .muted {
-  max-width: 960px;
-  margin: 0 auto;
+  margin: 0;
   color: var(--slate);
 }
 
 .error {
-  max-width: 960px;
-  margin: 0 auto 1rem;
+  margin: 0 0 1rem;
   color: var(--danger);
   font-weight: 600;
 }
 
 .empty {
-  max-width: 960px;
-  margin: 0 auto;
+  margin: 0;
   padding: 2rem;
   border: 1px solid var(--border);
   border-radius: 16px;
@@ -97,8 +115,7 @@
 
 .list {
   list-style: none;
-  max-width: 960px;
-  margin: 0 auto;
+  margin: 0;
   padding: 0;
   display: grid;
   gap: 1rem;
@@ -198,10 +215,10 @@
 }
 
 .tabs {
-  max-width: 960px;
-  margin: 0 auto 1.25rem;
+  margin: 0 0 1.5rem;
   display: flex;
-  gap: 0.5rem;
+  flex-wrap: wrap;
+  gap: 0.75rem;
 }
 
 .tab {
@@ -209,26 +226,31 @@
   background: #fff;
   color: var(--slate);
   border-radius: 999px;
-  padding: 0.45rem 0.9rem;
+  padding: 0.55rem 1.2rem;
   cursor: pointer;
+  font-size: 0.9rem;
   font-weight: 600;
 }
 
-.tabActive {
-  background: #eef2ff;
-  border-color: #c7d2fe;
+.tab:hover {
+  border-color: var(--indigo-border);
   color: var(--indigo);
 }
 
+.tabActive {
+  background: var(--indigo);
+  border-color: var(--indigo);
+  color: #fff;
+}
+
 .feedbackPanel {
-  max-width: 1100px;
-  margin: 0 auto;
+  margin: 0;
 }
 
 .feedbackToolbar {
   display: flex;
   gap: 0.75rem;
-  align-items: end;
+  align-items: flex-end;
   margin-bottom: 1rem;
 }
 
@@ -324,9 +346,115 @@
   white-space: pre-wrap;
 }
 
+.editorPanel {
+  margin: 0;
+  display: grid;
+  gap: 1.1rem;
+}
+
+.editorHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.editorTitle {
+  margin: 0.35rem 0 0;
+  font-size: 1.35rem;
+}
+
+.editorList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.85rem;
+}
+
+.editorCard {
+  border: 1px solid var(--border);
+  border-radius: 0.9rem;
+  background: #fff;
+  padding: 1rem;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.editorCardTop {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.editorLabel {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--slate);
+}
+
+.editorTextarea {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 0.65rem;
+  padding: 0.7rem 0.8rem;
+  font: inherit;
+  line-height: 1.45;
+  resize: vertical;
+}
+
+.notice {
+  margin: 0;
+  color: #0f766e;
+  font-weight: 600;
+}
+
+.editHistory {
+  border-top: 1px solid var(--border);
+  padding-top: 1rem;
+}
+
+.editHistory h3 {
+  margin: 0 0 0.65rem;
+  font-size: 1rem;
+}
+
+.historyList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.historyMeta {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--slate);
+}
+
+.historyBefore,
+.historyAfter {
+  margin: 0.25rem 0 0;
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.historyBefore {
+  color: #9a3412;
+}
+
+.historyAfter {
+  color: #166534;
+}
+
 @media (max-width: 720px) {
   .header,
-  .card {
+  .card,
+  .editorHeader,
+  .editorCardTop {
     flex-direction: column;
   }
 

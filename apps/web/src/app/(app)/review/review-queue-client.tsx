@@ -5,10 +5,14 @@ import { useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import type { SopLibraryItem } from '@h09a/types';
 
+import { StateEmpty } from '@/components/ui/state-empty';
+import { StateError } from '@/components/ui/state-error';
+import { StateLoading } from '@/components/ui/state-loading';
 import { useCurrentUser } from '@/contexts/auth-context';
 import { ApiError, approveSop, getSopsByStatus, publishSop } from '@/lib/api';
 
 import styles from './review.module.css';
+import { SopStepEditor } from './sop-step-editor';
 import { VoiceFeedbackPanel } from './voice-feedback-panel';
 
 type QueueItem = SopLibraryItem & { busy?: boolean };
@@ -25,8 +29,13 @@ function canAccessReview(role: string | undefined): boolean {
   return role === 'REVIEWER' || role === 'MANAGER';
 }
 
-export function ReviewQueueClient() {
-  const { user, loading, logout } = useCurrentUser();
+type ReviewQueueClientProps = {
+  /** Hide page chrome when rendered inside the dashboard primary column. */
+  embedded?: boolean;
+};
+
+export function ReviewQueueClient({ embedded = false }: ReviewQueueClientProps) {
+  const { user, loading } = useCurrentUser();
   const searchParams = useSearchParams();
   const requestedTab = searchParams.get('tab') === 'feedback' ? 'feedback' : 'sops';
   const feedbackId = searchParams.get('feedbackId');
@@ -34,6 +43,7 @@ export function ReviewQueueClient() {
   const [items, setItems] = useState<QueueItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loadingQueue, setLoadingQueue] = useState(true);
+  const [editingSopId, setEditingSopId] = useState<string | null>(null);
 
   const loadQueue = useCallback(async () => {
     setLoadingQueue(true);
@@ -104,83 +114,68 @@ export function ReviewQueueClient() {
     }
   }
 
+  const shellClass = embedded ? styles.embedded : styles.page;
+
   if (loading) {
     return (
-      <main className={styles.page}>
+      <div className={shellClass}>
         <p className={styles.muted}>Loading session...</p>
-      </main>
+      </div>
     );
   }
 
   if (!user) {
     return (
-      <main className={styles.page}>
+      <div className={shellClass}>
         <p className={styles.muted}>Redirecting to sign in...</p>
-      </main>
+      </div>
     );
   }
 
   if (!canAccessReview(user.role)) {
     return (
-      <main className={styles.page}>
+      <div className={shellClass}>
         <h1 className={styles.title}>Review queue</h1>
         <p className={styles.muted}>
           This page is for REVIEWER and MANAGER accounts. Signed in as {user.email} ({user.role}).
         </p>
-        <div className={styles.headerActions}>
-          <Link href="/library" className={styles.linkButton}>
-            Open library
-          </Link>
-          <button type="button" className={styles.secondaryButton} onClick={() => void logout()}>
-            Log out
-          </button>
-        </div>
-      </main>
+      </div>
     );
   }
 
   return (
-    <main className={styles.page}>
-      <header className={styles.header}>
-        <div>
-          <p className={styles.eyebrow}>
-            {user.role === 'MANAGER' ? 'Manager workspace' : 'Reviewer workspace'}
-          </p>
-          <h1 className={styles.title}>Review queue</h1>
-          <p className={styles.lead}>
-            Approve draft SOPs and review employee voice feedback with transcript and severity.
-          </p>
-        </div>
-        <div className={styles.headerActions}>
-          <p className={styles.userMeta}>
-            {user.email} ({user.role})
-          </p>
-          {user.role === 'MANAGER' ? (
-            <Link href="/dashboard/feedback" className={styles.linkButton}>
-              Feedback dashboard
-            </Link>
-          ) : null}
-          <Link href="/library" className={styles.linkButton}>
-            Library
-          </Link>
-          <button type="button" className={styles.secondaryButton} onClick={() => void logout()}>
-            Log out
-          </button>
-        </div>
-      </header>
+    <div className={shellClass}>
+      {embedded ? null : (
+        <header className={styles.header}>
+          <div>
+            <p className={styles.eyebrow}>Workspace</p>
+            <h1 className={styles.title}>Review queue</h1>
+            <p className={styles.lead}>
+              Approve draft SOPs, edit step descriptions immediately, and review employee voice
+              feedback.
+            </p>
+          </div>
+        </header>
+      )}
 
       <div className={styles.tabs}>
         <button
           type="button"
           className={`${styles.tab} ${tab === 'sops' ? styles.tabActive : ''}`}
-          onClick={() => setTab('sops')}
+          onClick={() => {
+            setTab('sops');
+            setEditingSopId(null);
+          }}
         >
           SOP queue
         </button>
         <button
           type="button"
           className={`${styles.tab} ${tab === 'feedback' ? styles.tabActive : ''}`}
-          onClick={() => setTab('feedback')}
+          onClick={() => {
+            setTab('feedback');
+            setEditingSopId(null);
+          }}
         >
           Voice feedback
         </button>
@@ -188,17 +183,23 @@ export function ReviewQueueClient() {
 
       {tab === 'feedback' ? (
         <VoiceFeedbackPanel initialFeedbackId={feedbackId} />
+      ) : editingSopId ? (
+        <SopStepEditor sopId={editingSopId} onClose={() => setEditingSopId(null)} />
       ) : (
         <>
-          {error ? <p className={styles.error}>{error}</p> : null}
+          {error ? (
+            <StateError message={error} code="REV_QUEUE_LOAD" onRetry={() => void loadQueue()} />
+          ) : null}
 
           {loadingQueue ? (
-            <p className={styles.muted}>Loading review queue...</p>
+            <StateLoading rows={4} />
           ) : items.length === 0 ? (
-            <section className={styles.empty}>
-              <h2>No SOPs waiting</h2>
-              <p>Draft and approved SOPs in this workspace will show up here.</p>
-            </section>
+            <StateEmpty
+              title="No SOPs waiting"
+              body="Draft and approved SOPs in this workspace will show up here."
+              actionLabel="Open library"
+              actionHref="/library"
+            />
           ) : (
             <ul className={styles.list}>
               {items.map((sop) => (
@@ -209,9 +210,15 @@ export function ReviewQueueClient() {
                       <span className={styles.steps}>{sop.step_count} steps</span>
                     </div>
                     <h2 className={styles.cardTitle}>{sop.title}</h2>
-                    <p className={styles.cardId}>{sop.id}</p>
                   </div>
                   <div className={styles.cardActions}>
+                    <button
+                      type="button"
+                      className={styles.linkButton}
+                      onClick={() => setEditingSopId(sop.id)}
+                    >
+                      Edit steps
+                    </button>
                     <Link href={`/sop/${sop.id}`} className={styles.linkButton}>
                       Open
                     </Link>
@@ -242,6 +249,6 @@ export function ReviewQueueClient() {
           )}
         </>
       )}
-    </main>
+    </div>
   );
 }

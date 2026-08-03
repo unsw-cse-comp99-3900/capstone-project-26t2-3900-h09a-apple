@@ -7,6 +7,10 @@ const dashboardSource = readFileSync(
 );
 const cardSource = readFileSync(new URL('./workflow-friction-card.tsx', import.meta.url), 'utf-8');
 const pageSource = readFileSync(new URL('./page.tsx', import.meta.url), 'utf-8');
+const navSource = readFileSync(
+  new URL('../../../../components/shell/nav-items.ts', import.meta.url),
+  'utf-8',
+);
 
 describe('variance dashboard friction list (H09AAPPLE-38)', () => {
   it('server-renders the initial friction list payload', () => {
@@ -17,8 +21,10 @@ describe('variance dashboard friction list (H09AAPPLE-38)', () => {
   it('loads ranked workflows for managers and keeps clustering secondary', () => {
     expect(dashboardSource).toContain('getFrictionWorkflowList');
     expect(dashboardSource).toContain("user?.role !== 'MANAGER'");
-    expect(dashboardSource).toContain('/dashboard/variance/clustering');
     expect(dashboardSource).toContain('WorkflowFrictionCard');
+    // Clustering stays a sibling Analytics route in the shell, not an in-page primary CTA.
+    expect(dashboardSource).toContain('sidebar for clustering');
+    expect(navSource).toContain('/dashboard/variance/clustering');
   });
 
   it('refreshes rankings when friction analysis updates arrive', () => {

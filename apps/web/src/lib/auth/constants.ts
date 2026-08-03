@@ -4,9 +4,9 @@ export const ACCESS_TOKEN_COOKIE = 'wt_access_token';
 export const REFRESH_TOKEN_COOKIE = 'wt_refresh_token';
 
 const ROLE_LANDING: Record<UserRole, string> = {
-  EMPLOYEE: '/library',
-  REVIEWER: '/review',
-  MANAGER: '/dashboard/variance',
+  EMPLOYEE: '/dashboard',
+  REVIEWER: '/dashboard',
+  MANAGER: '/dashboard',
 };
 
 export function roleLandingPath(role: UserRole): string {
