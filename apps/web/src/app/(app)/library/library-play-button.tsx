@@ -86,6 +86,7 @@ export function LibraryPlayButton({ sopId, onError, onSuccess }: LibraryPlayButt
         consentType="walkthrough"
         onAccepted={handleAccepted}
         onDeclined={handleDeclined}
+        onDismiss={() => setModalOpen(false)}
       />
     </>
   );

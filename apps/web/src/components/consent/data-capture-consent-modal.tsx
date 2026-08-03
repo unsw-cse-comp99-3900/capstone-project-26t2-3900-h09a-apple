@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 import { acceptConsent, getConsentStatus } from '@/lib/api';
 import { CONSENT_COPY, CONSENT_TERMS_VERSION, type ConsentType } from '@/lib/consent/constants';
@@ -21,6 +22,8 @@ type DataCaptureConsentModalProps = {
   consentType: ConsentType;
   onAccepted: () => void;
   onDeclined: () => void;
+  /** Close without accepting (X, Escape, overlay). Defaults to onDeclined. */
+  onDismiss?: () => void;
 };
 
 export function DataCaptureConsentModal({
@@ -28,10 +31,17 @@ export function DataCaptureConsentModal({
   consentType,
   onAccepted,
   onDeclined,
+  onDismiss,
 }: DataCaptureConsentModalProps) {
+  const dismiss = onDismiss ?? onDeclined;
   const [declined, setDeclined] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     if (open) {
@@ -41,7 +51,22 @@ export function DataCaptureConsentModal({
     }
   }, [open]);
 
-  if (!open) {
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        dismiss();
+      }
+    }
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [open, dismiss]);
+
+  if (!open || !mounted) {
     return null;
   }
 
@@ -68,15 +93,35 @@ export function DataCaptureConsentModal({
     onDeclined();
   }
 
-  return (
-    <div className={styles.overlay} role="presentation">
+  return createPortal(
+    <div
+      className={styles.overlay}
+      role="presentation"
+      onClick={(event) => {
+        if (event.target === event.currentTarget) {
+          dismiss();
+        }
+      }}
+    >
       <div
         className={styles.modal}
         role="dialog"
         aria-modal="true"
         aria-labelledby="consent-title"
         aria-describedby="consent-description"
+        onClick={(event) => event.stopPropagation()}
       >
+        <button type="button" className={styles.closeButton} aria-label="Close" onClick={dismiss}>
+          <svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true" focusable="false">
+            <path
+              d="M5 5l10 10M15 5L5 15"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+            />
+          </svg>
+        </button>
         {declined ? (
           <>
             <h2 id="consent-title">{CONSENT_COPY.declineTitle}</h2>
@@ -135,7 +180,8 @@ export function DataCaptureConsentModal({
           </>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
