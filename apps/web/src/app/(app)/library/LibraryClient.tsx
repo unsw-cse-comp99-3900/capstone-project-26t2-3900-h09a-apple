@@ -1,110 +1,160 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import type { SopLibraryItem } from '@h09a/types';
 
-import { getMyDrafts, getPublishedSops } from '@/lib/api';
+import { StateEmpty } from '@/components/ui/state-empty';
+import { StateError } from '@/components/ui/state-error';
+import { StateLoading } from '@/components/ui/state-loading';
+import { getMyDrafts, getMyPublishedSops, getPublishedSops } from '@/lib/api';
 
 import SopCard from './SopCard';
-import EmptyState from './EmptyState';
+import {
+  applyLibraryChip,
+  countLibraryChips,
+  filterAndRankSops,
+  type LibraryFilterChip,
+} from './library-search';
 import styles from './library.module.css';
+
+const VIEW_STORAGE_KEY = 'worktrace.library.view';
+const SEARCH_DEBOUNCE_MS = 200;
+const LIBRARY_ERROR_CODE = 'LIBRARY_LOAD_FAILED';
+
+type LibraryTab = 'published' | 'drafts';
+type LibraryView = 'grid' | 'list';
+
+function readStoredView(): LibraryView {
+  if (typeof window === 'undefined') {
+    return 'grid';
+  }
+
+  return window.localStorage.getItem(VIEW_STORAGE_KEY) === 'list' ? 'list' : 'grid';
+}
+
+function formatRefreshedAt(value: Date | null): string {
+  if (!value) {
+    return 'Not refreshed yet';
+  }
+
+  return `Last refreshed ${value.toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  })}`;
+}
 
 // Client-side SOP library with authenticated data loading.
 export default function LibraryClient() {
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
 
-  const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState(() => searchParams.get('search') ?? '');
+  const [debouncedSearch, setDebouncedSearch] = useState(() => searchParams.get('search') ?? '');
+  const [chip, setChip] = useState<LibraryFilterChip>('all');
+  const [view, setView] = useState<LibraryView>('grid');
 
   const [publishedSops, setPublishedSops] = useState<SopLibraryItem[]>([]);
   const [draftSops, setDraftSops] = useState<SopLibraryItem[]>([]);
+  const [minePublishedIds, setMinePublishedIds] = useState<Set<string>>(new Set());
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<Date | null>(null);
+  const [launchError, setLaunchError] = useState<string | null>(null);
 
-  const [tab, setTab] = useState<'published' | 'drafts'>('published');
+  const [tab, setTab] = useState<LibraryTab>('published');
 
   useEffect(() => {
-    async function loadPublished() {
-      try {
-        const data = await getPublishedSops();
-        setPublishedSops(data.sops);
-      } catch {
-        setError('Failed to load SOP library.');
-      }
-    }
+    setView(readStoredView());
+  }, []);
 
-    async function loadDrafts() {
-      try {
-        const data = await getMyDrafts();
-        setDraftSops(data.sops);
-      } catch {
-        setError('Failed to load your draft SOPs.');
-      }
-    }
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedSearch(searchInput);
+    }, SEARCH_DEBOUNCE_MS);
 
-    async function load() {
-      setError(null);
-
-      if (tab === 'published') {
-        if (publishedSops.length === 0) {
-          setLoading(true);
-          await loadPublished();
-          setLoading(false);
-        }
-      } else {
-        if (draftSops.length === 0) {
-          setLoading(true);
-          await loadDrafts();
-          setLoading(false);
-        }
-      }
-    }
-
-    void load();
-  }, [tab, publishedSops.length, draftSops.length]);
+    return () => window.clearTimeout(timer);
+  }, [searchInput]);
 
   useEffect(() => {
     const params = new URLSearchParams();
-
-    if (search.trim()) {
-      params.set('search', search);
+    const trimmed = debouncedSearch.trim();
+    if (trimmed) {
+      params.set('search', trimmed);
     }
 
     const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  }, [debouncedSearch, pathname, router]);
 
-    router.replace(query ? `${pathname}?${query}` : pathname, {
-      scroll: false,
-    });
-  }, [search, pathname, router]);
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    setLaunchError(null);
+
+    try {
+      if (tab === 'published') {
+        const published = await getPublishedSops();
+        setPublishedSops(published.sops);
+
+        try {
+          const minePublished = await getMyPublishedSops();
+          setMinePublishedIds(new Set(minePublished.sops.map((sop) => sop.id)));
+        } catch {
+          setMinePublishedIds(new Set());
+        }
+      } else {
+        const drafts = await getMyDrafts();
+        setDraftSops(drafts.sops);
+      }
+
+      setLastRefreshedAt(new Date());
+    } catch {
+      setError(
+        tab === 'published'
+          ? 'Could not load the SOP library. Check your connection and try again.'
+          : 'Could not load your draft SOPs. Check your connection and try again.',
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [tab]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   const sops = tab === 'published' ? publishedSops : draftSops;
 
-  const filtered = useMemo(() => {
-    const keyword = search.trim().toLowerCase();
-
-    if (!keyword) {
-      return sops;
+  const mineIds = useMemo(() => {
+    if (tab === 'drafts') {
+      return new Set(draftSops.map((sop) => sop.id));
     }
+    return minePublishedIds;
+  }, [tab, draftSops, minePublishedIds]);
 
-    return sops.filter((sop) => sop.title.toLowerCase().includes(keyword));
-  }, [search, sops]);
+  const chipCounts = useMemo(() => countLibraryChips(sops, mineIds), [sops, mineIds]);
 
-  if (loading) {
-    return (
-      <div className={styles.container}>
-        <p className={styles.count}>Loading procedures...</p>
-      </div>
-    );
+  const chipFiltered = useMemo(() => applyLibraryChip(sops, chip, mineIds), [sops, chip, mineIds]);
+
+  const filtered = useMemo(
+    () => filterAndRankSops(chipFiltered, debouncedSearch),
+    [chipFiltered, debouncedSearch],
+  );
+
+  function handleViewChange(next: LibraryView) {
+    setView(next);
+    window.localStorage.setItem(VIEW_STORAGE_KEY, next);
   }
 
-  if (error) {
-    return (
-      <div className={styles.container}>
-        <p className={styles.count}>{error}</p>
-      </div>
-    );
+  function clearSearchAndFilters() {
+    setSearchInput('');
+    setDebouncedSearch('');
+    setChip('all');
   }
 
   return (
@@ -112,9 +162,7 @@ export default function LibraryClient() {
       <div className={styles.hero}>
         <div>
           <p className={styles.eyebrow}>Workspace</p>
-
           <h1 className={styles.title}>SOP Library</h1>
-
           <p className={styles.subtitle}>
             Every procedure your team has recorded, ready to open and follow step by step.
           </p>
@@ -125,62 +173,142 @@ export default function LibraryClient() {
         <button
           type="button"
           className={tab === 'published' ? styles.activeTab : styles.tab}
-          onClick={() => setTab('published')}
+          onClick={() => {
+            setTab('published');
+            setChip('all');
+          }}
         >
           Published
         </button>
-
         <button
           type="button"
           className={tab === 'drafts' ? styles.activeTab : styles.tab}
-          onClick={() => setTab('drafts')}
+          onClick={() => {
+            setTab('drafts');
+            setChip('all');
+          }}
         >
           My Drafts
         </button>
       </div>
 
       <div className={styles.drawer}>
-        <label htmlFor="search" className={styles.drawerLabel}>
-          Find a procedure
-        </label>
+        <div className={styles.controlsRow}>
+          <div className={styles.searchBlock}>
+            <label htmlFor="search" className={styles.drawerLabel}>
+              Find a procedure
+            </label>
+            <input
+              id="search"
+              type="search"
+              placeholder="Search by title…"
+              value={searchInput}
+              onChange={(event) => setSearchInput(event.target.value)}
+              className={styles.input}
+            />
+          </div>
 
-        <input
-          id="search"
-          type="text"
-          placeholder="Search by title…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className={styles.input}
-        />
+          <div className={styles.viewToggle} role="group" aria-label="Library view">
+            <button
+              type="button"
+              className={view === 'grid' ? styles.viewActive : styles.viewButton}
+              aria-pressed={view === 'grid'}
+              onClick={() => handleViewChange('grid')}
+            >
+              Grid
+            </button>
+            <button
+              type="button"
+              className={view === 'list' ? styles.viewActive : styles.viewButton}
+              aria-pressed={view === 'list'}
+              onClick={() => handleViewChange('list')}
+            >
+              List
+            </button>
+          </div>
+        </div>
+
+        <div className={styles.chips} role="group" aria-label="Library filters">
+          {(
+            [
+              ['all', 'All'],
+              ['recent', 'Recently updated'],
+              ['mine', 'Mine'],
+            ] as const
+          ).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              className={chip === id ? styles.chipActive : styles.chip}
+              aria-pressed={chip === id}
+              onClick={() => setChip(id)}
+            >
+              {label} <span className={styles.chipCount}>{chipCounts[id]}</span>
+            </button>
+          ))}
+        </div>
 
         <p className={styles.count}>
-          Showing {filtered.length} of {sops.length}{' '}
-          {tab === 'published' ? 'published procedures' : 'draft procedures'}
+          Showing {filtered.length} of {sops.length}
+          <span className={styles.countMeta}> · {formatRefreshedAt(lastRefreshedAt)}</span>
         </p>
       </div>
 
-      {sops.length === 0 ? (
-        tab === 'published' ? (
-          <EmptyState />
-        ) : (
-          <EmptyState
-            title="No draft SOPs yet."
-            description="Your submitted SOPs will appear here until they are published."
-          />
-        )
+      {launchError ? (
+        <p className={styles.launchError} role="alert">
+          {launchError}
+        </p>
+      ) : null}
+
+      {loading ? (
+        <div className={styles.stateSlot}>
+          <StateLoading rows={4} label="Loading procedures" />
+        </div>
+      ) : error ? (
+        <div className={styles.stateSlot}>
+          <StateError message={error} code={LIBRARY_ERROR_CODE} onRetry={() => void load()} />
+        </div>
+      ) : sops.length === 0 ? (
+        <div className={styles.stateSlot}>
+          {tab === 'published' ? (
+            <StateEmpty
+              title="No procedures filed yet"
+              body="Record your first workflow to start the library."
+              actionLabel="Open dashboard"
+              actionHref="/dashboard"
+            />
+          ) : (
+            <StateEmpty
+              title="No draft SOPs yet"
+              body="Your submitted SOPs will appear here until they are published."
+              actionLabel="Open dashboard"
+              actionHref="/dashboard"
+            />
+          )}
+        </div>
       ) : filtered.length === 0 ? (
-        <EmptyState
-          title="No procedures match your search."
-          description={
-            tab === 'published'
-              ? 'Try a different keyword or clear the search to see all published procedures.'
-              : 'Try a different keyword or clear the search to see all of your draft SOPs.'
-          }
-        />
+        <div className={styles.stateSlot}>
+          <StateEmpty
+            title="No matching procedures"
+            body={
+              debouncedSearch.trim()
+                ? `Nothing matched "${debouncedSearch.trim()}" with the current filter. Clear the search to see more results.`
+                : 'Nothing matched the current filter. Clear filters to see all procedures in this tab.'
+            }
+            actionLabel="Clear search and filters"
+            onAction={clearSearchAndFilters}
+          />
+        </div>
       ) : (
-        <div className={styles.grid}>
+        <div className={view === 'list' ? styles.list : styles.grid}>
           {filtered.map((sop) => (
-            <SopCard key={sop.id} sop={sop} />
+            <SopCard
+              key={sop.id}
+              sop={sop}
+              view={view}
+              onLaunchError={(message) => setLaunchError(message)}
+              onLaunchSuccess={() => setLaunchError(null)}
+            />
           ))}
         </div>
       )}
