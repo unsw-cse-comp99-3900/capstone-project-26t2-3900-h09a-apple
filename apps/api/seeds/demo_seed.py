@@ -97,7 +97,6 @@ def ensure_demo_session(
     *,
     employee: models.User,
 ) -> models.Session:
-
     session = (
         db.query(models.Session)
         .filter(
@@ -171,7 +170,6 @@ def ensure_demo_sop(
     *,
     session: models.Session,
 ) -> models.Sop:
-
     sop = (
         db.query(models.Sop)
         .filter(
@@ -255,7 +253,6 @@ def ensure_demo_walkthroughs(
     sop: models.Sop,
     employee: models.User,
 ) -> None:
-
     completions = (
         db.query(models.WalkthroughCompletion)
         .filter(
@@ -291,7 +288,6 @@ def ensure_demo_walkthroughs(
     base_time = utc_now() - timedelta(hours=3)
 
     for index, timings in enumerate(TIMING_VARIANTS):
-
         completed = models.WalkthroughCompletion(
             tenant_id=TENANT_ID,
             sop_id=sop.id,
@@ -306,7 +302,6 @@ def ensure_demo_walkthroughs(
         db.flush()
 
         for step_number, duration in enumerate(timings, start=1):
-
             db.add(
                 models.WalkthroughStepTiming(
                     completion_id=completed.id,
@@ -339,7 +334,6 @@ def ensure_demo_friction_analysis(
     *,
     sop: models.Sop,
 ) -> None:
-
     analysis = (
         db.query(models.FrictionAnalysis)
         .filter(

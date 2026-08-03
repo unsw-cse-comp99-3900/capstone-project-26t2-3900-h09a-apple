@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 from uuid import UUID
-from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -39,9 +39,7 @@ def setup_demo_environment():
 
     seed_demo()
 
-    app.dependency_overrides[get_current_user] = (
-        lambda: _mock_user(models.UserRole.manager.value)
-    )
+    app.dependency_overrides[get_current_user] = lambda: _mock_user(models.UserRole.manager.value)
 
     yield
 
@@ -77,20 +75,13 @@ def test_01_seed_multi_session_integrity(db_session):
     - >=1 friction event
     """
 
-    sop = (
-        db_session.query(models.Sop)
-        .filter(models.Sop.tenant_id == TENANT_ID)
-        .first()
-    )
+    sop = db_session.query(models.Sop).filter(models.Sop.tenant_id == TENANT_ID).first()
 
     assert sop is not None
 
     assert sop.status == models.SopStatus.published.value
 
-    assert (
-        sop.embedding_status
-        == models.EmbeddingStatus.complete.value
-    )
+    assert sop.embedding_status == models.EmbeddingStatus.complete.value
 
     completions = (
         db_session.query(models.WalkthroughCompletion)
@@ -102,11 +93,7 @@ def test_01_seed_multi_session_integrity(db_session):
 
     friction_events = (
         db_session.query(models.WalkthroughFrictionEvent)
-        .filter(
-            models.WalkthroughFrictionEvent.completion_id.in_(
-                [c.id for c in completions]
-            )
-        )
+        .filter(models.WalkthroughFrictionEvent.completion_id.in_([c.id for c in completions]))
         .all()
     )
 
@@ -129,11 +116,7 @@ def test_02_kmeans_clustering_api(db_session):
     than the required sessions returns HTTP 422.
     """
 
-    sop = (
-        db_session.query(models.Sop)
-        .filter(models.Sop.tenant_id == TENANT_ID)
-        .first()
-    )
+    sop = db_session.query(models.Sop).filter(models.Sop.tenant_id == TENANT_ID).first()
 
     assert sop is not None
 
@@ -163,6 +146,7 @@ def test_02_kmeans_clustering_api(db_session):
 
     assert "metadata" in body
 
+
 # ============================================================
 # Smoke Test 3
 # Friction Analysis
@@ -174,17 +158,11 @@ def test_03_friction_analysis_api(db_session):
     Verify friction analysis exists for the seeded SOP.
     """
 
-    sop = (
-        db_session.query(models.Sop)
-        .filter(models.Sop.tenant_id == TENANT_ID)
-        .first()
-    )
+    sop = db_session.query(models.Sop).filter(models.Sop.tenant_id == TENANT_ID).first()
 
     assert sop is not None
 
-    response = client.get(
-        f"/api/v1/analytics/friction/{sop.id}"
-    )
+    response = client.get(f"/api/v1/analytics/friction/{sop.id}")
 
     assert response.status_code == 200
 
@@ -209,13 +187,9 @@ def test_04_dashboard_summary_api():
     can be surfaced through the dashboard.
     """
 
-    app.dependency_overrides[get_current_user] = (
-        lambda: _mock_user(models.UserRole.employee.value)
-    )
+    app.dependency_overrides[get_current_user] = lambda: _mock_user(models.UserRole.employee.value)
 
-    response = client.get(
-        "/api/v1/dashboard/summary"
-    )
+    response = client.get("/api/v1/dashboard/summary")
 
     assert response.status_code == 200
 
@@ -246,13 +220,9 @@ def test_05_feedback_api():
     contract rather than specific seeded records.
     """
 
-    app.dependency_overrides[get_current_user] = (
-        lambda: _mock_user(models.UserRole.manager.value)
-    )
+    app.dependency_overrides[get_current_user] = lambda: _mock_user(models.UserRole.manager.value)
 
-    response = client.get(
-        "/api/v1/feedback"
-    )
+    response = client.get("/api/v1/feedback")
 
     assert response.status_code == 200
 
@@ -264,9 +234,7 @@ def test_05_feedback_api():
         list,
     )
 
-    stats = client.get(
-        "/api/v1/feedback/stats"
-    )
+    stats = client.get("/api/v1/feedback/stats")
 
     assert stats.status_code == 200
 
@@ -293,31 +261,19 @@ def test_06_demo_environment_health(db_session):
     seed data is partially deleted or duplicated.
     """
 
-    sop_count = (
-        db_session.query(models.Sop)
-        .filter(models.Sop.tenant_id == TENANT_ID)
-        .count()
-    )
+    sop_count = db_session.query(models.Sop).filter(models.Sop.tenant_id == TENANT_ID).count()
 
-    completion_count = (
-        db_session.query(models.WalkthroughCompletion)
-        .count()
-    )
+    completion_count = db_session.query(models.WalkthroughCompletion).count()
 
-    friction_count = (
-        db_session.query(models.WalkthroughFrictionEvent)
-        .count()
-    )
+    friction_count = db_session.query(models.WalkthroughFrictionEvent).count()
 
-    embedding_count = (
-        db_session.query(models.SopStepEmbedding)
-        .count()
-    )
+    embedding_count = db_session.query(models.SopStepEmbedding).count()
 
     assert sop_count >= 1
     assert completion_count >= 4
     assert friction_count >= 1
     assert embedding_count >= 4
+
 
 def test_07_health():
     response = client.get("/api/v1/health")
@@ -336,10 +292,9 @@ def test_08_sop_list():
 
     assert len(response.json()) >= 1
 
+
 def test_09_voice_transcription():
-    app.dependency_overrides[get_current_user] = (
-        lambda: _mock_user(models.UserRole.employee.value)
-    )
+    app.dependency_overrides[get_current_user] = lambda: _mock_user(models.UserRole.employee.value)
 
     audio_path = Path(__file__).parent / "assets" / "demo.webm"
 
