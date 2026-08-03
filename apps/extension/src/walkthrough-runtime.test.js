@@ -265,10 +265,11 @@ test('playing walkthrough mounts overlay with previous disabled on step 1', asyn
     sentMessages.filter((m) => m.type === 'WALKTHROUGH_STEP_ENTERED')[0]?.step_number,
     1,
   );
-
+  const styleText = host.shadowRoot.querySelector('style').textContent;
   // Host is non-blocking; tooltip buttons opt back into pointer events via CSS.
-  assert.match(host.shadowRoot.innerHTML, /\.backdrop\s*\{[^}]*pointer-events:\s*none/);
-  assert.match(host.shadowRoot.innerHTML, /\.tooltip\s*\{[^}]*pointer-events:\s*auto/);
+  assert.match(styleText, /\.backdrop\s*\{[^}]*pointer-events:\s*none/);
+  assert.match(styleText, /\.tooltip\s*\{[^}]*pointer-events:\s*none/);
+  assert.match(styleText, /\.assistant-panel\s*\{[^}]*pointer-events:\s*auto/);
 });
 
 test('next and previous update step index and re-enter without duplicate open visits', async () => {
