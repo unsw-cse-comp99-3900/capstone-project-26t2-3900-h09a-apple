@@ -78,6 +78,9 @@
    *   occurred_at: number,
    * }>} */
   let assistantExpanded = true;
+  let assistantTransitionState = 'open';
+  let assistantTransitionTimer = null;
+  const ASSISTANT_TRANSITION_MS = 560;
   let assistantMode = 'auto';
   let assistantTab = 'prompt';
   let assistantQuestion = '';
@@ -1012,6 +1015,44 @@
     };
   }
 
+  function setAssistantExpanded(nextExpanded, tooltip = null) {
+    if (assistantTransitionTimer != null) {
+      clearTimeout(assistantTransitionTimer);
+      assistantTransitionTimer = null;
+    }
+
+    const targetTooltip = tooltip ?? shadowRoot?.querySelector('.tooltip');
+    if (!targetTooltip) {
+      assistantExpanded = nextExpanded;
+      assistantTransitionState = nextExpanded ? 'open' : 'closed';
+      return;
+    }
+
+    assistantExpanded = true;
+    targetTooltip.dataset.expanded = 'true';
+    targetTooltip.dataset.loading = String(assistantLoading);
+    targetTooltip.dataset.panelPhase = nextExpanded ? 'closed' : 'open';
+
+    void targetTooltip.offsetWidth;
+
+    requestAnimationFrame(() => {
+      assistantTransitionState = nextExpanded ? 'opening' : 'closing';
+      targetTooltip.dataset.panelPhase = assistantTransitionState;
+    });
+
+    assistantTransitionTimer = setTimeout(() => {
+      assistantExpanded = nextExpanded;
+      assistantTransitionState = nextExpanded ? 'open' : 'closed';
+      assistantTransitionTimer = null;
+
+      const settledTooltip = shadowRoot?.querySelector('.tooltip');
+      if (settledTooltip) {
+        settledTooltip.dataset.expanded = String(assistantExpanded);
+        settledTooltip.dataset.panelPhase = assistantTransitionState;
+      }
+    }, ASSISTANT_TRANSITION_MS);
+  }
+
   function ensureHost() {
     if (hostEl && shadowRoot) {
       return shadowRoot;
@@ -1357,14 +1398,17 @@
           width: min(340px, calc(100vw - 32px));
           max-width: 340px;
           max-height: min(72vh, 640px);
-          padding: 14px;
-          overflow: hidden;
+          padding: 0;
+          overflow: visible;
           border-radius: 18px;
-          background: #0f172a;
+          background: transparent;
           color: #f8fafc;
           font: 13px/1.45 ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif;
-          box-shadow: 0 18px 40px rgb(15 23 42 / 35%);
-          pointer-events: auto;
+          pointer-events: none;
+          transition:
+            width 220ms ease,
+            max-width 220ms ease,
+            max-height 220ms ease;
         }
 
         .assistant-panel {
@@ -1372,9 +1416,24 @@
           flex: 1 1 auto;
           flex-direction: column;
           min-height: 0;
+          max-height: min(72vh, 640px);
+          padding: 14px;
           overflow-x: hidden;
           overflow-y: auto;
           overscroll-behavior: contain;
+          border-radius: 18px;
+          background: #0f172a;
+          box-shadow: 0 18px 40px rgb(15 23 42 / 35%);
+          pointer-events: auto;
+          clip-path: inset(0 round 18px);
+          transform-origin: right bottom;
+          transition:
+            transform 360ms cubic-bezier(0.18, 0.95, 0.2, 1),
+            opacity 180ms ease,
+            clip-path 360ms cubic-bezier(0.18, 0.95, 0.2, 1),
+            border-radius 360ms cubic-bezier(0.18, 0.95, 0.2, 1),
+            box-shadow 360ms ease;
+          will-change: transform, opacity, clip-path, border-radius;
         }
 
         .assistant-panel .actions {
@@ -1405,7 +1464,9 @@
             0 18px 34px rgba(44, 58, 160, 0.28),
             0 0 0 8px rgba(99, 102, 241, 0.08);
           cursor: pointer;
+          pointer-events: auto;
           transition:
+            right 220ms cubic-bezier(0.2, 0.9, 0.2, 1),
             transform 160ms ease,
             box-shadow 160ms ease,
             filter 160ms ease;
@@ -1649,23 +1710,97 @@
           }
         }
         .tooltip[data-expanded='false'] {
-          display: block;
-          width: 60px;
-          height: 60px;
-          max-height: none;
-          padding: 0;
-          overflow: visible;
+          pointer-events: none;
+        }
+
+        .tooltip[data-panel-phase='closed'] {
+          width: 64px;
+          height: 64px;
+          max-width: 64px;
+          max-height: 64px;
+        }
+
+        .tooltip[data-panel-phase='closed'] .assistant-orb {
+          right: 0;
+          bottom: 0;
+        }
+
+        .tooltip[data-expanded='false'] .assistant-panel,
+        .tooltip[data-panel-phase='closed'] .assistant-panel {
+          opacity: 0;
+          pointer-events: none;
+          clip-path: circle(22px at 100% 100%);
           border-radius: 999px;
-          background: transparent;
-          box-shadow: none;
+          box-shadow: 0 8px 18px rgb(15 23 42 / 12%);
+          transform: translateX(64px) translateY(0) scale(0.14);
         }
 
-        .tooltip[data-expanded='false'] .assistant-orb {
-          position: static;
+        .tooltip[data-panel-phase='opening'] .assistant-panel {
+          opacity: 1;
+          clip-path: inset(0 round 18px);
+          transform: translateX(0) scale(1);
         }
 
-        .tooltip[data-expanded='false'] .assistant-panel {
-          display: none;
+        .tooltip[data-expanded='true'] .assistant-panel {
+          opacity: 1;
+          clip-path: inset(0 round 18px);
+          transform: translateX(0) scale(1);
+        }
+
+        .tooltip[data-panel-phase='closing'] .assistant-panel {
+          opacity: 0;
+          clip-path: inset(0 round 18px);
+          border-radius: 18px;
+          box-shadow: 0 12px 26px rgb(15 23 42 / 22%);
+          transform: translateX(68px) translateY(12px) scaleX(0.12) scaleY(0.22);
+          transition:
+            transform 560ms cubic-bezier(0.18, 0.95, 0.2, 1),
+            opacity 260ms ease 240ms,
+            box-shadow 560ms cubic-bezier(0.18, 0.95, 0.2, 1);
+          pointer-events: none;
+        }
+
+        .tooltip[data-panel-phase='closing'] .assistant-orb {
+          right: 0;
+          transition:
+            right 520ms cubic-bezier(0.22, 1, 0.36, 1),
+            transform 160ms ease,
+            box-shadow 160ms ease,
+            filter 160ms ease;
+        }
+
+        .assistant-panel > * {
+          transform-origin: right bottom;
+          transition:
+            opacity 220ms ease,
+            transform 300ms cubic-bezier(0.18, 0.95, 0.2, 1),
+            filter 300ms ease;
+        }
+
+        .tooltip[data-expanded='false'] .assistant-panel > * {
+          opacity: 0;
+          filter: blur(1.5px);
+          transform: translateX(34px) translateY(18px) scale(0.58);
+          transition-delay: 0ms;
+        }
+
+        .tooltip[data-panel-phase='opening'] .assistant-panel > *,
+        .tooltip[data-expanded='true'] .assistant-panel > * {
+          opacity: 1;
+          filter: blur(0);
+          transform: translateX(0) translateY(0) scale(1);
+          transition-delay: 120ms;
+        }
+
+        .tooltip[data-panel-phase='closing'] .assistant-panel > * {
+          opacity: 0;
+          filter: blur(0.8px);
+          transform: translateX(18px) translateY(8px) scale(0.72);
+          transition:
+            opacity 320ms ease,
+            transform 440ms cubic-bezier(0.18, 0.95, 0.2, 1),
+            filter 320ms ease;
+          transition-delay: 0ms;
         }
 
         .assistant-header {
@@ -1789,7 +1924,7 @@
       </style>
       <div class="backdrop" aria-hidden="true"></div>
       <div class="highlight" hidden></div>
-      <div class="tooltip" role="dialog" aria-live="polite" data-expanded="true" hidden>
+      <div class="tooltip" role="dialog" aria-live="polite" data-expanded="true" data-panel-phase="open" hidden>
         <button type="button" class="assistant-orb" data-action="toggle" aria-label="Open walkthrough assistant">
           <svg class="orb-logo" viewBox="0 0 44 44" aria-hidden="true">
             <path class="orb-link" d="M9 29L21 15L34 28" />
@@ -1956,9 +2091,7 @@
       }
       const action = button.getAttribute('data-action');
       if (action === 'toggle') {
-        assistantExpanded = !assistantExpanded;
-        tooltip.dataset.expanded = String(assistantExpanded);
-        tooltip.dataset.loading = String(assistantLoading);
+        setAssistantExpanded(!assistantExpanded, tooltip);
       } else if (action === 'tab-prompt') {
         assistantTab = 'prompt';
         render();
@@ -2509,6 +2642,7 @@
     autoModeBtn.dataset.active = String(assistantMode === 'auto');
     manualModeBtn.dataset.active = String(assistantMode === 'manual');
     tooltip.dataset.expanded = String(assistantExpanded);
+    tooltip.dataset.panelPhase = assistantTransitionState;
     tooltip.dataset.loading = String(assistantLoading);
     // tooltip.dataset.loading = 'true';
     tooltip.hidden = false;
