@@ -1473,6 +1473,28 @@
           animation: orb-breathe 3.4s ease-in-out infinite;
         }
 
+        .tooltip[data-expanded='true'],
+        .tooltip[data-panel-phase='opening'],
+        .tooltip[data-panel-phase='closing'] {
+          width: min(416px, calc(100vw - 32px));
+          max-width: 416px;
+        }
+
+        .tooltip[data-expanded='true'] .assistant-panel,
+        .tooltip[data-panel-phase='opening'] .assistant-panel,
+        .tooltip[data-panel-phase='closing'] .assistant-panel {
+          margin-left: 76px;
+        }
+
+        .tooltip[data-expanded='true'] .assistant-orb,
+        .tooltip[data-panel-phase='opening'] .assistant-orb,
+        .tooltip[data-panel-phase='closing'] .assistant-orb {
+          right: auto;
+          left: 6px;
+          top: auto;
+          bottom: 0;
+        }
+
         .assistant-orb::before {
           content: '';
           position: absolute;
@@ -1722,6 +1744,8 @@
 
         .tooltip[data-panel-phase='closed'] .assistant-orb {
           right: 0;
+          left: auto;
+          top: auto;
           bottom: 0;
         }
 
@@ -1761,9 +1785,10 @@
         }
 
         .tooltip[data-panel-phase='closing'] .assistant-orb {
-          right: 0;
+          right: auto;
+          left: calc(100% - 64px);
           transition:
-            right 520ms cubic-bezier(0.22, 1, 0.36, 1),
+            left 520ms cubic-bezier(0.22, 1, 0.36, 1),
             transform 160ms ease,
             box-shadow 160ms ease,
             filter 160ms ease;
