@@ -81,13 +81,16 @@ test('content script captures clicks/navigations/input/metadata when recording',
   sentMessages.length = 0; // Clear the array, prepare for subsequent tests
 
   // 5. Verification: Clicking on the interactive element (<button>) should be captured
+  // Unique aria-label wins over id for the recorded selector.
   const button = document.getElementById('submit-btn');
   button.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
 
   assert.equal(sentMessages.length, 1);
   assert.equal(sentMessages[0].type, 'CLICK');
-  assert.equal(sentMessages[0].payload.selector, 'button#submit-btn');
+  assert.equal(sentMessages[0].payload.selector, 'button[aria-label="Submit Form"]');
   assert.equal(sentMessages[0].payload.label, 'Submit Form');
+  assert.equal(sentMessages[0].payload.aria_label, 'Submit Form');
+  assert.equal(sentMessages[0].payload.role, 'button');
 
   sentMessages.length = 0;
 
@@ -110,12 +113,14 @@ test('content script captures clicks/navigations/input/metadata when recording',
   assert.equal(sentMessages[0].type, 'NAVIGATION');
   assert.equal(sentMessages[0].payload.url, 'https://example.com/duplicate-route');
 
-  // 9. Verification: CSS selector respects data-testid
+  // 9. Verification: without aria-label, CSS selector still respects data-testid
   sentMessages.length = 0;
   const cancelBtn = document.querySelector('[data-testid="cancel-btn"]');
   cancelBtn.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
   assert.equal(sentMessages.length, 1);
   assert.equal(sentMessages[0].payload.selector, 'button[data-testid="cancel-btn"]');
+  assert.equal(sentMessages[0].payload.aria_label, undefined);
+  assert.equal(sentMessages[0].payload.role, 'button');
 
   // 10. Verification: Password field produces no event
   sentMessages.length = 0;
@@ -145,7 +150,7 @@ test('content script captures clicks/navigations/input/metadata when recording',
   // The length should STILL be 1 because the value hasn't changed (deduplication works!)
   assert.equal(sentMessages.length, 1);
 
-  // 12. Verification: Email, Numeric ID and Date masking
+  // 12. Verification: Email, Numeric ID and Date masking + aria-first input selector
   sentMessages.length = 0;
   const emailInput = document.getElementById('email');
   emailInput.value = 'My email is test@example.com and ID is 123456 born on 1990-01-01';
@@ -155,6 +160,9 @@ test('content script captures clicks/navigations/input/metadata when recording',
     sentMessages[0].payload.value,
     'My email is [MASKED] and ID is [MASKED] born on [MASKED]',
   );
+  assert.equal(sentMessages[0].payload.selector, 'input[aria-label="Email"]');
+  assert.equal(sentMessages[0].payload.aria_label, 'Email');
+  assert.equal(sentMessages[0].payload.role, 'textbox');
 
   // 13. Verification: Configurable PII selector masking
   sentMessages.length = 0;
@@ -170,4 +178,51 @@ test('content script captures clicks/navigations/input/metadata when recording',
   button.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
   window.history.pushState({}, '', '/ignored-route');
   assert.equal(sentMessages.length, 0); // Events should be ignored because isRecording is now false
+});
+
+test('content script falls back to id when aria-label is not unique', async () => {
+  const dom = new JSDOM(
+    `
+    <!DOCTYPE html>
+    <html>
+      <body>
+        <button id="primary-close" aria-label="Close">Primary</button>
+        <button id="secondary-close" aria-label="Close">Secondary</button>
+      </body>
+    </html>
+    `,
+    { url: 'https://example.com/dup-aria', runScripts: 'dangerously' },
+  );
+
+  const window = dom.window;
+  const document = window.document;
+  window.CSS = { escape: (str) => str };
+
+  const sentMessages = [];
+  window.chrome = {
+    runtime: {
+      sendMessage: (message) => sentMessages.push(message),
+    },
+    storage: {
+      local: {
+        get: (_keys, callback) =>
+          setTimeout(() => callback({ recordingState: { status: 'recording' }, piiSelectors: [] }), 0),
+      },
+      onChanged: { addListener: () => {} },
+    },
+  };
+
+  const contentScriptCode = readFileSync(new URL('./content.js', import.meta.url), 'utf-8');
+  const scriptEl = document.createElement('script');
+  scriptEl.textContent = contentScriptCode;
+  document.head.appendChild(scriptEl);
+  await new Promise((resolve) => setTimeout(resolve, 10));
+
+  sentMessages.length = 0;
+  document.getElementById('primary-close').dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+
+  assert.equal(sentMessages.length, 1);
+  assert.equal(sentMessages[0].payload.selector, 'button#primary-close');
+  assert.equal(sentMessages[0].payload.aria_label, 'Close');
+  assert.equal(sentMessages[0].payload.role, 'button');
 });

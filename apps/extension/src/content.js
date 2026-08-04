@@ -38,10 +38,66 @@ window.addEventListener('message', (event) => {
 });
 
 /**
+ * Returns trimmed aria-label and resolved role for capture/attrs.
+ * Empty values are omitted by the caller.
+ */
+function getAriaAttrs(element) {
+  if (!(element instanceof Element)) {
+    return {};
+  }
+
+  const ariaLabel = (element.getAttribute('aria-label') || '').trim();
+  const explicitRole = (element.getAttribute('role') || '').trim();
+  const role = explicitRole || inferImplicitRole(element) || '';
+
+  return {
+    ...(ariaLabel ? { aria_label: ariaLabel } : {}),
+    ...(role ? { role } : {}),
+  };
+}
+
+/**
+ * Best-effort implicit ARIA role for common interactive controls.
+ */
+function inferImplicitRole(element) {
+  const tag = element.nodeName.toLowerCase();
+  if (tag === 'button') return 'button';
+  if (tag === 'a' && element.hasAttribute('href')) return 'link';
+  if (tag === 'select') return 'combobox';
+  if (tag === 'textarea') return 'textbox';
+  if (tag === 'input') {
+    const type = (element.getAttribute('type') || 'text').toLowerCase();
+    if (type === 'button' || type === 'submit' || type === 'reset') return 'button';
+    if (type === 'checkbox') return 'checkbox';
+    if (type === 'radio') return 'radio';
+    if (type === 'range') return 'slider';
+    if (type === 'number') return 'spinbutton';
+    if (type === 'search') return 'searchbox';
+    if (['text', 'email', 'tel', 'url', 'password', ''].includes(type)) return 'textbox';
+  }
+  return '';
+}
+
+/**
  * Generates a stable CSS selector for a given element.
+ * Prefers unique aria-label; otherwise falls back to id → data-* → nth-of-type.
  */
 function getCssSelector(el) {
   if (!(el instanceof Element)) return '';
+
+  const ariaLabel = (el.getAttribute('aria-label') || '').trim();
+  if (ariaLabel) {
+    const tag = el.nodeName.toLowerCase();
+    const ariaSelector = `${tag}[aria-label="${CSS.escape(ariaLabel)}"]`;
+    try {
+      if (document.querySelectorAll(ariaSelector).length === 1) {
+        return ariaSelector;
+      }
+    } catch {
+      // Invalid escape / selector — fall through to legacy strategy.
+    }
+  }
+
   const path = [];
   while (el.nodeType === Node.ELEMENT_NODE) {
     let selector = el.nodeName.toLowerCase();
@@ -251,6 +307,7 @@ document.addEventListener(
   (event) => {
     const interactiveTarget = getClosestInteractiveElement(event.target);
     if (interactiveTarget) {
+      const ariaAttrs = getAriaAttrs(interactiveTarget);
       const payload = {
         selector: getCssSelector(interactiveTarget),
         label: getElementLabel(interactiveTarget),
@@ -258,6 +315,7 @@ document.addEventListener(
         title: document.title,
         timestamp: Date.now(),
         target_rect: getTargetRect(interactiveTarget),
+        ...ariaAttrs,
       };
       sendEvent('CLICK', payload);
     }
@@ -288,6 +346,7 @@ function handleInput(event) {
     if (lastSentValues.get(target) === currentValue) return;
     lastSentValues.set(target, currentValue);
 
+    const ariaAttrs = getAriaAttrs(target);
     const payload = {
       selector: getCssSelector(target),
       label: getElementLabel(target),
@@ -295,6 +354,7 @@ function handleInput(event) {
       url: window.location.href,
       title: document.title,
       timestamp: Date.now(),
+      ...ariaAttrs,
     };
     sendEvent('INPUT', payload);
   }, 300);

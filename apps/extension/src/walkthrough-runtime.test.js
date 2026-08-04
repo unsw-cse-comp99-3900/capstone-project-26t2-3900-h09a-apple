@@ -16,6 +16,8 @@ function loadRuntime({
       <body>
         <button id="save-btn">Save</button>
         <input id="name-field" />
+        <button id="close-primary" aria-label="Dismiss dialog">Close</button>
+        <a href="/x" aria-label="Dismiss dialog">Dismiss</a>
       </body>
     </html>
     `,
@@ -99,12 +101,24 @@ function loadRuntime({
   };
 }
 
-test('resolveTarget prefers css_selector then xpath then fallback', async () => {
+test('resolveTarget prefers aria_label then css then xpath then fallback', async () => {
   const { window, document, flush } = loadRuntime();
   await flush();
 
   const api = window.WorkTraceWalkthrough;
   assert.ok(api);
+
+  // aria_label beats a wrong/stale css_selector.
+  const byAria = api.resolveTarget(
+    {
+      aria_label: 'Dismiss dialog',
+      role: 'button',
+      css_selector: '#missing-close-btn',
+    },
+    document,
+  );
+  assert.equal(byAria.mode, 'aria_label');
+  assert.equal(byAria.element.id, 'close-primary');
 
   const byCss = api.resolveTarget({ css_selector: '#save-btn' }, document);
   assert.equal(byCss.mode, 'css');
@@ -122,6 +136,7 @@ test('resolveTarget prefers css_selector then xpath then fallback', async () => 
   assert.equal(fallback.element, null);
 
   assert.equal(api.resolveAnchorMode({ css_selector: '#x' }), 'element');
+  assert.equal(api.resolveAnchorMode({ aria_label: 'Dismiss dialog' }), 'element');
   assert.equal(
     api.resolveAnchorMode({ screenshot_url: 'https://example.com/a.png' }),
     'screenshot',

@@ -1205,6 +1205,8 @@ def test_get_sop_walkthrough_returns_payload_for_single_step():
             "css_selector": "#login-button",
             "xpath": "/html/body/button[1]",
             "target_label": None,
+            "aria_label": None,
+            "role": None,
             "screenshot_url": "https://signed.example/screenshots/login.png",
             "time_estimate": 5,
             "screenshot_highlight": None,
@@ -1213,6 +1215,49 @@ def test_get_sop_walkthrough_returns_payload_for_single_step():
             "expected_url": "https://example.com/login",
             "warning": None,
         }
+    finally:
+        app.dependency_overrides[get_db] = override_get_db
+
+
+def test_get_sop_walkthrough_plumbs_aria_label_and_role_from_event_attrs():
+    fake_event = SimpleNamespace(
+        id=1,
+        seq=1,
+        session_id=WALKTHROUGH_SESSION_ID,
+        target_selector='button[aria-label="Submit Form"]',
+        target_label="Submit Form",
+        attrs={
+            "aria_label": "Submit Form",
+            "role": "button",
+        },
+        url="https://example.com/form",
+        screenshot_id=None,
+        timestamp_ms=1_000,
+        type="click",
+    )
+    fake_sop = _walkthrough_sop(
+        steps=[
+            {
+                "order": 1,
+                "title": "Submit",
+                "instruction": "Click Submit Form.",
+                "source_event_ids": ["1"],
+            }
+        ],
+    )
+
+    db = FakeDbWithSession(existing_sop=fake_sop, events=[fake_event])
+    app.dependency_overrides[get_db] = lambda: db
+
+    try:
+        response = client.get(f"/api/v1/sops/{WALKTHROUGH_SOP_ID}/walkthrough")
+
+        assert response.status_code == 200
+        step = response.json()["steps"][0]
+        assert step["aria_label"] == "Submit Form"
+        assert step["role"] == "button"
+        assert step["css_selector"] == 'button[aria-label="Submit Form"]'
+        assert step["anchor_mode"] == "element"
     finally:
         app.dependency_overrides[get_db] = override_get_db
 

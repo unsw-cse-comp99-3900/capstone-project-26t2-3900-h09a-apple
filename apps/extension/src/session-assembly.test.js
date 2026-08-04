@@ -85,6 +85,28 @@ test('assembleSession carries page title into event attrs for LLM context', () =
   assert.equal(payload.events[0].attrs.page_title, 'Example Login');
 });
 
+test('assembleSession persists aria_label and role into event attrs', () => {
+  const payload = assembleSession(
+    [
+      {
+        type: 'CLICK',
+        payload: {
+          selector: 'button[aria-label="Submit Form"]',
+          label: 'Submit Form',
+          aria_label: '  Submit Form  ',
+          role: 'button',
+          url: 'https://example.com/form',
+          timestamp: 1001,
+        },
+      },
+    ],
+    { workflowName: 'Form flow', startedAt: 1000, stoppedAt: 2000 },
+  );
+
+  assert.equal(payload.events[0].attrs.aria_label, 'Submit Form');
+  assert.equal(payload.events[0].attrs.role, 'button');
+});
+
 test('assembleSession carries screenshot ids and screenshot payloads', () => {
   const screenshot = {
     id: '33333333-3333-3333-3333-333333333333',
