@@ -206,7 +206,10 @@ test('content script falls back to id when aria-label is not unique', async () =
     storage: {
       local: {
         get: (_keys, callback) =>
-          setTimeout(() => callback({ recordingState: { status: 'recording' }, piiSelectors: [] }), 0),
+          setTimeout(
+            () => callback({ recordingState: { status: 'recording' }, piiSelectors: [] }),
+            0,
+          ),
       },
       onChanged: { addListener: () => {} },
     },
@@ -219,7 +222,9 @@ test('content script falls back to id when aria-label is not unique', async () =
   await new Promise((resolve) => setTimeout(resolve, 10));
 
   sentMessages.length = 0;
-  document.getElementById('primary-close').dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  document
+    .getElementById('primary-close')
+    .dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
 
   assert.equal(sentMessages.length, 1);
   assert.equal(sentMessages[0].payload.selector, 'button#primary-close');

@@ -7,6 +7,7 @@ import type { SopLibraryItem } from '@h09a/types';
 import { StateEmpty } from '@/components/ui/state-empty';
 import { StateError } from '@/components/ui/state-error';
 import { StateLoading } from '@/components/ui/state-loading';
+import { useCurrentUser } from '@/contexts/auth-context';
 import { getMyDrafts, getMyPublishedSops, getPublishedSops } from '@/lib/api';
 
 import SopCard from './SopCard';
@@ -51,6 +52,7 @@ export default function LibraryClient() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const { user } = useCurrentUser();
 
   const [searchInput, setSearchInput] = useState(() => searchParams.get('search') ?? '');
   const [debouncedSearch, setDebouncedSearch] = useState(() => searchParams.get('search') ?? '');
@@ -65,7 +67,10 @@ export default function LibraryClient() {
   const [error, setError] = useState<string | null>(null);
   const [lastRefreshedAt, setLastRefreshedAt] = useState<Date | null>(null);
   const [launchError, setLaunchError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [mineFilterWarning, setMineFilterWarning] = useState<string | null>(null);
+
+  const canDeleteAnyInTenant = user?.role === 'REVIEWER' || user?.role === 'MANAGER';
 
   const [tab, setTab] = useState<LibraryTab>('published');
 
@@ -96,6 +101,7 @@ export default function LibraryClient() {
     setLoading(true);
     setError(null);
     setLaunchError(null);
+    setDeleteError(null);
     setMineFilterWarning(null);
 
     try {
@@ -276,6 +282,12 @@ export default function LibraryClient() {
         </p>
       ) : null}
 
+      {deleteError ? (
+        <p className={styles.launchError} role="alert">
+          {deleteError}
+        </p>
+      ) : null}
+
       {loading ? (
         <div className={styles.stateSlot}>
           <StateLoading rows={4} label="Loading procedures" />
@@ -322,8 +334,14 @@ export default function LibraryClient() {
               key={sop.id}
               sop={sop}
               view={view}
+              canDelete={canDeleteAnyInTenant || mineIds.has(sop.id)}
               onLaunchError={(message) => setLaunchError(message)}
               onLaunchSuccess={() => setLaunchError(null)}
+              onDeleteError={(message) => setDeleteError(message)}
+              onDeleted={() => {
+                setDeleteError(null);
+                void load();
+              }}
             />
           ))}
         </div>

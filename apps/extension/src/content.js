@@ -94,7 +94,7 @@ function getCssSelector(el) {
         return ariaSelector;
       }
     } catch {
-      // Invalid escape / selector — fall through to legacy strategy.
+      // Invalid escape / selector - fall through to legacy strategy.
     }
   }
 
