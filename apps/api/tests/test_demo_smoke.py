@@ -10,11 +10,10 @@ from app import models
 from app.auth.deps import get_current_user
 from app.database import get_sessionmaker
 from app.main import app
-from seeds.demo_seed import seed_demo
+from seeds.demo_seed import SOP_TITLE, TENANT_ID, seed_demo
 
 client = TestClient(app)
 
-TENANT_ID = UUID("22222222-2222-2222-2222-222222222222")
 USER_ID = UUID("11111111-1111-1111-1111-111111111111")
 
 
@@ -26,6 +25,18 @@ def _mock_user(
         email="demo.manager@worktrace.local",
         role=role,
         tenant_id=TENANT_ID,
+    )
+
+
+def _demo_sop(db_session):
+    """Resolve the seeded demo SOP; do not use tenant .first() (local DBs may have extras)."""
+    return (
+        db_session.query(models.Sop)
+        .filter(
+            models.Sop.tenant_id == TENANT_ID,
+            models.Sop.title == SOP_TITLE,
+        )
+        .one()
     )
 
 
@@ -74,9 +85,7 @@ def test_01_seed_multi_session_integrity(db_session):
     - >=1 friction event
     """
 
-    sop = db_session.query(models.Sop).filter(models.Sop.tenant_id == TENANT_ID).first()
-
-    assert sop is not None
+    sop = _demo_sop(db_session)
 
     assert sop.status == models.SopStatus.published.value
 
@@ -115,9 +124,7 @@ def test_02_kmeans_clustering_api(db_session):
     than the required sessions returns HTTP 422.
     """
 
-    sop = db_session.query(models.Sop).filter(models.Sop.tenant_id == TENANT_ID).first()
-
-    assert sop is not None
+    sop = _demo_sop(db_session)
 
     payload = {
         "workflow_id": str(sop.id),
@@ -157,9 +164,7 @@ def test_03_friction_analysis_api(db_session):
     Verify friction analysis exists for the seeded SOP.
     """
 
-    sop = db_session.query(models.Sop).filter(models.Sop.tenant_id == TENANT_ID).first()
-
-    assert sop is not None
+    sop = _demo_sop(db_session)
 
     response = client.get(f"/api/v1/analytics/friction/{sop.id}")
 

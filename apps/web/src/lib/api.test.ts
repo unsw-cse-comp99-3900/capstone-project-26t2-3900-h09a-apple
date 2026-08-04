@@ -4,6 +4,7 @@ import {
   apiUrl,
   approveSop,
   getKmeansAnalysis,
+  getMyPublishedSops,
   getPublishedSops,
   getSop,
   getSopsByStatus,
@@ -42,6 +43,23 @@ describe('getSop', () => {
 
     expect(globalThis.fetch).toHaveBeenCalledWith(
       '/api/backend/sops/00000000-0000-0000-0000-000000000000',
+      expect.objectContaining({ cache: 'no-store' }),
+    );
+  });
+});
+
+describe('getMyPublishedSops', () => {
+  it('requests published SOPs owned by the current user', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ sops: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+
+    await expect(getMyPublishedSops()).resolves.toEqual({ sops: [] });
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/api/backend/sops?mine=true&status=published',
       expect.objectContaining({ cache: 'no-store' }),
     );
   });

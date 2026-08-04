@@ -349,6 +349,16 @@ export async function getMyDrafts(): Promise<SopListResponse> {
   return res.json();
 }
 
+export async function getMyPublishedSops(): Promise<SopListResponse> {
+  const res = await authedFetch('/api/v1/sops?mine=true&status=published');
+
+  if (!res.ok) {
+    throw new ApiError(await errorMessage(res, 'Failed to load your published SOPs'), res.status);
+  }
+
+  return res.json();
+}
+
 export async function getSopsByStatus(status: SopStatus): Promise<SopListResponse> {
   const res = await authedFetch(`/api/v1/sops?status=${encodeURIComponent(status)}`);
 

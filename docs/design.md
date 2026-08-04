@@ -177,9 +177,13 @@ Do not add without a product decision first:
 ## 8. Where this applies next
 
 Cards that will introduce new screens and should draw from this file rather
-than inventing new tokens: H09AAPPLE-57 (SOP review actions), H09AAPPLE-38
-/ H09AAPPLE-39 (Variance Dashboard), H09AAPPLE-58 (walkthrough launch from
-web). Extension-rendered UI (H09AAPPLE-28 / H09AAPPLE-29 / H09AAPPLE-32,
-the walkthrough overlay) runs inside a third-party page and intentionally
-does not use this palette wholesale. See those cards for overlay-specific
-styling.
+than inventing new tokens: H09AAPPLE-57 (app shell / SOP review actions),
+H09AAPPLE-38 / H09AAPPLE-39 (Variance Dashboard), H09AAPPLE-82 (SOP Library
+search, filter chips, view toggle, and Play-to-launch). Library Play uses
+`apps/web/src/lib/extension-bridge.ts` (`START_WALKTHROUGH`); the Chrome
+extension opens the target page and injects the guide there. Do not treat
+`apps/web/src/components/floating-assistant/` as the live guide (unused;
+commented out of the root layout). Extension-rendered UI (H09AAPPLE-28 /
+H09AAPPLE-29 / H09AAPPLE-32 / H09AAPPLE-80 walkthrough overlay and assistant
+surfaces) runs inside a third-party page and intentionally does not use this
+palette wholesale. See those cards for overlay-specific styling.

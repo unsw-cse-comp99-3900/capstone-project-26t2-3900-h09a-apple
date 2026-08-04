@@ -10,7 +10,7 @@ diagram at [docs/architecture/aws-deployment.png](./aws-deployment.png).
 | ------------------------------ | -------------------------------------------- | ------------------------------------------------------------------------------------------------ |
 | Web app                        | `apps/web`                                   | Next.js UI: auth, session review, SOP library, review dashboards, marketing pages                |
 | API                            | `apps/api`                                   | FastAPI backend: auth, session ingestion, SOP generation, walkthrough, analytics, voice feedback |
-| Chrome extension               | `apps/extension`                             | MV3 capture of browser workflows; still used for web-page recording paths                        |
+| Chrome extension               | `apps/extension`                             | MV3 capture plus the live walkthrough player (guide injected into the third-party page)          |
 | Desktop (Electron)             | `apps/desktop`                               | Desktop capture / walkthrough player direction; OS hooks and permissions are harder to automate  |
 | Shared types / storage helpers | `packages/types`, `packages/desktop-storage` | Shared TypeScript contracts and local buffer / capture-policy helpers                            |
 | PostgreSQL + pgvector          | Docker / RDS                                 | Primary datastore, embeddings support                                                            |
@@ -24,11 +24,15 @@ diagram at [docs/architecture/aws-deployment.png](./aws-deployment.png).
 [Chrome extension] --capture--> [Web review UI] --submit--> [FastAPI]
 [Electron desktop] --capture--> [local buffer]  --sync----> [FastAPI]
 
+[Web Library / SOP page] --START_WALKTHROUGH--> [Chrome extension]
+      --> open target page --> inject walkthrough guide (not a WorkTrace route)
+
 FastAPI
   |- PostgreSQL (sessions, events, sops, users, consent, feedback, ...)
   |- Object storage (screenshots, audio)
   |- Local Whisper (voice feedback transcription)
   |- LLM provider (openai | anthropic | mock) for SOP / embeddings / helpers
+  |- Assistant walkthrough helpers used by the extension player
 ```
 
 Cloud-oriented view (web on Vercel, API on ECS Fargate, RDS, S3) is documented
@@ -45,6 +49,21 @@ in [docs/deployment.md](../deployment.md).
    `SOP_GENERATOR` / `LLM_PROVIDER` (`mock` by default in local `.env.example`).
 6. **Review / publish** SOP in the web UI; walkthrough and analytics build on stored SOPs.
 
+## Library search and walkthrough launch
+
+1. Employee opens `/library` (authenticated app shell under `apps/web/src/app/(app)/`).
+2. Client filters the published (or draft) SOP list: substring / multi-word title
+   search, filter chips, and list/grid view (H09AAPPLE-82). No server-side search
+   at current data volumes.
+3. Play on a published card (or Start Walkthrough on `/sop/[id]`) calls
+   `postExtensionStartWalkthrough(sopId)` in
+   `apps/web/src/lib/extension-bridge.ts`.
+4. The extension receives `START_WALKTHROUGH`, opens the SOP target page, and
+   injects the guide from `apps/extension/src/walkthrough-runtime.js`. Highlighting,
+   step advance, Auto/Manual mode, Q&A, and assistant helpers stay in the
+   extension (plus API assistant routes). The web app does not render the live
+   guide; `apps/web/src/components/floating-assistant/` is unused.
+
 Related schema notes: [docs/db-schema.md](../db-schema.md).
 
 ## Implemented vs spike / future work
@@ -54,7 +73,10 @@ Related schema notes: [docs/db-schema.md](../db-schema.md).
 - Auth (JWT, refresh, roles), consent accept/status
 - Session ingestion with PII masking
 - SOP generation (mock and LLM providers), embeddings path
-- Walkthrough APIs and web SOP viewer flows
+- Walkthrough APIs, web SOP viewer, and Library search / one-click launch via
+  the extension bridge (H09AAPPLE-82)
+- Extension walkthrough player on the third-party page (guide bubble, step
+  advance; assistant coaching / recover / stuck flows land with H09AAPPLE-80)
 - Voice feedback upload, local Whisper transcription, classification helpers
 - Analytics / clustering routes (see `apps/api/app/analytics_*`)
 - CI for web, API, extension, desktop; Vercel web deploy on `main`
@@ -79,8 +101,10 @@ Related schema notes: [docs/db-schema.md](../db-schema.md).
 - Ingestion + PII: `apps/api/app/ingestion.py`, `apps/api/app/pii.py`
 - SOP providers: `apps/api/app/llm_sop_generator.py`, `apps/api/app/mock_sop_generator.py`
 - Local compose services: `docker-compose.yml`
-- Web: `apps/web`
-- Extension: `apps/extension`
+- Web: `apps/web` (Library: `apps/web/src/app/(app)/library/`)
+- Web to extension bridge: `apps/web/src/lib/extension-bridge.ts`
+- Extension: `apps/extension` (player: `walkthrough-runtime.js`,
+  `START_WALKTHROUGH` in `external-auth.js` / background)
 - Desktop: `apps/desktop`
 
 ## Related docs

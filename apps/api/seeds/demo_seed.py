@@ -262,14 +262,22 @@ def ensure_demo_walkthroughs(
         .all()
     )
 
-    # Return early if exact target number of walkthroughs already exists
-    if len(completions) == len(TIMING_VARIANTS):
+    completion_ids = [c.id for c in completions]
+    friction_count = 0
+    if completion_ids:
+        friction_count = (
+            db.query(models.WalkthroughFrictionEvent)
+            .filter(models.WalkthroughFrictionEvent.completion_id.in_(completion_ids))
+            .count()
+        )
+
+    # Exact walkthrough count alone is not enough: an older seed may have left
+    # four completions without the outlier friction event.
+    if len(completions) == len(TIMING_VARIANTS) and friction_count >= 1:
         return
 
     # Purge existing stale/partial walkthroughs to enforce exact 4 deterministic records
     if completions:
-        completion_ids = [c.id for c in completions]
-
         db.query(models.WalkthroughFrictionEvent).filter(
             models.WalkthroughFrictionEvent.completion_id.in_(completion_ids)
         ).delete(synchronize_session=False)
