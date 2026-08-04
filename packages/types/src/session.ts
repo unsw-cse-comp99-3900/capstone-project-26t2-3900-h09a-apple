@@ -288,6 +288,9 @@ export interface WalkthroughStep {
   /** element: css/xpath; screenshot: image fallback; none: instruction-only. */
   anchor_mode?: WalkthroughAnchorMode;
   expected_action?: WalkthroughExpectedAction | null;
+  expected_url?: string | null;
+  /** Joined SopWarning messages for this step, when any. */
+  warning?: string | null;
 }
 
 /** Response returned by GET /api/v1/sops/{id}/walkthrough. */

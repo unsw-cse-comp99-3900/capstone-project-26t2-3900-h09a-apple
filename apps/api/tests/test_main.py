@@ -1211,7 +1211,48 @@ def test_get_sop_walkthrough_returns_payload_for_single_step():
             "anchor_mode": "element",
             "expected_action": None,
             "expected_url": "https://example.com/login",
+            "warning": None,
         }
+    finally:
+        app.dependency_overrides[get_db] = override_get_db
+
+
+def test_get_sop_walkthrough_includes_step_warning_from_shared_events():
+    fake_event = SimpleNamespace(
+        id=1,
+        seq=1,
+        session_id=WALKTHROUGH_SESSION_ID,
+        target_selector="#login-button",
+        attrs={},
+        url="https://example.com/login",
+        screenshot_id=None,
+        timestamp_ms=1_000,
+    )
+    fake_sop = _walkthrough_sop(
+        steps=[
+            {
+                "order": 1,
+                "title": "Login",
+                "instruction": "Click the login button.",
+                "source_event_ids": ["1"],
+            }
+        ],
+    )
+    fake_sop.warnings = [
+        {
+            "type": "repeated_action",
+            "message": "Login was opened twice.",
+            "source_event_ids": ["1"],
+        }
+    ]
+
+    db = FakeDbWithSession(existing_sop=fake_sop, events=[fake_event])
+    app.dependency_overrides[get_db] = lambda: db
+
+    try:
+        response = client.get(f"/api/v1/sops/{WALKTHROUGH_SOP_ID}/walkthrough")
+        assert response.status_code == 200
+        assert response.json()["steps"][0]["warning"] == "Login was opened twice."
     finally:
         app.dependency_overrides[get_db] = override_get_db
 

@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session as DBSession
 
 from app import models
 from app.analytics_routes import router as analytics_router
+from app.assistant_routes import router as assistant_router
 from app.auth.deps import filter_by_tenant, require_role
 from app.auth.routes import router as auth_router
 from app.consent_routes import router as consent_router
@@ -85,6 +86,7 @@ app.include_router(analytics_router)
 app.include_router(friction_router)
 app.include_router(dashboard_router)
 app.include_router(sop_edit_router)
+app.include_router(assistant_router)
 
 
 @app.get("/health")

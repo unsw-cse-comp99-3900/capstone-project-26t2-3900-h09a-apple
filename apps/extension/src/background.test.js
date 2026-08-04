@@ -47,3 +47,11 @@ test('background starts walkthroughs from external web handoff using only sop id
 test('background uploads the complete walkthrough step sequence', () => {
   assert.match(backgroundSource, /step_sequence: message\.step_sequence \?\? \[\]/);
 });
+
+test('background uploads walkthrough voice feedback through authenticated API', () => {
+  assert.match(backgroundSource, /WALKTHROUGH_VOICE_UPLOAD/);
+  assert.match(backgroundSource, /uploadWalkthroughVoiceFeedback/);
+  assert.match(backgroundSource, /\/api\/v1\/feedback\/voice/);
+  assert.match(backgroundSource, /form\.append\('sop_id', sopId\)/);
+  assert.match(backgroundSource, /authenticatedFetch/);
+});

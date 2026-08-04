@@ -1,3 +1,8 @@
+// H09AAPPLE-80 remaining (background side of extension ball):
+// T0: forwards task + confidence (done)
+// T2-2 captureVisibleTab for stuck analyze: WALKTHROUGH_CAPTURE_VISIBLE
+// T3-2/T3-3 optional notify hooks when handoff/stuck aggregates land
+
 import { assembleSession } from './session-assembly.js';
 import {
   deleteSessionPayload,
@@ -132,6 +137,73 @@ function parseScreenshotDataUrl(dataUrl) {
   return {
     content_type: match[1],
     data_base64: match[2],
+  };
+}
+
+function base64ToBlob(base64, contentType) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return new Blob([bytes], { type: contentType || 'application/octet-stream' });
+}
+
+async function uploadWalkthroughVoiceFeedback(message) {
+  const sopId = typeof message.sopId === 'string' ? message.sopId.trim() : '';
+  const audioBase64 = typeof message.audioBase64 === 'string' ? message.audioBase64.trim() : '';
+  const contentType =
+    typeof message.contentType === 'string' && message.contentType.trim()
+      ? message.contentType.trim()
+      : 'audio/webm';
+  const filename =
+    typeof message.filename === 'string' && message.filename.trim()
+      ? message.filename.trim()
+      : 'feedback.webm';
+
+  if (!sopId) {
+    throw new Error('Missing SOP id for voice upload');
+  }
+  if (!audioBase64) {
+    throw new Error('Missing audio payload for voice upload');
+  }
+
+  const audioBlob = base64ToBlob(audioBase64, contentType);
+  if (audioBlob.size < 1) {
+    throw new Error('Recorded audio is empty');
+  }
+
+  const form = new FormData();
+  form.append('audio', audioBlob, filename);
+  form.append('sop_id', sopId);
+  if (typeof message.recordedAt === 'string' && message.recordedAt.trim()) {
+    form.append('recorded_at', message.recordedAt.trim());
+  }
+
+  const response = await authenticatedFetch('/api/v1/feedback/voice', {
+    method: 'POST',
+    body: form,
+  });
+
+  if (!response.ok) {
+    const detail = await response.text();
+    if (response.status === 401) {
+      throw new Error('Sign in to the WorkTrace extension before sending voice feedback.');
+    }
+    throw new Error(
+      detail?.trim()
+        ? `Voice upload failed (${response.status}): ${detail.slice(0, 200)}`
+        : `Voice upload failed (${response.status})`,
+    );
+  }
+
+  const payload = await response.json();
+  return {
+    feedbackId: payload.feedback_id ?? null,
+    transcript: payload.transcript ?? '',
+    classification: payload.classification ?? null,
+    status: payload.status ?? null,
+    durationSeconds: payload.duration_seconds ?? null,
   };
 }
 
@@ -316,6 +388,112 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       tabId: sender.tab?.id ?? null,
     });
     return false;
+  }
+
+  if (message.type === 'WALKTHROUGH_CAPTURE_VISIBLE') {
+    const tabId = message.tabId ?? sender.tab?.id ?? null;
+    if (tabId == null) {
+      sendResponse({ ok: false, error: 'Missing tab id for screenshot capture.' });
+      return false;
+    }
+
+    chrome.tabs
+      .get(tabId)
+      .then(async (tab) => {
+        if (!tab?.windowId) {
+          throw new Error('Walkthrough tab is not available for capture.');
+        }
+        const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, {
+          format: SCREENSHOT_FORMAT,
+          quality: VISION_CAPTURE_QUALITY,
+        });
+        sendResponse({
+          ok: true,
+          screenshot_b64: dataUrl,
+        });
+      })
+      .catch((error) => {
+        console.error('Walkthrough visible capture failed:', error);
+        sendResponse({
+          ok: false,
+          error: error instanceof Error ? error.message : 'Screenshot capture failed.',
+        });
+      });
+
+    return true;
+  }
+
+  if (message.type === 'WALKTHROUGH_ASSISTANT_ASK') {
+    authenticatedFetch('/api/v1/assistant/walkthrough', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        task: message.task ?? 'qa',
+        question: message.question ?? null,
+        mode: message.mode ?? 'walkthrough',
+        page_url: message.page_url ?? null,
+        page_title: message.page_title ?? null,
+        screenshot_b64: message.screenshot_b64 ?? null,
+        expected_target: message.expected_target ?? null,
+        actual_action: message.actual_action ?? null,
+        steps_summary: message.steps_summary ?? null,
+        step: {
+          index: message.step?.index ?? 0,
+          total: message.step?.total ?? 1,
+          title: message.step?.title ?? 'Current step',
+          instruction: message.step?.instruction ?? '',
+        },
+      }),
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          const detail = await response.text();
+          throw new Error(
+            response.status === 401 || response.status === 403
+              ? 'Sign in to the WorkTrace extension before using the assistant.'
+              : `Assistant request failed (${response.status}): ${detail.slice(0, 200)}`,
+          );
+        }
+
+        const payload = await response.json();
+
+        sendResponse({
+          ok: true,
+          answer: payload.answer ?? '',
+          confidence: payload.confidence ?? 'medium',
+          confidence_reason: payload.confidence_reason ?? '',
+        });
+      })
+      .catch((error) => {
+        console.error('Walkthrough assistant request failed:', error);
+        sendResponse({
+          ok: false,
+          error: error instanceof Error ? error.message : 'Assistant request failed',
+        });
+      });
+
+    return true;
+  }
+
+  if (message.type === 'WALKTHROUGH_VOICE_UPLOAD') {
+    uploadWalkthroughVoiceFeedback(message)
+      .then((payload) => {
+        sendResponse({
+          ok: true,
+          ...payload,
+        });
+      })
+      .catch((error) => {
+        console.error('Walkthrough voice upload failed:', error);
+        sendResponse({
+          ok: false,
+          error: error instanceof Error ? error.message : 'Voice upload failed',
+        });
+      });
+
+    return true;
   }
 
   if (message.type === 'WALKTHROUGH_VISION_LOCATE') {

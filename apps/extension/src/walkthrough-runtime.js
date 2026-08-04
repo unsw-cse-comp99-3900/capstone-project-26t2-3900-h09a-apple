@@ -6,11 +6,45 @@
  * getBoundingClientRect. Screenshots are preview + fallback only (H09AAPPLE-28).
  * Resolution chain: CSS → XPath → label, then H09AAPPLE-53 vision grid locate
  * on selector_miss (pixel overlay; manual Next). Full text+role is H09AAPPLE-29.
+ *
+ * H09AAPPLE-80 remaining (this file is the real ball; ignore apps/web floating-assistant):
+ * T0-2 confidence chip: done for Q&A answers
+ * T1-1 Prompt Coaching: done (local Use this / Edit only; no SOP writeback)
+ * T1-2 One-click recovery after wrong_target (task=recover) in Help tab: done
+ * T1-3 Smart step match (task=match_step) with URL-shape throttle >=10s: done
+ * T2-1 Privacy mask before capture + one-time stuck consent in chrome.storage.local: done
+ * T2-2 I'm stuck -> captureVisibleTab (reuse background) -> task=analyze: done
+ * T2-3 Voice: already shipped; polish only if needed
+ * T3-1 Page-level deviation soft hint (debounce; skip for now if noisy)
+ * T3-2 Buffer stuck_click into frictionEvents (upload on complete; add enum+migration)
+ * T3-3 Human handoff after 3 stuck or 2x low confidence
+ * T3-4 SOP drift signals (later)
+ * T3-5 Timeout detection: skip
  */
 (() => {
   const STORAGE_STATE_KEY = 'walkthroughState';
   const STORAGE_PAYLOAD_KEY = 'walkthroughPayload';
+  const STUCK_CONSENT_KEY = 'stuckScreenshotConsent';
   const HOST_ID = 'worktrace-walkthrough-host';
+  const PRIVACY_MASK_ATTR = 'data-worktrace-privacy-mask';
+  const PRIVACY_MASK_SELECTORS = [
+    'input[type="password"]',
+    'input[type="email"]',
+    'input[type="tel"]',
+    'input[autocomplete="email"]',
+    'input[autocomplete="tel"]',
+    'input[autocomplete="cc-number"]',
+    'input[autocomplete="cc-csc"]',
+    'input[autocomplete="cc-exp"]',
+    'input[name*="password"]',
+    'input[name*="Password"]',
+    'input[name*="ssn"]',
+    'input[name*="SSN"]',
+    'textarea[name*="password"]',
+    'textarea[name*="Password"]',
+    '[data-sensitive="true"]',
+    '[data-pii="true"]',
+  ];
 
   /** @type {{ status: string, sopId: string | null, stepIndex: number, tabId?: number | null } | null} */
   let activeState = null;
@@ -36,11 +70,73 @@
   let myTabId = null;
   /** @type {AbortController | null} */
   let currentStepListener = null;
+  /** @type {Element | null} element the current step listener is bound to */
+  let currentListeningElement = null;
   /** @type {Array<{
    *   step_number: number,
    *   event_type: 'wrong_target' | 'wrong_page' | 'empty_input' | 'selector_miss',
    *   occurred_at: number,
    * }>} */
+  let assistantExpanded = true;
+  let assistantTransitionState = 'open';
+  let assistantTransitionTimer = null;
+  const ASSISTANT_TRANSITION_MS = 560;
+  let assistantMode = 'auto';
+  let assistantTab = 'prompt';
+  let assistantQuestion = '';
+  let assistantAnswer = '';
+  let assistantConfidence = '';
+  let assistantConfidenceReason = '';
+  let assistantLoading = false;
+  let assistantError = '';
+  let coachSuggestion = '';
+  let coachConfidence = '';
+  let coachConfidenceReason = '';
+  let coachLoading = false;
+  let coachError = '';
+  let coachEditing = false;
+  let recoverAnswer = '';
+  let recoverConfidence = '';
+  let recoverConfidenceReason = '';
+  let recoverLoading = false;
+  let recoverError = '';
+  let wrongTargetPending = false;
+  let lastExpectedTarget = '';
+  let lastActualAction = '';
+  /** @type {number | null} */
+  let matchStepIndex = null;
+  let matchStepReason = '';
+  let matchStepLoading = false;
+  let matchStepError = '';
+  let lastMatchUrlShape = '';
+  let lastMatchStepAt = 0;
+  const MATCH_STEP_THROTTLE_MS = 10_000;
+  let analyzeAnswer = '';
+  let analyzeConfidence = '';
+  let analyzeConfidenceReason = '';
+  let analyzeLoading = false;
+  let analyzeError = '';
+  /** @type {boolean | null} null = not loaded yet */
+  let stuckConsentAccepted = null;
+  let stuckConsentPromptVisible = false;
+  /** @type {HTMLElement[]} */
+  let privacyMaskOverlays = [];
+  /** @type {Record<number, string>} */
+  let instructionOverrides = {};
+  /** @type {'idle' | 'recording' | 'uploading' | 'done' | 'error'} */
+  let voiceStatus = 'idle';
+  let voiceError = '';
+  let voiceTranscript = '';
+  let voiceElapsedSeconds = 0;
+  /** @type {MediaRecorder | null} */
+  let mediaRecorder = null;
+  /** @type {MediaStream | null} */
+  let mediaStream = null;
+  /** @type {Blob[]} */
+  let recordedChunks = [];
+  /** @type {ReturnType<typeof setInterval> | null} */
+  let voiceTimerId = null;
+  let voiceRecordedAt = '';
   let frictionEvents = [];
 
   /** @type {Array<{
@@ -97,6 +193,223 @@
       return step.instruction.trim().slice(0, 500);
     }
     return '';
+  }
+
+  function describeClickedElement(target) {
+    if (!(target instanceof Element)) {
+      return 'Clicked outside the highlighted target';
+    }
+    const tag = target.tagName.toLowerCase();
+    const label =
+      target.getAttribute('aria-label') ||
+      target.getAttribute('title') ||
+      (typeof target.innerText === 'string'
+        ? target.innerText.replace(/\s+/g, ' ').trim().slice(0, 80)
+        : '') ||
+      target.getAttribute('name') ||
+      target.id ||
+      tag;
+    return `Clicked <${tag}> ${label}`.trim();
+  }
+
+  function resetRecoverState() {
+    recoverAnswer = '';
+    recoverConfidence = '';
+    recoverConfidenceReason = '';
+    recoverError = '';
+    recoverLoading = false;
+    wrongTargetPending = false;
+    lastExpectedTarget = '';
+    lastActualAction = '';
+  }
+
+  function resetMatchStepState() {
+    matchStepIndex = null;
+    matchStepReason = '';
+    matchStepError = '';
+    matchStepLoading = false;
+  }
+
+  function resetAnalyzeState() {
+    analyzeAnswer = '';
+    analyzeConfidence = '';
+    analyzeConfidenceReason = '';
+    analyzeError = '';
+    analyzeLoading = false;
+    stuckConsentPromptVisible = false;
+  }
+
+  function readStuckConsent() {
+    return new Promise((resolve) => {
+      if (!chrome.storage?.local) {
+        resolve(false);
+        return;
+      }
+      chrome.storage.local.get([STUCK_CONSENT_KEY], (result) => {
+        resolve(result?.[STUCK_CONSENT_KEY]?.accepted === true);
+      });
+    });
+  }
+
+  function saveStuckConsent() {
+    return new Promise((resolve) => {
+      const record = {
+        accepted: true,
+        acceptedAt: new Date().toISOString(),
+      };
+      if (!chrome.storage?.local) {
+        stuckConsentAccepted = true;
+        resolve(record);
+        return;
+      }
+      chrome.storage.local.set({ [STUCK_CONSENT_KEY]: record }, () => {
+        stuckConsentAccepted = true;
+        resolve(record);
+      });
+    });
+  }
+
+  function collectPrivacyMaskTargets() {
+    /** @type {Element[]} */
+    const targets = [];
+    const seen = new Set();
+    for (const selector of PRIVACY_MASK_SELECTORS) {
+      let nodes;
+      try {
+        nodes = document.querySelectorAll(selector);
+      } catch {
+        continue;
+      }
+      nodes.forEach((node) => {
+        if (!(node instanceof Element) || seen.has(node)) {
+          return;
+        }
+        if (hostEl && (node === hostEl || hostEl.contains(node))) {
+          return;
+        }
+        const rect = node.getBoundingClientRect();
+        if (rect.width < 2 || rect.height < 2) {
+          return;
+        }
+        seen.add(node);
+        targets.push(node);
+      });
+    }
+    return targets;
+  }
+
+  function applyPrivacyMask() {
+    removePrivacyMask();
+    const overlays = [];
+    for (const target of collectPrivacyMaskTargets()) {
+      const rect = target.getBoundingClientRect();
+      const overlay = document.createElement('div');
+      overlay.setAttribute(PRIVACY_MASK_ATTR, '1');
+      overlay.setAttribute('aria-hidden', 'true');
+      overlay.style.cssText = [
+        'position:fixed',
+        `top:${Math.max(0, rect.top - 2)}px`,
+        `left:${Math.max(0, rect.left - 2)}px`,
+        `width:${rect.width + 4}px`,
+        `height:${rect.height + 4}px`,
+        'background:#0f172a',
+        'border-radius:6px',
+        'z-index:2147483646',
+        'pointer-events:none',
+        'box-shadow:inset 0 0 0 1px rgba(148,163,184,0.35)',
+      ].join(';');
+      document.documentElement.appendChild(overlay);
+      overlays.push(overlay);
+    }
+    privacyMaskOverlays = overlays;
+    return overlays;
+  }
+
+  function removePrivacyMask() {
+    for (const overlay of privacyMaskOverlays) {
+      overlay.remove();
+    }
+    privacyMaskOverlays = [];
+    document.querySelectorAll(`[${PRIVACY_MASK_ATTR}]`).forEach((node) => node.remove());
+  }
+
+  function waitForPaint() {
+    return new Promise((resolve) => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(resolve);
+      });
+    });
+  }
+
+  async function captureVisibleTabMasked() {
+    const previousVisibility = hostEl ? hostEl.style.visibility : '';
+    try {
+      applyPrivacyMask();
+      if (hostEl) {
+        hostEl.style.visibility = 'hidden';
+      }
+      await waitForPaint();
+      const response = await new Promise((resolve, reject) => {
+        chrome.runtime?.sendMessage?.(
+          {
+            type: 'WALKTHROUGH_CAPTURE_VISIBLE',
+            tabId: activeState?.tabId ?? myTabId ?? null,
+          },
+          (payload) => {
+            if (chrome.runtime?.lastError) {
+              reject(new Error(chrome.runtime.lastError.message));
+              return;
+            }
+            if (!payload?.ok) {
+              reject(new Error(payload?.error || 'Screenshot capture failed.'));
+              return;
+            }
+            resolve(payload);
+          },
+        );
+      });
+      return typeof response.screenshot_b64 === 'string' ? response.screenshot_b64 : null;
+    } finally {
+      removePrivacyMask();
+      if (hostEl) {
+        hostEl.style.visibility = previousVisibility;
+      }
+    }
+  }
+
+  function urlShapeKey(href) {
+    try {
+      const url = new URL(href);
+      return `${url.origin}${generalizePathname(url.pathname)}`;
+    } catch {
+      return String(href || '');
+    }
+  }
+
+  function buildStepsSummary() {
+    return getSteps()
+      .map((step, index) => {
+        const title = step.title || step.instruction || `Step ${index + 1}`;
+        const page = stepPageUrl(step) || 'no url';
+        return `${index + 1}. ${title} | ${page}`;
+      })
+      .join('\n');
+  }
+
+  function parseMatchStepAnswer(raw) {
+    const text = String(raw || '').trim();
+    const match = text.match(/MATCH:\s*(null|\d+)\s*[-:]\s*(.+)$/im);
+    if (!match) {
+      return { stepIndex: null, reason: text };
+    }
+    if (match[1].toLowerCase() === 'null') {
+      return { stepIndex: null, reason: match[2].trim() };
+    }
+    const oneBased = Number(match[1]);
+    if (!Number.isFinite(oneBased) || oneBased < 1) {
+      return { stepIndex: null, reason: match[2].trim() };
+    }
+    return { stepIndex: oneBased - 1, reason: match[2].trim() };
   }
 
   function resetVisionLocateLocal() {
@@ -452,11 +765,78 @@
 
   function detachStepListener() {
     if (!currentStepListener) {
+      currentListeningElement = null;
       return;
     }
 
     currentStepListener.abort();
     currentStepListener = null;
+    currentListeningElement = null;
+  }
+
+  function associatedLabelText(element) {
+    if (!(element instanceof Element)) {
+      return '';
+    }
+    if (element.id) {
+      try {
+        const escaped =
+          typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
+            ? CSS.escape(element.id)
+            : element.id.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+        const byFor = document.querySelector(`label[for="${escaped}"]`);
+        if (byFor?.textContent) {
+          return byFor.textContent.replace(/\s+/g, ' ').trim();
+        }
+      } catch {
+        // ignore invalid id selectors
+      }
+    }
+    const wrapped = element.closest('label');
+    if (wrapped?.textContent) {
+      return wrapped.textContent.replace(/\s+/g, ' ').trim();
+    }
+    return '';
+  }
+
+  function isClickOnStepTarget(targetElement, eventTarget) {
+    if (!(eventTarget instanceof Node) || !(targetElement instanceof Element)) {
+      return false;
+    }
+    if (eventTarget === targetElement || targetElement.contains(eventTarget)) {
+      return true;
+    }
+    if (!(eventTarget instanceof Element)) {
+      return false;
+    }
+    if (eventTarget.tagName === 'LABEL') {
+      const htmlFor = eventTarget.getAttribute('for');
+      if (htmlFor && targetElement.id === htmlFor) {
+        return true;
+      }
+      if (eventTarget.contains(targetElement)) {
+        return true;
+      }
+    }
+    if (targetElement.tagName === 'LABEL') {
+      const htmlFor = targetElement.getAttribute('for');
+      if (htmlFor && eventTarget.id === htmlFor) {
+        return true;
+      }
+      if (targetElement.contains(eventTarget)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function clearWrongTargetOffer() {
+    if (!wrongTargetPending && !lastActualAction) {
+      return;
+    }
+    wrongTargetPending = false;
+    lastActualAction = '';
+    lastExpectedTarget = '';
   }
 
   /**
@@ -469,12 +849,6 @@
    */
   function attachWrongTargetListener(targetElement, signal) {
     const handler = (event) => {
-      if (
-        event.target instanceof Node &&
-        (event.target === targetElement || targetElement.contains(event.target))
-      ) {
-        return;
-      }
       // Ignore clicks on our own tooltip/overlay (Previous/Next/Finish etc.).
       if (
         hostEl &&
@@ -483,7 +857,53 @@
       ) {
         return;
       }
+
+      if (isClickOnStepTarget(targetElement, event.target)) {
+        if (wrongTargetPending) {
+          clearWrongTargetOffer();
+          render();
+        }
+        return;
+      }
+
+      // Prefer the live highlighted element if resolve just moved.
+      if (
+        currentHighlightRestore?.element &&
+        currentHighlightRestore.element !== targetElement &&
+        isClickOnStepTarget(currentHighlightRestore.element, event.target)
+      ) {
+        if (wrongTargetPending) {
+          clearWrongTargetOffer();
+          render();
+        }
+        return;
+      }
+
+      const step = getCurrentStep();
+      const expected = (describeStepForVision(step) || '').trim().toLowerCase();
+      const labelText = associatedLabelText(
+        event.target instanceof Element ? event.target : null,
+      ).toLowerCase();
+      if (expected && labelText && (labelText.includes(expected) || expected.includes(labelText))) {
+        if (wrongTargetPending) {
+          clearWrongTargetOffer();
+          render();
+        }
+        return;
+      }
+
+      lastExpectedTarget = describeStepForVision(step) || 'highlighted target';
+      lastActualAction = describeClickedElement(
+        event.target instanceof Element ? event.target : null,
+      );
+      const firstOffer = !wrongTargetPending;
+      wrongTargetPending = true;
+      if (firstOffer) {
+        assistantExpanded = true;
+        assistantTab = 'help';
+      }
       recordFriction('wrong_target');
+      render();
     };
 
     document.addEventListener('click', handler, { capture: true, signal });
@@ -495,14 +915,17 @@
       return;
     }
 
-    // Already listening on this element.
-    if (currentStepListener && currentHighlightRestore?.element === element) {
+    // Bind to the concrete element. Do not use currentHighlightRestore here:
+    // applyHighlight may already point at `element` while listeners are still
+    // attached to a previous node after DOM re-resolve.
+    if (currentStepListener && currentListeningElement === element) {
       return;
     }
 
     detachStepListener();
 
     currentStepListener = new AbortController();
+    currentListeningElement = element;
     const { signal } = currentStepListener;
 
     const advance = () => {
@@ -592,6 +1015,44 @@
     };
   }
 
+  function setAssistantExpanded(nextExpanded, tooltip = null) {
+    if (assistantTransitionTimer != null) {
+      clearTimeout(assistantTransitionTimer);
+      assistantTransitionTimer = null;
+    }
+
+    const targetTooltip = tooltip ?? shadowRoot?.querySelector('.tooltip');
+    if (!targetTooltip) {
+      assistantExpanded = nextExpanded;
+      assistantTransitionState = nextExpanded ? 'open' : 'closed';
+      return;
+    }
+
+    assistantExpanded = true;
+    targetTooltip.dataset.expanded = 'true';
+    targetTooltip.dataset.loading = String(assistantLoading);
+    targetTooltip.dataset.panelPhase = nextExpanded ? 'closed' : 'open';
+
+    void targetTooltip.offsetWidth;
+
+    requestAnimationFrame(() => {
+      assistantTransitionState = nextExpanded ? 'opening' : 'closing';
+      targetTooltip.dataset.panelPhase = assistantTransitionState;
+    });
+
+    assistantTransitionTimer = setTimeout(() => {
+      assistantExpanded = nextExpanded;
+      assistantTransitionState = nextExpanded ? 'open' : 'closed';
+      assistantTransitionTimer = null;
+
+      const settledTooltip = shadowRoot?.querySelector('.tooltip');
+      if (settledTooltip) {
+        settledTooltip.dataset.expanded = String(assistantExpanded);
+        settledTooltip.dataset.panelPhase = assistantTransitionState;
+      }
+    }, ASSISTANT_TRANSITION_MS);
+  }
+
   function ensureHost() {
     if (hostEl && shadowRoot) {
       return shadowRoot;
@@ -631,17 +1092,789 @@
           transition: top 0.12s ease, left 0.12s ease, width 0.12s ease, height 0.12s ease;
         }
         .highlight[hidden], .tooltip[hidden] { display: none !important; }
+        .assistant-tabs {
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          gap: 6px;
+          margin: 0 0 12px;
+        }
+
+        .assistant-tabs button {
+          min-height: 34px;
+          border-radius: 10px;
+          background: rgba(30, 41, 59, 0.72);
+          color: #cbd5e1;
+          font-size: 12px;
+          font-weight: 750;
+        }
+
+        .assistant-tabs button[data-active='true'] {
+          background: #ffffff;
+          color: #334155;
+        }
+
+        .qa-panel,
+        .prompt-panel,
+        .help-panel {
+          gap: 8px;
+          margin: 0 0 12px;
+        }
+
+        .qa-panel:not([hidden]),
+        .prompt-panel:not([hidden]),
+        .help-panel:not([hidden]) {
+          display: grid;
+        }
+
+        .help-note,
+        .help-hint {
+          margin: 0;
+          color: #cbd5e1;
+          font-size: 12px;
+          line-height: 1.45;
+        }
+
+        .help-hint {
+          padding: 8px 10px;
+          border-radius: 10px;
+          background: rgba(251, 191, 36, 0.14);
+          color: #fde68a;
+        }
+
+        .recover-answer[hidden],
+        .recover-confidence[hidden],
+        .recover-error[hidden],
+        .help-hint[hidden] {
+          display: none;
+        }
+
+        .recover-error {
+          margin: 0;
+          color: #fca5a5;
+          font-size: 12px;
+        }
+
+        .match-suggestion {
+          margin: 0;
+          padding: 10px 12px;
+          border-radius: 12px;
+          background: rgba(52, 211, 153, 0.14);
+          color: #bbf7d0;
+          white-space: pre-wrap;
+        }
+
+        .match-suggestion[hidden],
+        .match-error[hidden],
+        .match-jump[hidden] {
+          display: none;
+        }
+
+        .match-error {
+          margin: 0;
+          color: #fca5a5;
+          font-size: 12px;
+        }
+
+        .help-actions {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+        }
+
+        .stuck-divider {
+          margin: 4px 0 0;
+          border: 0;
+          border-top: 1px solid rgba(148, 163, 184, 0.28);
+        }
+
+        .stuck-consent {
+          margin: 0;
+          padding: 10px 12px;
+          border-radius: 12px;
+          background: rgba(148, 163, 184, 0.14);
+          color: #e2e8f0;
+          font-size: 12px;
+          line-height: 1.45;
+        }
+
+        .stuck-consent[hidden],
+        .analyze-answer[hidden],
+        .analyze-confidence[hidden],
+        .analyze-error[hidden] {
+          display: none;
+        }
+
+        .analyze-answer,
+        .recover-answer {
+          margin: 0;
+          max-height: 7.5em;
+          padding: 10px 12px;
+          overflow-x: hidden;
+          overflow-y: auto;
+          border-radius: 12px;
+          background: rgba(59, 130, 246, 0.14);
+          color: #dbeafe;
+          white-space: pre-wrap;
+        }
+
+        .analyze-error {
+          margin: 0;
+          color: #fca5a5;
+          font-size: 12px;
+        }
+
+        .prompt-actions {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+        }
+
+        .coach-suggestion {
+          margin: 0;
+          padding: 10px 12px;
+          border-radius: 12px;
+          background: rgba(59, 130, 246, 0.14);
+          color: #dbeafe;
+          white-space: pre-wrap;
+        }
+
+        .coach-suggestion[hidden],
+        .coach-edit-input[hidden],
+        .coach-confidence[hidden],
+        .coach-error[hidden] {
+          display: none !important;
+        }
+
+        .coach-edit-input {
+          width: 100%;
+          resize: vertical;
+          min-height: 76px;
+          box-sizing: border-box;
+          border: 1px solid rgba(147, 197, 253, 0.26);
+          border-radius: 12px;
+          padding: 10px 12px;
+          background: rgba(15, 23, 42, 0.72);
+          color: #f8fafc;
+          font: inherit;
+          outline: none;
+        }
+
+        .coach-note {
+          margin: 0;
+          color: #94a3b8;
+          font-size: 11px;
+          line-height: 1.4;
+        }
+
+        .coach-error {
+          margin: 0;
+          color: #fca5a5;
+          font-size: 12px;
+        }
+
+        .qa-label {
+          color: #93c5fd;
+          font-size: 12px;
+          font-weight: 800;
+          text-transform: uppercase;
+          letter-spacing: 0.08em;
+        }
+
+        .qa-input {
+          width: 100%;
+          resize: vertical;
+          min-height: 76px;
+          box-sizing: border-box;
+          border: 1px solid rgba(147, 197, 253, 0.26);
+          border-radius: 12px;
+          padding: 10px 12px;
+          background: rgba(15, 23, 42, 0.72);
+          color: #f8fafc;
+          font: inherit;
+          outline: none;
+        }
+
+        .qa-input:focus {
+          border-color: rgba(129, 140, 248, 0.85);
+          box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.18);
+        }
+
+        .voice-panel {
+          gap: 8px;
+          margin: 0 0 12px;
+        }
+
+        .voice-panel:not([hidden]) {
+          display: grid;
+        }
+
+        .voice-status {
+          margin: 0;
+          color: #cbd5e1;
+          font-size: 12px;
+        }
+
+        .voice-status[data-tone='recording'] {
+          color: #fca5a5;
+          font-weight: 700;
+        }
+
+        .voice-status[data-tone='done'] {
+          color: #86efac;
+        }
+
+        .voice-status[data-tone='error'] {
+          color: #fca5a5;
+        }
+
+        .voice-actions {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+        }
+
+        .voice-transcript {
+          margin: 4px 0 0;
+          padding: 10px 12px;
+          border-radius: 10px;
+          background: rgba(15, 23, 42, 0.72);
+          color: #e2e8f0;
+          font-size: 13px;
+          line-height: 1.45;
+          white-space: pre-wrap;
+        }
+
+        .voice-transcript[hidden] {
+          display: none !important;
+        }
+
+        .qa-confidence {
+          display: inline-flex;
+          margin: 8px 0 0;
+          padding: 3px 8px;
+          border-radius: 999px;
+          background: rgba(148, 163, 184, 0.22);
+          color: #e2e8f0;
+          font-size: 11px;
+          font-weight: 700;
+          letter-spacing: 0.04em;
+          text-transform: uppercase;
+        }
+
+        .qa-confidence[data-level='high'] {
+          background: rgba(34, 197, 94, 0.2);
+          color: #bbf7d0;
+        }
+
+        .qa-confidence[data-level='medium'] {
+          background: rgba(234, 179, 8, 0.2);
+          color: #fde68a;
+        }
+
+        .qa-confidence[data-level='low'] {
+          background: rgba(248, 113, 113, 0.2);
+          color: #fecaca;
+        }
+
+        .qa-confidence[hidden] {
+          display: none !important;
+        }
+
+        .qa-answer {
+          margin: 4px 0 0;
+          padding: 10px 12px;
+          border-radius: 12px;
+          background: rgba(59, 130, 246, 0.14);
+          color: #dbeafe;
+        }
         .tooltip {
           position: fixed;
-          width: min(320px, calc(100vw - 24px));
-          max-width: 320px;
-          padding: 14px;
-          border-radius: 12px;
-          background: #0f172a;
+          right: 24px;
+          bottom: 24px;
+          left: auto !important;
+          top: auto !important;
+          display: flex;
+          flex-direction: column;
+          width: min(340px, calc(100vw - 32px));
+          max-width: 340px;
+          max-height: min(72vh, 640px);
+          padding: 0;
+          overflow: visible;
+          border-radius: 18px;
+          background: transparent;
           color: #f8fafc;
           font: 13px/1.45 ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif;
+          pointer-events: none;
+          transition:
+            width 220ms ease,
+            max-width 220ms ease,
+            max-height 220ms ease;
+        }
+
+        .assistant-panel {
+          display: flex;
+          flex: 1 1 auto;
+          flex-direction: column;
+          min-height: 0;
+          max-height: min(72vh, 640px);
+          padding: 14px;
+          overflow-x: hidden;
+          overflow-y: auto;
+          overscroll-behavior: contain;
+          border-radius: 18px;
+          background: #0f172a;
           box-shadow: 0 18px 40px rgb(15 23 42 / 35%);
           pointer-events: auto;
+          clip-path: inset(0 round 18px);
+          transform-origin: right bottom;
+          transition:
+            transform 360ms cubic-bezier(0.18, 0.95, 0.2, 1),
+            opacity 180ms ease,
+            clip-path 360ms cubic-bezier(0.18, 0.95, 0.2, 1),
+            border-radius 360ms cubic-bezier(0.18, 0.95, 0.2, 1),
+            box-shadow 360ms ease;
+          will-change: transform, opacity, clip-path, border-radius;
+        }
+
+        .assistant-panel .actions {
+          position: sticky;
+          bottom: 0;
+          padding-top: 8px;
+          background: linear-gradient(180deg, transparent, #0f172a 28%);
+        }
+
+        .assistant-orb {
+          position: absolute;
+          right: calc(100% + 12px);
+          bottom: 0;
+          display: grid;
+          width: 64px;
+          height: 64px;
+          place-items: center;
+          padding: 0;
+          border: 0;
+          border-radius: 999px;
+          overflow: hidden;
+          isolation: isolate;
+          background:
+            radial-gradient(circle at 34% 28%, rgba(255, 255, 255, 0.34), transparent 26%),
+            radial-gradient(circle at 72% 76%, rgba(50, 35, 180, 0.42), transparent 38%),
+            linear-gradient(135deg, #7392ff 0%, #675af4 48%, #4b31c8 100%);
+          box-shadow:
+            0 18px 34px rgba(44, 58, 160, 0.28),
+            0 0 0 8px rgba(99, 102, 241, 0.08);
+          cursor: pointer;
+          pointer-events: auto;
+          transition:
+            right 220ms cubic-bezier(0.2, 0.9, 0.2, 1),
+            transform 160ms ease,
+            box-shadow 160ms ease,
+            filter 160ms ease;
+          animation: orb-breathe 3.4s ease-in-out infinite;
+        }
+
+        .tooltip[data-expanded='true'],
+        .tooltip[data-panel-phase='opening'],
+        .tooltip[data-panel-phase='closing'] {
+          width: min(416px, calc(100vw - 32px));
+          max-width: 416px;
+        }
+
+        .tooltip[data-expanded='true'] .assistant-panel,
+        .tooltip[data-panel-phase='opening'] .assistant-panel,
+        .tooltip[data-panel-phase='closing'] .assistant-panel {
+          margin-left: 76px;
+        }
+
+        .tooltip[data-expanded='true'] .assistant-orb,
+        .tooltip[data-panel-phase='opening'] .assistant-orb,
+        .tooltip[data-panel-phase='closing'] .assistant-orb {
+          right: auto;
+          left: 6px;
+          top: auto;
+          bottom: 0;
+        }
+
+        .assistant-orb::before {
+          content: '';
+          position: absolute;
+          inset: -35%;
+          z-index: 0;
+          pointer-events: none;
+          border-radius: inherit;
+          background:
+            radial-gradient(circle at 28% 36%, rgba(255, 255, 255, 0.26), transparent 20%),
+            radial-gradient(circle at 68% 42%, rgba(117, 226, 255, 0.18), transparent 24%),
+            radial-gradient(circle at 46% 72%, rgba(154, 126, 255, 0.28), transparent 26%);
+          filter: blur(2px);
+          opacity: 0.9;
+          transform: translate3d(-4%, -2%, 0) rotate(0deg);
+          animation: orb-ambient-shift 8400ms ease-in-out infinite;
+        }
+
+        .assistant-orb:hover {
+          transform: scale(1.04);
+          filter: brightness(1.04);
+          box-shadow:
+            0 22px 42px rgba(44, 58, 160, 0.34),
+            0 0 0 10px rgba(99, 102, 241, 0.1);
+        }
+
+        .assistant-orb:active {
+          transform: scale(0.97);
+        }
+
+        .orb-logo {
+          width: 50px;
+          height: 50px;
+          overflow: visible;
+          position: relative;
+          z-index: 1;
+        }
+
+        .orb-link {
+          fill: none;
+          stroke: rgba(255, 255, 255, 0.72);
+          stroke-width: 2.3;
+          stroke-linecap: round;
+          stroke-linejoin: round;
+          filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.2));
+        }
+
+        .tooltip[data-loading='false'] .orb-link {
+          animation: orb-idle-link-glow 3600ms ease-in-out infinite;
+        }
+
+        .tooltip[data-loading='false'] .orb-node {
+          animation: orb-idle-node-glow 3600ms ease-in-out infinite;
+        }
+        
+        .orb-flow {
+          fill: none;
+          stroke: #ffffff;
+          stroke-width: 2.8;
+          stroke-linecap: round;
+          stroke-linejoin: round;
+          stroke-dasharray: 22;
+          stroke-dashoffset: 22;
+          opacity: 0;
+          filter:
+            drop-shadow(0 0 5px rgba(255, 255, 255, 0.85))
+            drop-shadow(0 0 12px rgba(130, 125, 255, 0.55));
+        }
+        
+        .orb-node {
+          fill: #665ff0;
+          stroke: rgba(255, 255, 255, 0.72);
+          stroke-width: 2.4;
+          opacity: 1;
+          filter:
+            drop-shadow(0 0 3px rgba(255, 255, 255, 0.2))
+            drop-shadow(0 0 8px rgba(120, 116, 255, 0.14));
+        }
+
+        .tooltip[data-loading='true'] .orb-logo {
+          filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.8));
+        }
+
+        .tooltip[data-loading='true'] .orb-link,
+        .tooltip[data-loading='true'] .orb-node {
+          animation: none;
+        }
+
+        .tooltip[data-loading='true'] .orb-node-1 {
+          animation: orb-node-glow 2800ms ease-in-out infinite;
+        }
+
+        .tooltip[data-loading='true'] .orb-node-2 {
+          animation: orb-node-glow 2800ms ease-in-out 520ms infinite;
+        }
+
+        .tooltip[data-loading='true'] .orb-node-3 {
+          animation: orb-node-glow 2800ms ease-in-out 1040ms infinite;
+        }
+
+        .tooltip[data-loading='true'] .orb-flow-left {
+          animation: orb-flow-left 2800ms ease-in-out infinite;
+        }
+
+        .tooltip[data-loading='true'] .orb-flow-right {
+          animation: orb-flow-right 2800ms ease-in-out infinite;
+        }
+
+        .tooltip[data-loading='true'] .orb-link {
+          animation: none;
+        }
+
+        @keyframes orb-breathe {
+          0%, 100% {
+            box-shadow:
+              0 18px 34px rgba(44, 58, 160, 0.25),
+              0 0 0 7px rgba(99, 102, 241, 0.07);
+          }
+
+          50% {
+            box-shadow:
+              0 20px 38px rgba(44, 58, 160, 0.32),
+              0 0 0 11px rgba(99, 102, 241, 0.1);
+          }
+        }
+
+        @keyframes orb-flow-left {
+          0% {
+            stroke-dashoffset: 22;
+            opacity: 0;
+          }
+
+          10% {
+            opacity: 1;
+          }
+
+          38% {
+            stroke-dashoffset: 0;
+            opacity: 1;
+          }
+
+          52%, 100% {
+            stroke-dashoffset: 0;
+            opacity: 0;
+          }
+        }
+
+        @keyframes orb-flow-right {
+          0%, 30% {
+            stroke-dashoffset: 22;
+            opacity: 0;
+          }
+
+          42% {
+            opacity: 1;
+          }
+
+          72% {
+            stroke-dashoffset: 0;
+            opacity: 1;
+          }
+
+          88%, 100% {
+            stroke-dashoffset: 0;
+            opacity: 0;
+          }
+        }
+
+        @keyframes orb-idle-link-glow {
+          0%, 100% {
+            stroke: rgba(255, 255, 255, 0.66);
+            filter:
+              drop-shadow(0 0 3px rgba(255, 255, 255, 0.12))
+              drop-shadow(0 0 8px rgba(120, 116, 255, 0.12));
+          }
+
+          50% {
+            stroke: rgba(255, 255, 255, 0.96);
+            filter:
+              drop-shadow(0 0 6px rgba(255, 255, 255, 0.56))
+              drop-shadow(0 0 14px rgba(120, 116, 255, 0.34));
+          }
+        }
+
+        @keyframes orb-idle-node-glow {
+          0%, 100% {
+            fill: #665ff0;
+            stroke: rgba(255, 255, 255, 0.74);
+            filter:
+              drop-shadow(0 0 2px rgba(255, 255, 255, 0.16))
+              drop-shadow(0 0 7px rgba(120, 116, 255, 0.12));
+          }
+
+          50% {
+            fill: #8a84ff;
+            stroke: #ffffff;
+            filter:
+              drop-shadow(0 0 5px rgba(255, 255, 255, 0.56))
+              drop-shadow(0 0 13px rgba(120, 116, 255, 0.34));
+          }
+        }
+
+        @keyframes orb-node-glow {
+          0%, 100% {
+            fill: #665ff0;
+            stroke: rgba(255, 255, 255, 0.72);
+            filter:
+              drop-shadow(0 0 2px rgba(255, 255, 255, 0.16))
+              drop-shadow(0 0 7px rgba(120, 116, 255, 0.12));
+          }
+
+          32% {
+            fill: #dedcff;
+            stroke: #ffffff;
+            filter:
+              drop-shadow(0 0 5px rgba(255, 255, 255, 0.62))
+              drop-shadow(0 0 12px rgba(130, 125, 255, 0.35));
+          }
+
+          62% {
+            fill: #6f68f5;
+            stroke: rgba(255, 255, 255, 0.82);
+            filter:
+              drop-shadow(0 0 3px rgba(255, 255, 255, 0.28))
+              drop-shadow(0 0 8px rgba(120, 116, 255, 0.18));
+          }
+        }
+
+        @keyframes orb-ambient-shift {
+          0%, 100% {
+            transform: translate3d(-4%, -2%, 0) rotate(0deg);
+          }
+
+          50% {
+            transform: translate3d(5%, 4%, 0) rotate(12deg);
+          }
+        }
+        .tooltip[data-expanded='false'] {
+          pointer-events: none;
+        }
+
+        .tooltip[data-panel-phase='closed'] {
+          width: 64px;
+          height: 64px;
+          max-width: 64px;
+          max-height: 64px;
+        }
+
+        .tooltip[data-panel-phase='closed'] .assistant-orb {
+          right: 0;
+          left: auto;
+          top: auto;
+          bottom: 0;
+        }
+
+        .tooltip[data-expanded='false'] .assistant-panel,
+        .tooltip[data-panel-phase='closed'] .assistant-panel {
+          opacity: 0;
+          pointer-events: none;
+          clip-path: circle(22px at 100% 100%);
+          border-radius: 999px;
+          box-shadow: 0 8px 18px rgb(15 23 42 / 12%);
+          transform: translateX(64px) translateY(0) scale(0.14);
+        }
+
+        .tooltip[data-panel-phase='opening'] .assistant-panel {
+          opacity: 1;
+          clip-path: inset(0 round 18px);
+          transform: translateX(0) scale(1);
+        }
+
+        .tooltip[data-expanded='true'] .assistant-panel {
+          opacity: 1;
+          clip-path: inset(0 round 18px);
+          transform: translateX(0) scale(1);
+        }
+
+        .tooltip[data-panel-phase='closing'] .assistant-panel {
+          opacity: 0;
+          clip-path: inset(0 round 18px);
+          border-radius: 18px;
+          box-shadow: 0 12px 26px rgb(15 23 42 / 22%);
+          transform: translateX(68px) translateY(12px) scaleX(0.12) scaleY(0.22);
+          transition:
+            transform 560ms cubic-bezier(0.18, 0.95, 0.2, 1),
+            opacity 260ms ease 240ms,
+            box-shadow 560ms cubic-bezier(0.18, 0.95, 0.2, 1);
+          pointer-events: none;
+        }
+
+        .tooltip[data-panel-phase='closing'] .assistant-orb {
+          right: auto;
+          left: calc(100% - 64px);
+          transition:
+            left 520ms cubic-bezier(0.22, 1, 0.36, 1),
+            transform 160ms ease,
+            box-shadow 160ms ease,
+            filter 160ms ease;
+        }
+
+        .assistant-panel > * {
+          transform-origin: right bottom;
+          transition:
+            opacity 220ms ease,
+            transform 300ms cubic-bezier(0.18, 0.95, 0.2, 1),
+            filter 300ms ease;
+        }
+
+        .tooltip[data-expanded='false'] .assistant-panel > * {
+          opacity: 0;
+          filter: blur(1.5px);
+          transform: translateX(34px) translateY(18px) scale(0.58);
+          transition-delay: 0ms;
+        }
+
+        .tooltip[data-panel-phase='opening'] .assistant-panel > *,
+        .tooltip[data-expanded='true'] .assistant-panel > * {
+          opacity: 1;
+          filter: blur(0);
+          transform: translateX(0) translateY(0) scale(1);
+          transition-delay: 120ms;
+        }
+
+        .tooltip[data-panel-phase='closing'] .assistant-panel > * {
+          opacity: 0;
+          filter: blur(0.8px);
+          transform: translateX(18px) translateY(8px) scale(0.72);
+          transition:
+            opacity 320ms ease,
+            transform 440ms cubic-bezier(0.18, 0.95, 0.2, 1),
+            filter 320ms ease;
+          transition-delay: 0ms;
+        }
+
+        .assistant-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+          margin-bottom: 10px;
+        }
+
+        .assistant-title {
+          margin: 0;
+          color: #93c5fd;
+          font-size: 11px;
+          font-weight: 700;
+          letter-spacing: 0.04em;
+          text-transform: uppercase;
+        }
+
+        .assistant-collapse {
+          padding: 4px 8px;
+          border-radius: 8px;
+          background: #1e293b;
+          color: #f8fafc;
+        }
+
+        .mode-toggle {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 6px;
+          padding: 6px;
+          margin: 0 0 12px;
+          border-radius: 12px;
+          background: rgba(30, 41, 59, 0.9);
+        }
+
+        .mode-toggle button {
+          min-height: 32px;
+          padding: 6px 8px;
+          border-radius: 9px;
+          background: transparent;
+          color: #cbd5e1;
+          font-size: 12px;
+          font-weight: 700;
+        }
+
+        .mode-toggle button[data-active='true'] {
+          background: #ffffff;
+          color: #1e293b;
         }
         .eyebrow {
           margin: 0 0 6px;
@@ -655,6 +1888,20 @@
           margin: 0 0 10px;
           font-size: 14px;
           font-weight: 600;
+        }
+        .step-warning {
+          margin: -4px 0 10px;
+          color: #fbbf24;
+          font-size: 11px;
+          font-weight: 650;
+          line-height: 1.35;
+          display: -webkit-box;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+        }
+        .step-warning[hidden] {
+          display: none !important;
         }
         .preview {
           display: block;
@@ -702,15 +1949,161 @@
       </style>
       <div class="backdrop" aria-hidden="true"></div>
       <div class="highlight" hidden></div>
-      <div class="tooltip" role="dialog" aria-live="polite" hidden>
-        <p class="eyebrow"></p>
-        <p class="instruction"></p>
-        <img class="preview" alt="Step screenshot preview" hidden />
-        <p class="fallback-note" hidden></p>
-        <div class="actions">
-          <button type="button" class="btn-secondary" data-action="previous">Previous</button>
-          <button type="button" class="btn-primary" data-action="next">Next</button>
-          <button type="button" class="btn-primary" data-action="finish" hidden>Finish</button>
+      <div class="tooltip" role="dialog" aria-live="polite" data-expanded="true" data-panel-phase="open" hidden>
+        <button type="button" class="assistant-orb" data-action="toggle" aria-label="Open walkthrough assistant">
+          <svg class="orb-logo" viewBox="0 0 44 44" aria-hidden="true">
+            <path class="orb-link" d="M9 29L21 15L34 28" />
+            <path class="orb-flow orb-flow-left" d="M9 29L21 15" />
+            <path class="orb-flow orb-flow-right" d="M21 15L34 28" />
+            <circle class="orb-node orb-node-1" cx="9" cy="29" r="4.2" />
+            <circle class="orb-node orb-node-2" cx="21" cy="15" r="4.2" />
+            <circle class="orb-node orb-node-3" cx="34" cy="28" r="4.2" />
+          </svg>
+          
+        </button>
+
+        <div class="assistant-panel">
+          <div class="assistant-header">
+            <p class="assistant-title">WorkTrace Guide</p>
+            <button type="button" class="assistant-collapse" data-action="toggle" aria-label="Collapse walkthrough assistant">
+              -
+            </button>
+          </div>
+
+          <div class="mode-toggle" role="group" aria-label="Walkthrough mode">
+            <button type="button" data-action="mode-auto" data-mode="auto">Auto Walkthrough</button>
+            <button type="button" data-action="mode-manual" data-mode="manual">Manual Guide</button>
+          </div>
+
+          <div class="assistant-tabs" role="tablist" aria-label="Assistant tools">
+            <button type="button" data-action="tab-prompt" data-tab="prompt">Prompt</button>
+            <button type="button" data-action="tab-qa" data-tab="qa">Q&A</button>
+            <button type="button" data-action="tab-voice" data-tab="voice">Voice</button>
+            <button type="button" data-action="tab-help" data-tab="help">Help</button>
+          </div>
+
+          <p class="eyebrow"></p>
+          <p class="instruction"></p>
+          <p class="step-warning" hidden></p>
+          <div class="prompt-panel" hidden>
+            <p class="qa-label">Prompt Coaching</p>
+            <p class="coach-note">
+              Rewrite this step more clearly for the current page. Use this only updates your local
+              guide text; it does not change the shared SOP.
+            </p>
+            <div class="prompt-actions">
+              <button type="button" class="btn-primary coach-generate" data-action="coach-generate">
+                Generate clearer instruction
+              </button>
+              <button type="button" class="btn-secondary coach-use" data-action="coach-use" hidden>
+                Use this
+              </button>
+              <button type="button" class="btn-secondary coach-edit-btn" data-action="coach-edit" hidden>
+                Edit
+              </button>
+              <button
+                type="button"
+                class="btn-secondary coach-cancel-edit"
+                data-action="coach-cancel-edit"
+                hidden
+              >
+                Cancel edit
+              </button>
+            </div>
+            <p class="qa-confidence coach-confidence" hidden></p>
+            <p class="coach-suggestion" hidden></p>
+            <textarea class="coach-edit-input" rows="3" hidden></textarea>
+            <p class="coach-error" hidden></p>
+          </div>
+          <div class="qa-panel" hidden>
+            <label class="qa-label" for="worktrace-assistant-question">Ask about this step</label>
+            <textarea
+              id="worktrace-assistant-question"
+              class="qa-input"
+              rows="3"
+              placeholder="Example: what should I click now?"
+            ></textarea>
+            <button type="button" class="btn-primary qa-submit" data-action="ask-assistant">
+              Ask
+            </button>
+            <p class="qa-confidence qa-confidence-chip" hidden></p>
+            <p class="qa-answer" hidden></p>
+          </div>
+          <div class="voice-panel" hidden>
+            <p class="qa-label">Voice Feedback</p>
+            <p class="voice-status" data-tone="idle">Record a short note about this step for your reviewer.</p>
+            <div class="voice-actions">
+              <button type="button" class="btn-primary voice-start" data-action="voice-start">
+                Start recording
+              </button>
+              <button type="button" class="btn-primary voice-stop" data-action="voice-stop" hidden>
+                Stop &amp; upload
+              </button>
+              <button type="button" class="btn-secondary voice-reset" data-action="voice-reset" hidden>
+                Record again
+              </button>
+            </div>
+            <p class="voice-transcript" hidden></p>
+          </div>
+          <div class="help-panel" hidden>
+            <p class="qa-label">Recovery</p>
+            <p class="help-note">Off-target click? Recover or jump to a better step.</p>
+            <p class="help-hint" hidden></p>
+            <div class="help-actions">
+              <button type="button" class="btn-primary recover-generate" data-action="recover-generate">
+                Get recovery steps
+              </button>
+              <button type="button" class="btn-secondary match-generate" data-action="match-generate">
+                Find my step
+              </button>
+            </div>
+            <p class="qa-confidence recover-confidence" hidden></p>
+            <p class="recover-answer" hidden></p>
+            <p class="recover-error" hidden></p>
+            <p class="match-suggestion" hidden></p>
+            <button type="button" class="btn-primary match-jump" data-action="match-jump" hidden>
+              Jump to matched step
+            </button>
+            <p class="match-error" hidden></p>
+            <hr class="stuck-divider" />
+            <p class="qa-label">I am stuck</p>
+            <p class="help-note">Screenshot this page (sensitive fields covered) for AI help.</p>
+            <p class="stuck-consent" hidden>
+              Sends one masked screenshot to WorkTrace AI for this step. Accept once to enable.
+            </p>
+            <div class="help-actions">
+              <button type="button" class="btn-primary stuck-analyze" data-action="stuck-analyze">
+                I am stuck
+              </button>
+              <button
+                type="button"
+                class="btn-primary stuck-consent-accept"
+                data-action="stuck-consent-accept"
+                hidden
+              >
+                Accept screenshot help
+              </button>
+              <button
+                type="button"
+                class="btn-secondary stuck-consent-cancel"
+                data-action="stuck-consent-cancel"
+                hidden
+              >
+                Not now
+              </button>
+            </div>
+            <p class="qa-confidence analyze-confidence" hidden></p>
+            <p class="analyze-answer" hidden></p>
+            <p class="analyze-error" hidden></p>
+          </div>
+          <img class="preview" alt="Step screenshot preview" hidden />
+          <p class="fallback-note" hidden></p>
+
+          <div class="actions">
+            <button type="button" class="btn-secondary" data-action="previous">Previous</button>
+            <button type="button" class="btn-primary" data-action="next">Next</button>
+            <button type="button" class="btn-primary" data-action="finish" hidden>Finish</button>
+          </div>
         </div>
       </div>
     `;
@@ -722,7 +2115,60 @@
         return;
       }
       const action = button.getAttribute('data-action');
-      if (action === 'previous') {
+      if (action === 'toggle') {
+        setAssistantExpanded(!assistantExpanded, tooltip);
+      } else if (action === 'tab-prompt') {
+        assistantTab = 'prompt';
+        render();
+      } else if (action === 'tab-qa') {
+        assistantTab = 'qa';
+        render();
+      } else if (action === 'tab-voice') {
+        assistantTab = 'voice';
+        render();
+      } else if (action === 'tab-help') {
+        assistantTab = 'help';
+        render();
+      } else if (action === 'ask-assistant') {
+        void askAssistant();
+      } else if (action === 'coach-generate') {
+        void generateCoachSuggestion();
+      } else if (action === 'coach-use') {
+        adoptCoachSuggestion();
+      } else if (action === 'coach-edit') {
+        beginCoachEdit();
+      } else if (action === 'coach-cancel-edit') {
+        cancelCoachEdit();
+      } else if (action === 'recover-generate') {
+        void generateRecoverSuggestion();
+      } else if (action === 'match-generate') {
+        void requestStepMatch({ force: true });
+      } else if (action === 'match-jump') {
+        jumpToMatchedStep();
+      } else if (action === 'stuck-analyze') {
+        void handleStuckAnalyzeClick();
+      } else if (action === 'stuck-consent-accept') {
+        void acceptStuckConsentAndAnalyze();
+      } else if (action === 'stuck-consent-cancel') {
+        stuckConsentPromptVisible = false;
+        analyzeError = '';
+        render();
+      } else if (action === 'voice-start') {
+        void startVoiceRecording();
+      } else if (action === 'voice-stop') {
+        stopVoiceRecording();
+      } else if (action === 'voice-reset') {
+        resetVoiceUi();
+        render();
+      } else if (action === 'mode-auto') {
+        assistantMode = 'auto';
+        render();
+      } else if (action === 'mode-manual') {
+        assistantMode = 'manual';
+        detachStepListener();
+        removeHighlight();
+        render();
+      } else if (action === 'previous') {
         handlePrevious();
       } else if (action === 'next') {
         handleNext();
@@ -744,6 +2190,8 @@
     // leaveCurrentStep() before any state transition that leads here.
     detachStepListener();
     removeHighlight();
+    discardVoiceRecording();
+    removePrivacyMask();
 
     if (hostEl) {
       hostEl.remove();
@@ -811,25 +2259,11 @@
     });
   }
 
-  function placeTooltip(tooltip, anchorRect) {
-    const gap = 12;
-    const tooltipRect = tooltip.getBoundingClientRect();
-    const width = tooltipRect.width || 320;
-    const height = tooltipRect.height || 160;
-
-    let top = anchorRect.bottom + gap;
-    let left = anchorRect.left;
-
-    if (top + height > window.innerHeight - 8) {
-      top = Math.max(8, anchorRect.top - height - gap);
-    }
-    if (left + width > window.innerWidth - 8) {
-      left = Math.max(8, window.innerWidth - width - 8);
-    }
-    left = Math.max(8, left);
-
-    tooltip.style.top = `${top}px`;
-    tooltip.style.left = `${left}px`;
+  function placeTooltip(tooltip) {
+    tooltip.style.top = 'auto';
+    tooltip.style.left = 'auto';
+    tooltip.style.right = '24px';
+    tooltip.style.bottom = '24px';
   }
 
   function isWrongPage(step) {
@@ -879,10 +2313,16 @@
 
     if (isWrongPage(step)) {
       recordFriction('wrong_page');
+      void requestStepMatch({ force: false });
     }
   }
 
   function refreshHighlight() {
+    if (assistantMode === 'manual') {
+      detachStepListener();
+      removeHighlight();
+      return;
+    }
     const step = getCurrentStep();
     if (!step) {
       detachStepListener();
@@ -977,16 +2417,13 @@
       }
     }
 
-    if (showPreview && tooltip.dataset.anchorMode !== 'vision') {
-      preview.hidden = false;
-      preview.src = step.screenshot_url;
-    } else if (showPreview && tooltip.dataset.anchorMode === 'vision') {
-      // Prefer live vision highlight; keep screenshot available but collapsed.
+    // Help tab is already dense; keep the step screenshot out of the way.
+    if (assistantTab === 'help' || !showPreview || tooltip.dataset.anchorMode === 'vision') {
       preview.hidden = true;
       preview.removeAttribute('src');
     } else {
-      preview.hidden = true;
-      preview.removeAttribute('src');
+      preview.hidden = false;
+      preview.src = step.screenshot_url;
     }
   }
 
@@ -1006,6 +2443,15 @@
     // New step visit: allow a fresh selector_miss/wrong_page recording for it.
     missFrictionStepIndex = null;
     resetVisionLocateLocal();
+    coachSuggestion = '';
+    coachConfidence = '';
+    coachConfidenceReason = '';
+    coachError = '';
+    coachEditing = false;
+    coachLoading = false;
+    resetRecoverState();
+    resetMatchStepState();
+    resetAnalyzeState();
 
     const stepNumber = step.step_number ?? activeState.stepIndex + 1;
     lastEnteredStepIndex = activeState.stepIndex;
@@ -1135,13 +2581,80 @@
     const tooltip = root.querySelector('.tooltip');
     const eyebrow = root.querySelector('.eyebrow');
     const instruction = root.querySelector('.instruction');
+    const stepWarning = root.querySelector('.step-warning');
     const previousBtn = root.querySelector('[data-action="previous"]');
     const nextBtn = root.querySelector('[data-action="next"]');
     const finishBtn = root.querySelector('[data-action="finish"]');
+    const autoModeBtn = root.querySelector('[data-action="mode-auto"]');
+    const manualModeBtn = root.querySelector('[data-action="mode-manual"]');
 
+    const tabs = root.querySelectorAll('[data-tab]');
+    const promptPanel = root.querySelector('.prompt-panel');
+    const coachGenerateBtn = root.querySelector('.coach-generate');
+    const coachUseBtn = root.querySelector('.coach-use');
+    const coachEditBtn = root.querySelector('.coach-edit-btn');
+    const coachCancelEditBtn = root.querySelector('.coach-cancel-edit');
+    const coachConfidenceEl = root.querySelector('.coach-confidence');
+    const coachSuggestionEl = root.querySelector('.coach-suggestion');
+    const coachEditInput = root.querySelector('.coach-edit-input');
+    const coachErrorEl = root.querySelector('.coach-error');
+    const qaPanel = root.querySelector('.qa-panel');
+    const qaInput = root.querySelector('.qa-input');
+    const qaSubmit = root.querySelector('.qa-submit');
+    const qaAnswer = root.querySelector('.qa-answer');
+    // Must scope to Q&A panel: several chips reuse .qa-confidence (coach/recover/analyze).
+    const qaConfidence =
+      qaPanel?.querySelector('.qa-confidence-chip') ??
+      qaPanel?.querySelector('.qa-confidence') ??
+      null;
+    const voicePanel = root.querySelector('.voice-panel');
+    const helpPanel = root.querySelector('.help-panel');
+    const helpHint = root.querySelector('.help-hint');
+    const recoverGenerateBtn = root.querySelector('.recover-generate');
+    const recoverConfidenceEl = root.querySelector('.recover-confidence');
+    const recoverAnswerEl = root.querySelector('.recover-answer');
+    const recoverErrorEl = root.querySelector('.recover-error');
+    const matchGenerateBtn = root.querySelector('.match-generate');
+    const matchSuggestionEl = root.querySelector('.match-suggestion');
+    const matchJumpBtn = root.querySelector('.match-jump');
+    const matchErrorEl = root.querySelector('.match-error');
+    const stuckAnalyzeBtn = root.querySelector('.stuck-analyze');
+    const stuckConsentEl = root.querySelector('.stuck-consent');
+    const stuckConsentAcceptBtn = root.querySelector('.stuck-consent-accept');
+    const stuckConsentCancelBtn = root.querySelector('.stuck-consent-cancel');
+    const analyzeConfidenceEl = root.querySelector('.analyze-confidence');
+    const analyzeAnswerEl = root.querySelector('.analyze-answer');
+    const analyzeErrorEl = root.querySelector('.analyze-error');
+    const voiceStatusEl = root.querySelector('.voice-status');
+    const voiceStartBtn = root.querySelector('.voice-start');
+    const voiceStopBtn = root.querySelector('.voice-stop');
+    const voiceResetBtn = root.querySelector('.voice-reset');
+    const voiceTranscriptEl = root.querySelector('.voice-transcript');
     const stepNumber = step.step_number ?? activeState.stepIndex + 1;
     eyebrow.textContent = `Step ${activeState.stepIndex + 1} / ${steps.length}`;
-    instruction.textContent = String(step.instruction ?? '');
+    if (qaInput) {
+      protectAssistantTextInput(qaInput);
+    }
+    if (coachEditInput) {
+      protectAssistantTextInput(coachEditInput);
+    }
+    const override = instructionOverrides[activeState.stepIndex];
+    instruction.textContent =
+      typeof override === 'string' && override.trim() ? override : String(step.instruction ?? '');
+
+    if (stepWarning) {
+      const warningText =
+        typeof step.warning === 'string' && step.warning.trim() ? step.warning.trim() : '';
+      if (warningText) {
+        stepWarning.hidden = false;
+        stepWarning.textContent = `Warning: ${warningText}`;
+        stepWarning.title = warningText;
+      } else {
+        stepWarning.hidden = true;
+        stepWarning.textContent = '';
+        stepWarning.removeAttribute('title');
+      }
+    }
 
     const isFirst = activeState.stepIndex <= 0;
     const isLast = activeState.stepIndex >= steps.length - 1;
@@ -1151,11 +2664,924 @@
     nextBtn.hidden = isLast;
     finishBtn.hidden = !isLast;
 
+    autoModeBtn.dataset.active = String(assistantMode === 'auto');
+    manualModeBtn.dataset.active = String(assistantMode === 'manual');
+    tooltip.dataset.expanded = String(assistantExpanded);
+    tooltip.dataset.panelPhase = assistantTransitionState;
+    tooltip.dataset.loading = String(assistantLoading);
+    // tooltip.dataset.loading = 'true';
     tooltip.hidden = false;
     enterCurrentStep();
     reposition();
 
     tooltip.dataset.stepNumber = String(stepNumber);
+
+    tabs.forEach((tab) => {
+      tab.dataset.active = String(tab.dataset.tab === assistantTab);
+    });
+
+    if (promptPanel) {
+      promptPanel.hidden = assistantTab !== 'prompt';
+    }
+
+    if (qaPanel) {
+      qaPanel.hidden = assistantTab !== 'qa';
+    }
+
+    if (voicePanel) {
+      voicePanel.hidden = assistantTab !== 'voice';
+    }
+
+    if (helpPanel) {
+      helpPanel.hidden = assistantTab !== 'help';
+    }
+
+    if (helpHint) {
+      if (wrongTargetPending && lastActualAction) {
+        helpHint.hidden = false;
+        helpHint.textContent = lastExpectedTarget
+          ? `Off target: expected "${lastExpectedTarget}". ${lastActualAction}.`
+          : lastActualAction;
+      } else {
+        helpHint.hidden = true;
+        helpHint.textContent = '';
+      }
+    }
+
+    if (recoverGenerateBtn) {
+      recoverGenerateBtn.disabled = recoverLoading || assistantLoading || coachLoading;
+      recoverGenerateBtn.textContent = recoverLoading ? 'Getting recovery…' : 'Get recovery steps';
+    }
+
+    const hasRecoverAnswer = Boolean(recoverAnswer && !recoverError);
+    if (recoverConfidenceEl) {
+      if (!hasRecoverAnswer || !recoverConfidence) {
+        recoverConfidenceEl.hidden = true;
+        recoverConfidenceEl.textContent = '';
+        recoverConfidenceEl.removeAttribute('data-level');
+        recoverConfidenceEl.removeAttribute('title');
+      } else {
+        recoverConfidenceEl.hidden = false;
+        recoverConfidenceEl.dataset.level = recoverConfidence;
+        recoverConfidenceEl.textContent = `Confidence: ${recoverConfidence}`;
+        recoverConfidenceEl.title = recoverConfidenceReason || '';
+      }
+    }
+
+    if (recoverAnswerEl) {
+      recoverAnswerEl.hidden = !hasRecoverAnswer;
+      recoverAnswerEl.textContent = recoverAnswer;
+    }
+
+    if (recoverErrorEl) {
+      recoverErrorEl.hidden = !recoverError;
+      recoverErrorEl.textContent = recoverError;
+    }
+
+    if (matchGenerateBtn) {
+      matchGenerateBtn.disabled =
+        matchStepLoading || recoverLoading || assistantLoading || coachLoading;
+      matchGenerateBtn.textContent = matchStepLoading ? 'Finding step…' : 'Find my step';
+    }
+
+    const hasMatchSuggestion =
+      !matchStepError && (matchStepIndex != null || Boolean(matchStepReason));
+    if (matchSuggestionEl) {
+      if (!hasMatchSuggestion) {
+        matchSuggestionEl.hidden = true;
+        matchSuggestionEl.textContent = '';
+      } else if (matchStepIndex != null) {
+        matchSuggestionEl.hidden = false;
+        matchSuggestionEl.textContent = `Possible match: step ${matchStepIndex + 1}. ${matchStepReason}`;
+      } else {
+        matchSuggestionEl.hidden = false;
+        matchSuggestionEl.textContent = matchStepReason || 'No clear matching step on this page.';
+      }
+    }
+
+    if (matchJumpBtn) {
+      const canJump =
+        matchStepIndex != null &&
+        activeState &&
+        matchStepIndex !== activeState.stepIndex &&
+        matchStepIndex >= 0 &&
+        matchStepIndex < steps.length;
+      matchJumpBtn.hidden = !canJump;
+      matchJumpBtn.disabled = matchStepLoading;
+    }
+
+    if (matchErrorEl) {
+      matchErrorEl.hidden = !matchStepError;
+      matchErrorEl.textContent = matchStepError;
+    }
+
+    const busyForStuck =
+      analyzeLoading || matchStepLoading || recoverLoading || assistantLoading || coachLoading;
+    if (stuckAnalyzeBtn) {
+      stuckAnalyzeBtn.hidden = stuckConsentPromptVisible;
+      stuckAnalyzeBtn.disabled = busyForStuck;
+      stuckAnalyzeBtn.textContent = analyzeLoading ? 'Analyzing…' : 'I am stuck';
+    }
+    if (stuckConsentEl) {
+      stuckConsentEl.hidden = !stuckConsentPromptVisible;
+    }
+    if (stuckConsentAcceptBtn) {
+      stuckConsentAcceptBtn.hidden = !stuckConsentPromptVisible;
+      stuckConsentAcceptBtn.disabled = busyForStuck;
+    }
+    if (stuckConsentCancelBtn) {
+      stuckConsentCancelBtn.hidden = !stuckConsentPromptVisible;
+      stuckConsentCancelBtn.disabled = analyzeLoading;
+    }
+
+    const hasAnalyzeAnswer = Boolean(analyzeAnswer && !analyzeError);
+    if (analyzeConfidenceEl) {
+      if (!hasAnalyzeAnswer || !analyzeConfidence) {
+        analyzeConfidenceEl.hidden = true;
+        analyzeConfidenceEl.textContent = '';
+        analyzeConfidenceEl.removeAttribute('data-level');
+        analyzeConfidenceEl.removeAttribute('title');
+      } else {
+        analyzeConfidenceEl.hidden = false;
+        analyzeConfidenceEl.dataset.level = analyzeConfidence;
+        analyzeConfidenceEl.textContent = `Confidence: ${analyzeConfidence}`;
+        analyzeConfidenceEl.title = analyzeConfidenceReason || '';
+      }
+    }
+    if (analyzeAnswerEl) {
+      analyzeAnswerEl.hidden = !hasAnalyzeAnswer;
+      analyzeAnswerEl.textContent = analyzeAnswer;
+    }
+    if (analyzeErrorEl) {
+      analyzeErrorEl.hidden = !analyzeError;
+      analyzeErrorEl.textContent = analyzeError;
+    }
+
+    const hasCoachSuggestion = Boolean(coachSuggestion && !coachError);
+    if (coachGenerateBtn) {
+      coachGenerateBtn.disabled = coachLoading || assistantLoading;
+      coachGenerateBtn.textContent = coachLoading ? 'Generating…' : 'Generate clearer instruction';
+    }
+    if (coachUseBtn) {
+      coachUseBtn.hidden = !hasCoachSuggestion && !coachEditing;
+      coachUseBtn.disabled = coachLoading;
+    }
+    if (coachEditBtn) {
+      coachEditBtn.hidden = !hasCoachSuggestion || coachEditing;
+      coachEditBtn.disabled = coachLoading;
+    }
+    if (coachCancelEditBtn) {
+      coachCancelEditBtn.hidden = !coachEditing;
+    }
+    if (coachConfidenceEl) {
+      if (!hasCoachSuggestion || !coachConfidence || coachEditing) {
+        coachConfidenceEl.hidden = true;
+        coachConfidenceEl.textContent = '';
+        coachConfidenceEl.removeAttribute('data-level');
+        coachConfidenceEl.removeAttribute('title');
+      } else {
+        coachConfidenceEl.hidden = false;
+        coachConfidenceEl.dataset.level = coachConfidence;
+        coachConfidenceEl.textContent = `Confidence: ${coachConfidence}`;
+        coachConfidenceEl.title = coachConfidenceReason || '';
+      }
+    }
+    if (coachSuggestionEl) {
+      coachSuggestionEl.hidden = !hasCoachSuggestion || coachEditing;
+      coachSuggestionEl.textContent = coachSuggestion;
+    }
+    if (coachEditInput) {
+      coachEditInput.hidden = !coachEditing;
+      if (coachEditing && coachEditInput.value !== coachSuggestion) {
+        // Keep user edits while typing; seed once when entering edit mode.
+      }
+    }
+    if (coachErrorEl) {
+      coachErrorEl.hidden = !coachError;
+      coachErrorEl.textContent = coachError;
+    }
+
+    if (qaInput && qaInput.value !== assistantQuestion) {
+      qaInput.value = assistantQuestion;
+    }
+
+    if (qaSubmit) {
+      qaSubmit.textContent = assistantLoading ? 'Asking...' : 'Ask';
+      qaSubmit.disabled = assistantLoading;
+    }
+
+    if (qaConfidence) {
+      if (assistantError || !assistantAnswer || !assistantConfidence) {
+        qaConfidence.hidden = true;
+        qaConfidence.textContent = '';
+        qaConfidence.removeAttribute('data-level');
+        qaConfidence.removeAttribute('title');
+      } else {
+        qaConfidence.hidden = false;
+        qaConfidence.dataset.level = assistantConfidence;
+        qaConfidence.textContent = `Confidence: ${assistantConfidence}`;
+        qaConfidence.title = assistantConfidenceReason || '';
+      }
+    }
+
+    if (qaAnswer) {
+      const message = assistantError || assistantAnswer;
+      qaAnswer.hidden = !message;
+      qaAnswer.textContent = message;
+    }
+
+    if (voiceStatusEl) {
+      voiceStatusEl.dataset.tone = voiceStatus;
+      if (voiceStatus === 'recording') {
+        voiceStatusEl.textContent = `Recording… ${formatVoiceElapsed(voiceElapsedSeconds)}`;
+      } else if (voiceStatus === 'uploading') {
+        voiceStatusEl.textContent = 'Uploading voice feedback…';
+      } else if (voiceStatus === 'done') {
+        voiceStatusEl.textContent = 'Voice feedback sent to your reviewer.';
+      } else if (voiceStatus === 'error') {
+        voiceStatusEl.textContent = voiceError || 'Could not upload voice feedback.';
+      } else {
+        voiceStatusEl.textContent = 'Record a short note about this step for your reviewer.';
+      }
+    }
+
+    if (voiceStartBtn) {
+      voiceStartBtn.hidden = voiceStatus === 'recording' || voiceStatus === 'uploading';
+      voiceStartBtn.disabled = voiceStatus === 'uploading';
+      voiceStartBtn.textContent =
+        voiceStatus === 'done' || voiceStatus === 'error'
+          ? 'Start new recording'
+          : 'Start recording';
+    }
+
+    if (voiceStopBtn) {
+      voiceStopBtn.hidden = voiceStatus !== 'recording';
+      voiceStopBtn.disabled = false;
+    }
+
+    if (voiceResetBtn) {
+      // Kept for markup stability; primary restart path is "Start new recording".
+      voiceResetBtn.hidden = true;
+    }
+
+    if (voiceTranscriptEl) {
+      const showTranscript = voiceStatus === 'done' && Boolean(voiceTranscript);
+      voiceTranscriptEl.hidden = !showTranscript;
+      voiceTranscriptEl.textContent = showTranscript ? voiceTranscript : '';
+    }
+  }
+
+  function formatVoiceElapsed(totalSeconds) {
+    const seconds = Math.max(0, Number(totalSeconds) || 0);
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  }
+
+  function clearVoiceTimer() {
+    if (voiceTimerId != null) {
+      clearInterval(voiceTimerId);
+      voiceTimerId = null;
+    }
+  }
+
+  function stopMediaTracks() {
+    if (!mediaStream) {
+      return;
+    }
+    for (const track of mediaStream.getTracks()) {
+      track.stop();
+    }
+    mediaStream = null;
+  }
+
+  function resetVoiceUi() {
+    clearVoiceTimer();
+    const recorder = mediaRecorder;
+    mediaRecorder = null;
+    recordedChunks = [];
+    voiceStatus = 'idle';
+    voiceError = '';
+    voiceTranscript = '';
+    voiceElapsedSeconds = 0;
+    voiceRecordedAt = '';
+    stopMediaTracks();
+    if (recorder && recorder.state !== 'inactive') {
+      try {
+        recorder.stop();
+      } catch {
+        // Ignore stop races while resetting UI.
+      }
+    }
+  }
+
+  function discardVoiceRecording() {
+    resetVoiceUi();
+  }
+
+  function pickRecorderMimeType() {
+    if (typeof MediaRecorder === 'undefined') {
+      return '';
+    }
+    const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'];
+    for (const type of candidates) {
+      if (MediaRecorder.isTypeSupported?.(type)) {
+        return type;
+      }
+    }
+    return '';
+  }
+
+  function blobToBase64(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = String(reader.result || '');
+        const comma = result.indexOf(',');
+        resolve(comma >= 0 ? result.slice(comma + 1) : result);
+      };
+      reader.onerror = () => reject(reader.error || new Error('Failed to read audio'));
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  async function startVoiceRecording() {
+    if (voiceStatus === 'recording' || voiceStatus === 'uploading') {
+      return;
+    }
+
+    if (!activeState?.sopId) {
+      voiceStatus = 'error';
+      voiceError = 'No SOP is linked to this walkthrough.';
+      voiceTranscript = '';
+      render();
+      return;
+    }
+
+    if (!navigator?.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+      voiceStatus = 'error';
+      voiceError = 'This browser cannot record microphone audio.';
+      voiceTranscript = '';
+      render();
+      return;
+    }
+
+    try {
+      clearVoiceTimer();
+      stopMediaTracks();
+      recordedChunks = [];
+      voiceError = '';
+      voiceTranscript = '';
+      voiceElapsedSeconds = 0;
+      voiceRecordedAt = new Date().toISOString();
+
+      mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = pickRecorderMimeType();
+      mediaRecorder = mimeType
+        ? new MediaRecorder(mediaStream, { mimeType })
+        : new MediaRecorder(mediaStream);
+
+      mediaRecorder.addEventListener('dataavailable', (event) => {
+        if (event.data && event.data.size > 0) {
+          recordedChunks.push(event.data);
+        }
+      });
+
+      mediaRecorder.addEventListener('error', () => {
+        voiceStatus = 'error';
+        voiceError = 'Recording failed. Please try again.';
+        clearVoiceTimer();
+        stopMediaTracks();
+        mediaRecorder = null;
+        render();
+      });
+
+      mediaRecorder.addEventListener('stop', () => {
+        void finalizeVoiceRecording();
+      });
+
+      mediaRecorder.start();
+      voiceStatus = 'recording';
+      voiceTimerId = setInterval(() => {
+        voiceElapsedSeconds += 1;
+        const host = shadowRoot || ensureHost();
+        const statusEl = host.querySelector('.voice-status');
+        if (statusEl && voiceStatus === 'recording') {
+          statusEl.dataset.tone = 'recording';
+          statusEl.textContent = `Recording… ${formatVoiceElapsed(voiceElapsedSeconds)}`;
+        }
+      }, 1000);
+      render();
+    } catch (error) {
+      console.error('Walkthrough voice recording failed:', error);
+      stopMediaTracks();
+      mediaRecorder = null;
+      voiceStatus = 'error';
+      voiceError =
+        error?.name === 'NotAllowedError'
+          ? 'Microphone permission denied. Allow access and try again.'
+          : 'Could not start microphone recording.';
+      render();
+    }
+  }
+
+  function stopVoiceRecording() {
+    if (voiceStatus !== 'recording' || !mediaRecorder) {
+      return;
+    }
+    clearVoiceTimer();
+    voiceStatus = 'uploading';
+    render();
+    try {
+      mediaRecorder.stop();
+    } catch (error) {
+      console.error('Walkthrough voice stop failed:', error);
+      stopMediaTracks();
+      mediaRecorder = null;
+      voiceStatus = 'error';
+      voiceError = 'Could not finish the recording.';
+      render();
+    }
+  }
+
+  async function finalizeVoiceRecording() {
+    const chunks = recordedChunks.slice();
+    const mimeType = mediaRecorder?.mimeType || 'audio/webm';
+    stopMediaTracks();
+    mediaRecorder = null;
+    recordedChunks = [];
+
+    if (voiceStatus !== 'uploading') {
+      return;
+    }
+
+    const blob = new Blob(chunks, { type: mimeType || 'audio/webm' });
+    if (blob.size < 256) {
+      voiceStatus = 'error';
+      voiceError = 'Recording was too short. Please try again.';
+      render();
+      return;
+    }
+
+    const sopId = activeState?.sopId;
+    if (!sopId) {
+      voiceStatus = 'error';
+      voiceError = 'No SOP is linked to this walkthrough.';
+      render();
+      return;
+    }
+
+    try {
+      const audioBase64 = await blobToBase64(blob);
+      const extension = mimeType.includes('mp4') ? 'mp4' : 'webm';
+      const payload = await new Promise((resolve, reject) => {
+        chrome.runtime?.sendMessage?.(
+          {
+            type: 'WALKTHROUGH_VOICE_UPLOAD',
+            sopId,
+            audioBase64,
+            contentType: mimeType || 'audio/webm',
+            filename: `feedback.${extension}`,
+            recordedAt: voiceRecordedAt || new Date().toISOString(),
+          },
+          (response) => {
+            if (chrome.runtime?.lastError) {
+              reject(new Error(chrome.runtime.lastError.message));
+              return;
+            }
+            if (!response?.ok) {
+              reject(new Error(response?.error || 'Voice upload failed.'));
+              return;
+            }
+            resolve(response);
+          },
+        );
+      });
+
+      voiceStatus = 'done';
+      voiceError = '';
+      voiceTranscript =
+        payload.transcript || 'Uploaded. Your reviewer can listen in the review queue.';
+    } catch (error) {
+      console.error('Walkthrough voice upload failed:', error);
+      voiceStatus = 'error';
+      voiceError =
+        error instanceof Error && error.message
+          ? error.message
+          : 'Could not upload voice feedback.';
+      voiceTranscript = '';
+    } finally {
+      render();
+    }
+  }
+
+  function requestAssistant(message) {
+    return new Promise((resolve, reject) => {
+      chrome.runtime?.sendMessage?.(message, (response) => {
+        if (chrome.runtime?.lastError) {
+          reject(new Error(chrome.runtime.lastError.message));
+          return;
+        }
+        if (!response?.ok) {
+          reject(new Error(response?.error || 'Assistant request failed.'));
+          return;
+        }
+        resolve(response);
+      });
+    });
+  }
+
+  function currentAssistantStepPayload() {
+    const step = getCurrentStep();
+    const steps = getSteps();
+    if (!step || !activeState) {
+      return null;
+    }
+    const override = instructionOverrides[activeState.stepIndex];
+    return {
+      index: activeState.stepIndex,
+      total: steps.length,
+      title: step.title || step.instruction || 'Current step',
+      instruction:
+        typeof override === 'string' && override.trim() ? override : step.instruction || '',
+    };
+  }
+
+  async function askAssistant() {
+    const host = ensureHost();
+    const tooltip = host.querySelector('.tooltip');
+    const input = tooltip?.querySelector('.qa-input');
+    const question = input?.value?.trim();
+
+    if (!question) {
+      assistantError = 'Please enter a question first.';
+      assistantAnswer = '';
+      assistantConfidence = '';
+      assistantConfidenceReason = '';
+      render();
+      return;
+    }
+
+    const stepPayload = currentAssistantStepPayload();
+    if (!stepPayload) {
+      assistantError = 'No walkthrough step is currently active.';
+      assistantAnswer = '';
+      assistantConfidence = '';
+      assistantConfidenceReason = '';
+      render();
+      return;
+    }
+
+    assistantQuestion = question;
+    assistantLoading = true;
+    assistantError = '';
+    assistantAnswer = '';
+    assistantConfidence = '';
+    assistantConfidenceReason = '';
+    render();
+
+    try {
+      const payload = await requestAssistant({
+        type: 'WALKTHROUGH_ASSISTANT_ASK',
+        task: 'qa',
+        question,
+        mode: assistantMode === 'manual' ? 'manual' : 'walkthrough',
+        page_url: window.location.href,
+        page_title: document.title || null,
+        step: stepPayload,
+      });
+
+      assistantAnswer = payload.answer || 'No answer returned.';
+      assistantConfidence = payload.confidence || 'medium';
+      assistantConfidenceReason = payload.confidence_reason || '';
+    } catch (error) {
+      console.error('Walkthrough assistant request failed:', error);
+      assistantError =
+        error instanceof Error ? error.message : 'Assistant is unavailable right now.';
+      assistantConfidence = '';
+      assistantConfidenceReason = '';
+    } finally {
+      assistantLoading = false;
+      render();
+    }
+  }
+
+  async function generateCoachSuggestion() {
+    const stepPayload = currentAssistantStepPayload();
+    if (!stepPayload) {
+      coachError = 'No walkthrough step is currently active.';
+      coachSuggestion = '';
+      coachConfidence = '';
+      coachConfidenceReason = '';
+      render();
+      return;
+    }
+
+    coachLoading = true;
+    coachError = '';
+    coachSuggestion = '';
+    coachConfidence = '';
+    coachConfidenceReason = '';
+    coachEditing = false;
+    render();
+
+    try {
+      const payload = await requestAssistant({
+        type: 'WALKTHROUGH_ASSISTANT_ASK',
+        task: 'coach',
+        question: null,
+        mode: assistantMode === 'manual' ? 'manual' : 'walkthrough',
+        page_url: window.location.href,
+        page_title: document.title || null,
+        step: stepPayload,
+      });
+
+      coachSuggestion = (payload.answer || '').trim();
+      if (!coachSuggestion) {
+        coachError = 'No coaching suggestion returned.';
+        coachConfidence = '';
+        coachConfidenceReason = '';
+      } else {
+        coachConfidence = payload.confidence || 'medium';
+        coachConfidenceReason = payload.confidence_reason || '';
+      }
+    } catch (error) {
+      console.error('Walkthrough coach request failed:', error);
+      coachError = error instanceof Error ? error.message : 'Assistant is unavailable right now.';
+      coachSuggestion = '';
+      coachConfidence = '';
+      coachConfidenceReason = '';
+    } finally {
+      coachLoading = false;
+      render();
+    }
+  }
+
+  async function requestStepMatch({ force = false } = {}) {
+    const stepPayload = currentAssistantStepPayload();
+    if (!stepPayload || !activeState) {
+      return;
+    }
+
+    const shape = urlShapeKey(window.location.href);
+    const now = Date.now();
+    if (
+      !force &&
+      shape &&
+      shape === lastMatchUrlShape &&
+      now - lastMatchStepAt < MATCH_STEP_THROTTLE_MS
+    ) {
+      return;
+    }
+
+    lastMatchUrlShape = shape;
+    lastMatchStepAt = now;
+    matchStepLoading = true;
+    matchStepError = '';
+    if (force) {
+      assistantExpanded = true;
+      assistantTab = 'help';
+    }
+    render();
+
+    try {
+      const payload = await requestAssistant({
+        type: 'WALKTHROUGH_ASSISTANT_ASK',
+        task: 'match_step',
+        question: null,
+        mode: assistantMode === 'manual' ? 'manual' : 'walkthrough',
+        page_url: window.location.href,
+        page_title: document.title || null,
+        steps_summary: buildStepsSummary(),
+        step: stepPayload,
+      });
+
+      const parsed = parseMatchStepAnswer(payload.answer || '');
+      const steps = getSteps();
+      if (parsed.stepIndex != null && parsed.stepIndex >= 0 && parsed.stepIndex < steps.length) {
+        matchStepIndex = parsed.stepIndex;
+        matchStepReason = parsed.reason || 'Page shape matches this step.';
+        matchStepError = '';
+        if (!force && matchStepIndex !== activeState.stepIndex) {
+          assistantExpanded = true;
+          assistantTab = 'help';
+        }
+      } else {
+        matchStepIndex = null;
+        matchStepReason = parsed.reason || 'No clear matching step on this page.';
+        matchStepError = '';
+      }
+    } catch (error) {
+      console.error('Walkthrough match_step request failed:', error);
+      matchStepIndex = null;
+      matchStepReason = '';
+      matchStepError =
+        error instanceof Error ? error.message : 'Assistant is unavailable right now.';
+    } finally {
+      matchStepLoading = false;
+      render();
+    }
+  }
+
+  function jumpToMatchedStep() {
+    if (!activeState || matchStepIndex == null) {
+      return;
+    }
+    const steps = getSteps();
+    if (matchStepIndex < 0 || matchStepIndex >= steps.length) {
+      return;
+    }
+    if (matchStepIndex === activeState.stepIndex) {
+      return;
+    }
+    persistState({
+      ...activeState,
+      stepIndex: matchStepIndex,
+    });
+  }
+
+  async function ensureStuckConsentLoaded() {
+    if (stuckConsentAccepted != null) {
+      return stuckConsentAccepted;
+    }
+    stuckConsentAccepted = await readStuckConsent();
+    return stuckConsentAccepted;
+  }
+
+  async function handleStuckAnalyzeClick() {
+    assistantExpanded = true;
+    assistantTab = 'help';
+    analyzeError = '';
+    const accepted = await ensureStuckConsentLoaded();
+    if (!accepted) {
+      stuckConsentPromptVisible = true;
+      render();
+      return;
+    }
+    await runStuckAnalyze();
+  }
+
+  async function acceptStuckConsentAndAnalyze() {
+    await saveStuckConsent();
+    stuckConsentPromptVisible = false;
+    await runStuckAnalyze();
+  }
+
+  async function runStuckAnalyze() {
+    const stepPayload = currentAssistantStepPayload();
+    if (!stepPayload) {
+      analyzeError = 'No walkthrough step is currently active.';
+      analyzeAnswer = '';
+      analyzeConfidence = '';
+      analyzeConfidenceReason = '';
+      render();
+      return;
+    }
+
+    analyzeLoading = true;
+    analyzeError = '';
+    analyzeAnswer = '';
+    analyzeConfidence = '';
+    analyzeConfidenceReason = '';
+    render();
+
+    try {
+      const screenshotB64 = await captureVisibleTabMasked();
+      if (!screenshotB64) {
+        throw new Error('Screenshot capture returned an empty image.');
+      }
+
+      const step = getCurrentStep();
+      const payload = await requestAssistant({
+        type: 'WALKTHROUGH_ASSISTANT_ASK',
+        task: 'analyze',
+        question: 'I am stuck on this step.',
+        mode: assistantMode === 'manual' ? 'manual' : 'walkthrough',
+        page_url: window.location.href,
+        page_title: document.title || null,
+        screenshot_b64: screenshotB64,
+        expected_target: describeStepForVision(step) || null,
+        actual_action: lastActualAction || 'User clicked I am stuck',
+        steps_summary: buildStepsSummary(),
+        step: stepPayload,
+      });
+
+      analyzeAnswer = (payload.answer || '').trim();
+      if (!analyzeAnswer) {
+        analyzeError = 'No stuck analysis returned.';
+        analyzeConfidence = '';
+        analyzeConfidenceReason = '';
+      } else {
+        analyzeConfidence = payload.confidence || 'medium';
+        analyzeConfidenceReason = payload.confidence_reason || '';
+      }
+    } catch (error) {
+      console.error('Walkthrough stuck analyze failed:', error);
+      analyzeError = error instanceof Error ? error.message : 'Assistant is unavailable right now.';
+      analyzeAnswer = '';
+      analyzeConfidence = '';
+      analyzeConfidenceReason = '';
+    } finally {
+      analyzeLoading = false;
+      render();
+    }
+  }
+
+  async function generateRecoverSuggestion() {
+    const stepPayload = currentAssistantStepPayload();
+    if (!stepPayload) {
+      recoverError = 'No walkthrough step is currently active.';
+      recoverAnswer = '';
+      recoverConfidence = '';
+      recoverConfidenceReason = '';
+      render();
+      return;
+    }
+
+    const step = getCurrentStep();
+    const expectedTarget =
+      lastExpectedTarget || describeStepForVision(step) || 'highlighted target';
+    const actualAction = lastActualAction || 'User requested recovery help for the current step';
+
+    recoverLoading = true;
+    recoverError = '';
+    recoverAnswer = '';
+    recoverConfidence = '';
+    recoverConfidenceReason = '';
+    render();
+
+    try {
+      const payload = await requestAssistant({
+        type: 'WALKTHROUGH_ASSISTANT_ASK',
+        task: 'recover',
+        question: null,
+        mode: assistantMode === 'manual' ? 'manual' : 'walkthrough',
+        page_url: window.location.href,
+        page_title: document.title || null,
+        expected_target: expectedTarget,
+        actual_action: actualAction,
+        step: stepPayload,
+      });
+
+      recoverAnswer = (payload.answer || '').trim();
+      if (!recoverAnswer) {
+        recoverError = 'No recovery steps returned.';
+        recoverConfidence = '';
+        recoverConfidenceReason = '';
+      } else {
+        recoverConfidence = payload.confidence || 'medium';
+        recoverConfidenceReason = payload.confidence_reason || '';
+      }
+    } catch (error) {
+      console.error('Walkthrough recover request failed:', error);
+      recoverError = error instanceof Error ? error.message : 'Assistant is unavailable right now.';
+      recoverAnswer = '';
+      recoverConfidence = '';
+      recoverConfidenceReason = '';
+    } finally {
+      recoverLoading = false;
+      render();
+    }
+  }
+
+  function beginCoachEdit() {
+    if (!coachSuggestion) {
+      return;
+    }
+    coachEditing = true;
+    render();
+    const host = ensureHost();
+    const input = host.querySelector('.coach-edit-input');
+    if (input) {
+      input.value = coachSuggestion;
+      input.focus();
+    }
+  }
+
+  function cancelCoachEdit() {
+    coachEditing = false;
+    render();
+  }
+
+  function adoptCoachSuggestion() {
+    if (!activeState) {
+      return;
+    }
+    const host = ensureHost();
+    const input = host.querySelector('.coach-edit-input');
+    const nextText = coachEditing
+      ? String(input?.value || '').trim()
+      : String(coachSuggestion || '').trim();
+    if (!nextText) {
+      coachError = 'Suggestion is empty.';
+      render();
+      return;
+    }
+    instructionOverrides[activeState.stepIndex] = nextText;
+    coachSuggestion = nextText;
+    coachEditing = false;
+    coachError = '';
+    render();
   }
 
   function persistState(nextState) {
@@ -1206,12 +3632,19 @@
   function navigateForStep(step, resolvedUrls, liveUrl) {
     const recorded = stepPageUrl(step);
     const resolved = resolvePlaybackTargetUrl(recorded, resolvedUrls, liveUrl);
+
     if (!resolved.url) {
       return resolved;
     }
+
+    if (assistantMode !== 'auto') {
+      return resolved;
+    }
+
     if (needsNavigation(resolved.url)) {
       requestStepPage(resolved.url);
     }
+
     return resolved;
   }
 
@@ -1241,6 +3674,7 @@
     });
 
     navigateForStep(destinationStep, resolvedUrls, liveUrl);
+    render();
   }
 
   function handleNext() {
@@ -1265,6 +3699,7 @@
     });
 
     navigateForStep(steps[nextIndex], resolvedUrls, liveUrl);
+    render();
   }
 
   function handleFinish() {
@@ -1445,3 +3880,50 @@
     generalizePathname,
   };
 })();
+
+function stopPageFromStealingInput(event) {
+  event.stopPropagation();
+
+  if (typeof event.stopImmediatePropagation === 'function') {
+    event.stopImmediatePropagation();
+  }
+}
+
+function protectAssistantTextInput(input) {
+  [
+    'pointerdown',
+    'mousedown',
+    'mouseup',
+    'click',
+    'dblclick',
+    'keydown',
+    'keyup',
+    'keypress',
+    'beforeinput',
+    'input',
+    'compositionstart',
+    'compositionupdate',
+    'compositionend',
+    'paste',
+    'cut',
+    'copy',
+  ].forEach((eventName) => {
+    input.addEventListener(eventName, stopPageFromStealingInput, true);
+  });
+
+  input.addEventListener(
+    'pointerdown',
+    () => {
+      input.focus();
+    },
+    true,
+  );
+
+  input.addEventListener(
+    'click',
+    () => {
+      input.focus();
+    },
+    true,
+  );
+}

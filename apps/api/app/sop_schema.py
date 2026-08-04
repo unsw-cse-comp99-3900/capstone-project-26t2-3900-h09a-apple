@@ -100,6 +100,8 @@ class WalkthroughStep(BaseModel):
     anchor_mode: Literal["element", "screenshot", "none"] = "element"
     expected_action: Literal["click", "input", "submit"] | None = None
     expected_url: str | None = None
+    # Joined SopWarning messages for this step (via source_event_ids). Compact for the ball UI.
+    warning: str | None = None
 
 
 class WalkthroughPayload(BaseModel):

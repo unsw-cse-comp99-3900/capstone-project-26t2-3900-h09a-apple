@@ -53,3 +53,14 @@ def get_google_client_secret() -> str:
     if not client_secret:
         raise SettingsError("GOOGLE_CLIENT_SECRET is not configured")
     return client_secret
+
+
+def get_openai_api_key() -> str:
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise SettingsError("OPENAI_API_KEY is not configured")
+    return api_key
+
+
+def get_openai_model() -> str:
+    return os.getenv("OPENAI_MODEL", "gpt-4o-mini").strip()
