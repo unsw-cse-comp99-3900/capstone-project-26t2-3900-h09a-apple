@@ -13,7 +13,7 @@ type Interest = {
 const PLANS = [
   {
     name: 'Free',
-    price: '$0',
+    price: '--',
     suffix: '',
     meta: '',
     blurb: 'Try the core loop alone in the browser.',
@@ -28,8 +28,8 @@ const PLANS = [
   },
   {
     name: 'Solo',
-    price: '$19',
-    suffix: ' / seat / mo',
+    price: '--',
+    suffix: '',
     meta: '',
     blurb: 'One operator with desktop + browser capture.',
     features: ['Desktop + browser capture', 'Personal SOP library', 'Guided walkthrough playback'],
@@ -38,9 +38,9 @@ const PLANS = [
   },
   {
     name: 'Team',
-    price: '$12',
-    suffix: ' / seat / mo',
-    meta: 'Min 5 seats · from $60 / mo',
+    price: '--',
+    suffix: '',
+    meta: '',
     blurb: 'Shared library and review before publish.',
     features: ['Everything in Solo', 'Shared library + roles', 'Review before publish'],
     cta: 'Subscribe to Team',
@@ -50,9 +50,9 @@ const PLANS = [
   },
   {
     name: 'Business',
-    price: 'Contact us',
+    price: '--',
     suffix: '',
-    meta: 'Early access pricing',
+    meta: '',
     blurb: 'Multi-team orgs that need priority help.',
     features: ['Everything in Team', 'Org-wide library', 'Priority onboarding help'],
     cta: 'Request early access',
