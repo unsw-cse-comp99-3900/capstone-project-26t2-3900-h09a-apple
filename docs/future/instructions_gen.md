@@ -1,8 +1,8 @@
-# Instruction Maker — Product Concept
+# Instruction Maker - Product Concept
 
 ## Background and motivation
 
-In the project demos, building a usable agent often hinges less on recording the workflow itself and more on writing a clear Custom Instructions definition in a Claude Project: who the assistant is, what it should read, how it should work, what it should return, and what it must never do automatically. The team has already validated a five-section structure — IDENTITY, CONTEXT, STEPS, OUTPUT, and GUARDRAILS — and used it for scenarios such as Chief of Staff and Competitive Research.
+In the project demos, building a usable agent often hinges less on recording the workflow itself and more on writing a clear Custom Instructions definition in a Claude Project: who the assistant is, what it should read, how it should work, what it should return, and what it must never do automatically. The team has already validated a five-section structure - IDENTITY, CONTEXT, STEPS, OUTPUT, and GUARDRAILS - and used it for scenarios such as Chief of Staff and Competitive Research.
 
 The friction is that target users (operations staff, EAs, managers, and other non-prompt specialists) can usually describe the business need, but struggle to produce a complete, well-bounded instruction in one pass. Today that step still depends on manual drafting or external prompt-writing experience, which raises the barrier and makes the pattern hard to reuse at scale.
 
@@ -16,11 +16,11 @@ The core deliverable is not an SOP and not a capture transcript. It is an **agen
 
 Output should always follow the same format:
 
-- **IDENTITY** — role, tone, and who the assistant serves
-- **CONTEXT** — information and tool context to read before acting
-- **STEPS** — suggested working steps and decision order
-- **OUTPUT** — structure of the response or deliverable
-- **GUARDRAILS** — forbidden actions, and actions that require explicit user confirmation
+- **IDENTITY** - role, tone, and who the assistant serves
+- **CONTEXT** - information and tool context to read before acting
+- **STEPS** - suggested working steps and decision order
+- **OUTPUT** - structure of the response or deliverable
+- **GUARDRAILS** - forbidden actions, and actions that require explicit user confirmation
 
 This keeps generated prompts aligned with the agent-design convention already proven in demos, and makes them portable to external LLM products.
 
