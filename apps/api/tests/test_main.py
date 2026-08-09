@@ -62,12 +62,16 @@ class TestProvider:
 class FakeDb:
     def __init__(self):
         self.added = []
+        self.deleted = []
         self.flushed = False
         self.committed = False
         self.rolled_back = False
 
     def add(self, item):
         self.added.append(item)
+
+    def delete(self, item):
+        self.deleted.append(item)
 
     def flush(self):
         self.flushed = True
@@ -271,6 +275,7 @@ class FakeDbWithSession(FakeDb):
         events=None,
         screenshot=None,
         sops=None,
+        completion_count=0,
     ):
         super().__init__()
 
@@ -281,6 +286,7 @@ class FakeDbWithSession(FakeDb):
         self.events = events or []
         self.screenshot = screenshot
         self.sops = sops or []
+        self.completion_count = completion_count
         self._tenant_id_filter = None
         self._session_id_filter = None
         self._event_ids_filter = None
@@ -335,6 +341,16 @@ class FakeDbWithSession(FakeDb):
 
     def join(self, *args):
         return self
+
+    def count(self):
+        if self.current_model == main_module.models.WalkthroughCompletion:
+            return self.completion_count
+        return 0
+
+    def delete(self, item):
+        super().delete(item)
+        if item is self.existing_sop:
+            self.existing_sop = None
 
     def first(self):
         if self.current_model == main_module.models.Session:
@@ -1084,6 +1100,121 @@ def test_list_my_draft_sops():
         app.dependency_overrides[get_current_user] = lambda: _make_user()
 
 
+def test_employee_delete_own_sop_returns_204():
+    current_user = _make_user(role=UserRole.employee)
+    session_id = UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
+    fake_session = SimpleNamespace(
+        id=session_id,
+        tenant_id=DEFAULT_TENANT_ID,
+        recorded_by=current_user.id,
+    )
+    fake_sop = SimpleNamespace(
+        id=UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+        session_id=session_id,
+        tenant_id=DEFAULT_TENANT_ID,
+        status=main_module.models.SopStatus.draft.value,
+    )
+    db = FakeDbWithSession(session=fake_session, existing_sop=fake_sop)
+    app.dependency_overrides[get_db] = lambda: db
+    app.dependency_overrides[get_current_user] = lambda: current_user
+
+    try:
+        response = client.delete("/api/v1/sops/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+        assert response.status_code == 204
+        assert db.committed is True
+        assert fake_sop in db.deleted
+    finally:
+        app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+def test_employee_delete_others_sop_returns_403():
+    current_user = _make_user(role=UserRole.employee)
+    session_id = UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
+    fake_session = SimpleNamespace(
+        id=session_id,
+        tenant_id=DEFAULT_TENANT_ID,
+        recorded_by=UUID("99999999-9999-9999-9999-999999999999"),
+    )
+    fake_sop = SimpleNamespace(
+        id=UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+        session_id=session_id,
+        tenant_id=DEFAULT_TENANT_ID,
+        status=main_module.models.SopStatus.published.value,
+    )
+    db = FakeDbWithSession(session=fake_session, existing_sop=fake_sop)
+    app.dependency_overrides[get_db] = lambda: db
+    app.dependency_overrides[get_current_user] = lambda: current_user
+
+    try:
+        response = client.delete("/api/v1/sops/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+        assert response.status_code == 403
+        assert response.json()["detail"] == "Not allowed to delete this SOP"
+        assert db.committed is False
+        assert db.deleted == []
+    finally:
+        app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+def test_reviewer_delete_tenant_sop_returns_204():
+    fake_sop = SimpleNamespace(
+        id=UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+        session_id=UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
+        tenant_id=DEFAULT_TENANT_ID,
+        status=main_module.models.SopStatus.published.value,
+    )
+    db = FakeDbWithSession(existing_sop=fake_sop)
+    app.dependency_overrides[get_db] = lambda: db
+    app.dependency_overrides[get_current_user] = lambda: _make_user(role=UserRole.reviewer)
+
+    try:
+        response = client.delete("/api/v1/sops/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+        assert response.status_code == 204
+        assert db.committed is True
+        assert fake_sop in db.deleted
+    finally:
+        app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+def test_manager_delete_sop_with_completions_returns_204():
+    """Demo hard-delete: completions/analytics cascade via FK, so delete succeeds."""
+    current_user = _make_user(role=UserRole.manager)
+    fake_sop = SimpleNamespace(
+        id=UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+        session_id=UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
+        tenant_id=DEFAULT_TENANT_ID,
+        status=main_module.models.SopStatus.published.value,
+    )
+    db = FakeDbWithSession(existing_sop=fake_sop, completion_count=2)
+    app.dependency_overrides[get_db] = lambda: db
+    app.dependency_overrides[get_current_user] = lambda: current_user
+
+    try:
+        response = client.delete("/api/v1/sops/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+        assert response.status_code == 204
+        assert db.committed is True
+        assert fake_sop in db.deleted
+    finally:
+        app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+def test_delete_sop_returns_404_when_missing():
+    db = FakeDbWithSession(existing_sop=None)
+    app.dependency_overrides[get_db] = lambda: db
+    app.dependency_overrides[get_current_user] = lambda: _make_user(role=UserRole.reviewer)
+
+    try:
+        response = client.delete("/api/v1/sops/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+        assert response.status_code == 404
+        assert response.json()["detail"] == "SOP not found"
+    finally:
+        app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides.pop(get_current_user, None)
+
+
 def _walkthrough_sop(
     *,
     steps: list[dict],
@@ -1205,6 +1336,8 @@ def test_get_sop_walkthrough_returns_payload_for_single_step():
             "css_selector": "#login-button",
             "xpath": "/html/body/button[1]",
             "target_label": None,
+            "aria_label": None,
+            "role": None,
             "screenshot_url": "https://signed.example/screenshots/login.png",
             "time_estimate": 5,
             "screenshot_highlight": None,
@@ -1213,6 +1346,49 @@ def test_get_sop_walkthrough_returns_payload_for_single_step():
             "expected_url": "https://example.com/login",
             "warning": None,
         }
+    finally:
+        app.dependency_overrides[get_db] = override_get_db
+
+
+def test_get_sop_walkthrough_plumbs_aria_label_and_role_from_event_attrs():
+    fake_event = SimpleNamespace(
+        id=1,
+        seq=1,
+        session_id=WALKTHROUGH_SESSION_ID,
+        target_selector='button[aria-label="Submit Form"]',
+        target_label="Submit Form",
+        attrs={
+            "aria_label": "Submit Form",
+            "role": "button",
+        },
+        url="https://example.com/form",
+        screenshot_id=None,
+        timestamp_ms=1_000,
+        type="click",
+    )
+    fake_sop = _walkthrough_sop(
+        steps=[
+            {
+                "order": 1,
+                "title": "Submit",
+                "instruction": "Click Submit Form.",
+                "source_event_ids": ["1"],
+            }
+        ],
+    )
+
+    db = FakeDbWithSession(existing_sop=fake_sop, events=[fake_event])
+    app.dependency_overrides[get_db] = lambda: db
+
+    try:
+        response = client.get(f"/api/v1/sops/{WALKTHROUGH_SOP_ID}/walkthrough")
+
+        assert response.status_code == 200
+        step = response.json()["steps"][0]
+        assert step["aria_label"] == "Submit Form"
+        assert step["role"] == "button"
+        assert step["css_selector"] == 'button[aria-label="Submit Form"]'
+        assert step["anchor_mode"] == "element"
     finally:
         app.dependency_overrides[get_db] = override_get_db
 

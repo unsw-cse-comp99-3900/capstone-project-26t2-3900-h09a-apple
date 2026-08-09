@@ -119,6 +119,16 @@ def _xpath_from_attrs(attrs: object) -> str | None:
     return xpath_text or None
 
 
+def _attr_str(attrs: object, key: str) -> str | None:
+    if not isinstance(attrs, dict):
+        return None
+    value = attrs.get(key)
+    if not isinstance(value, str):
+        return None
+    trimmed = value.strip()
+    return trimmed or None
+
+
 def _resolve_step_metadata(
     source_event_ids: list[str],
     session_id: UUID,
@@ -132,6 +142,8 @@ def _resolve_step_metadata(
     dict | None,
     Literal["click", "input", "submit"] | None,
     str | None,
+    str | None,
+    str | None,
 ]:
     css_selector = None
     xpath = None
@@ -140,6 +152,8 @@ def _resolve_step_metadata(
     screenshot_highlight = None
     expected_action = None
     expected_url = None
+    aria_label = None
+    role = None
 
     priority = {
         models.EventType.click.value: 1,
@@ -150,18 +164,26 @@ def _resolve_step_metadata(
     best_priority = 0
 
     for event in _load_ordered_events(source_event_ids, session_id, tenant_id, db):
+        attrs = getattr(event, "attrs", None)
+
         if css_selector is None:
             selector = getattr(event, "target_selector", None)
             if selector:
                 css_selector = selector
 
         if xpath is None:
-            xpath = _xpath_from_attrs(getattr(event, "attrs", None))
+            xpath = _xpath_from_attrs(attrs)
 
         if target_label is None:
             label = getattr(event, "target_label", None)
             if label:
                 target_label = label.strip()
+
+        if aria_label is None:
+            aria_label = _attr_str(attrs, "aria_label")
+
+        if role is None:
+            role = _attr_str(attrs, "role")
 
         if screenshot_url is None:
             screenshot_id = getattr(event, "screenshot_id", None)
@@ -174,7 +196,7 @@ def _resolve_step_metadata(
                 )
 
         if screenshot_highlight is None:
-            screenshot_highlight = _extract_screenshot_highlight(getattr(event, "attrs", None))
+            screenshot_highlight = _extract_screenshot_highlight(attrs)
 
         # Record the first page URL associated with this step so the
         # walkthrough runtime can distinguish selector misses from
@@ -202,6 +224,8 @@ def _resolve_step_metadata(
             and screenshot_url
             and screenshot_highlight
             and expected_url
+            and aria_label
+            and role
             and best_priority == submit_priority
         ):
             break
@@ -214,6 +238,8 @@ def _resolve_step_metadata(
         screenshot_highlight,
         expected_action,
         expected_url,
+        aria_label,
+        role,
     )
 
 
@@ -236,13 +262,14 @@ def resolve_anchor_mode(
     css_selector: str | None,
     xpath: str | None,
     screenshot_url: str | None,
+    aria_label: str | None = None,
 ) -> str:
     """Choose how the live player should anchor a step.
 
     Navigation-only steps often have no selector; screenshot capture can also
     fail under throttle / inactive-tab conditions, so ``none`` is a real mode.
     """
-    if css_selector or xpath:
+    if css_selector or xpath or aria_label:
         return "element"
     if screenshot_url:
         return "screenshot"
@@ -274,6 +301,8 @@ def build_walkthrough_payload(sop: models.Sop, db: DBSession) -> WalkthroughPayl
             screenshot_highlight,
             expected_action,
             expected_url,
+            aria_label,
+            role,
         ) = _resolve_step_metadata(
             source_event_ids,
             sop.session_id,
@@ -298,7 +327,7 @@ def build_walkthrough_payload(sop: models.Sop, db: DBSession) -> WalkthroughPayl
             computed_time_estimate if computed_time_estimate is not None else llm_time_estimate
         )
 
-        anchor_mode = resolve_anchor_mode(css_selector, xpath, screenshot_url)
+        anchor_mode = resolve_anchor_mode(css_selector, xpath, screenshot_url, aria_label)
 
         steps.append(
             WalkthroughStep(
@@ -307,6 +336,8 @@ def build_walkthrough_payload(sop: models.Sop, db: DBSession) -> WalkthroughPayl
                 css_selector=css_selector,
                 xpath=xpath,
                 target_label=target_label,
+                aria_label=aria_label,
+                role=role,
                 screenshot_url=screenshot_url,
                 time_estimate=time_estimate,
                 screenshot_highlight=screenshot_highlight,

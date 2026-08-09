@@ -334,6 +334,53 @@ def get_sop(
     )
 
 
+@app.delete(
+    "/api/v1/sops/{sop_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def delete_sop(
+    sop_id: UUID,
+    db: DBSession = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.employee)),
+):
+    """Hard-delete an SOP in the current tenant.
+
+    Employees may delete only SOPs they recorded. Reviewers and managers may
+    delete any SOP in the tenant. Related walkthrough/analytics rows cascade.
+    """
+    sop = (
+        filter_by_tenant(db.query(models.Sop), models.Sop, current_user.tenant_id)
+        .filter(models.Sop.id == sop_id)
+        .first()
+    )
+
+    if sop is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="SOP not found")
+
+    try:
+        user_role = UserRole(current_user.role)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid user role",
+        ) from exc
+
+    if user_role not in (UserRole.reviewer, UserRole.manager):
+        session = db.query(models.Session).filter(models.Session.id == sop.session_id).first()
+        if session is None or session.recorded_by != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not allowed to delete this SOP",
+            )
+
+    try:
+        db.delete(sop)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+
 @app.get(
     "/api/v1/sops/{sop_id}/walkthrough",
     response_model=WalkthroughPayload,
