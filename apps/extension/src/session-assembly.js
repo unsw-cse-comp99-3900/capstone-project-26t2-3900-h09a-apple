@@ -11,6 +11,12 @@ function mapBufferedEventToWTEventInput(evt) {
     attrs: {
       ...(pageTitle ? { page_title: pageTitle } : {}),
       ...(payload.target_rect ? { target_rect: payload.target_rect } : {}),
+      ...(typeof payload.aria_label === 'string' && payload.aria_label.trim()
+        ? { aria_label: payload.aria_label.trim() }
+        : {}),
+      ...(typeof payload.role === 'string' && payload.role.trim()
+        ? { role: payload.role.trim() }
+        : {}),
     },
     timestamp_ms: payload.timestamp || evt.receivedAt || 0,
     screenshot_id: payload.screenshot_id || null,

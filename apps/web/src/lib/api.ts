@@ -172,6 +172,16 @@ export async function getPublishedSops(): Promise<SopListResponse> {
   return res.json();
 }
 
+export async function deleteSop(sopId: string): Promise<void> {
+  const res = await authedFetch(`/api/v1/sops/${encodeURIComponent(sopId)}`, {
+    method: 'DELETE',
+  });
+
+  if (!res.ok) {
+    throw new ApiError(await errorMessage(res, 'Failed to delete SOP'), res.status);
+  }
+}
+
 export async function runKmeansAnalysis(
   payload: KmeansAnalysisRequest,
 ): Promise<KmeansAnalysisResponse> {

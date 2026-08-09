@@ -35,11 +35,16 @@ async function proxy(request: Request, context: RouteContext): Promise<NextRespo
     body,
   });
 
-  const responseBody = await upstream.arrayBuffer();
+  // 204/205/304 must not carry a body; NextResponse throws if given one.
+  const nullBody = upstream.status === 204 || upstream.status === 205 || upstream.status === 304;
+  const responseBody = nullBody ? null : await upstream.arrayBuffer();
   const response = new NextResponse(responseBody, { status: upstream.status });
 
   upstream.headers.forEach((value, key) => {
     if (key.toLowerCase() === 'transfer-encoding') {
+      return;
+    }
+    if (nullBody && key.toLowerCase() === 'content-length') {
       return;
     }
     response.headers.set(key, value);

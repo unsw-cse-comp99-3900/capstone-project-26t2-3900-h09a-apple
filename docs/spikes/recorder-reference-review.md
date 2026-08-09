@@ -69,12 +69,15 @@
 ### Decision — WorkTrace
 
 - Generate a **stable CSS selector** with this preference order:
-  1. `#id` if present and unique
-  2. `[data-testid]` / stable `data-*` attribute
-  3. `nth-of-type` path from the nearest identifiable ancestor
-- Additionally capture a human-readable `target_label`: visible text → `aria-label` → `placeholder` → `title`.
+  1. Unique `[aria-label="..."]` on the target element (when present and unique in the document)
+  2. `#id` if present and unique
+  3. `[data-testid]` / stable `data-*` attribute
+  4. `nth-of-type` path from the nearest identifiable ancestor
+- Additionally capture:
+  - human-readable `target_label`: associated `<label>` → visible text → `aria-label` → `placeholder` → `title`
+  - `attrs.aria_label` / `attrs.role` for walkthrough resolve (aria first, then CSS → XPath → label → vision)
 
-**Rationale:** the CSS selector gives uniqueness for analytics/diffing; the readable label drives SOP step titles ("Click **Submit invoice**"), which is what makes the generated SOP human-readable.
+**Rationale:** unique aria-labels are more stable than brittle `nth-of-type` paths on real SaaS UIs; the readable `target_label` still drives SOP step titles ("Click **Submit invoice**").
 
 ---
 

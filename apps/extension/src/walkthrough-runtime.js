@@ -4,8 +4,9 @@
  *
  * Primary mode is LIVE overlay: resolve target on the page, anchor tooltip via
  * getBoundingClientRect. Screenshots are preview + fallback only (H09AAPPLE-28).
- * Resolution chain: CSS → XPath → label, then H09AAPPLE-53 vision grid locate
- * on selector_miss (pixel overlay; manual Next). Full text+role is H09AAPPLE-29.
+ * Resolution chain: aria_label → CSS → XPath → label, then H09AAPPLE-53 vision
+ * grid locate on selector_miss (pixel overlay; manual Next). Full text+role is
+ * H09AAPPLE-29.
  *
  * H09AAPPLE-80 remaining (this file is the real ball; ignore apps/web floating-assistant):
  * T0-2 confidence chip: done for Q&A answers
@@ -652,11 +653,109 @@
   }
 
   /**
-   * Stub resolver for H09AAPPLE-28. H09AAPPLE-29 owns the full strategy chain.
+   * Infer a coarse ARIA role for common interactive controls.
+   */
+  function inferImplicitRole(element) {
+    if (!(element instanceof Element)) {
+      return '';
+    }
+    const explicit = (element.getAttribute('role') || '').trim().toLowerCase();
+    if (explicit) {
+      return explicit;
+    }
+    const tag = element.nodeName.toLowerCase();
+    if (tag === 'button') return 'button';
+    if (tag === 'a' && element.hasAttribute('href')) return 'link';
+    if (tag === 'select') return 'combobox';
+    if (tag === 'textarea') return 'textbox';
+    if (tag === 'input') {
+      const type = (element.getAttribute('type') || 'text').toLowerCase();
+      if (type === 'button' || type === 'submit' || type === 'reset') return 'button';
+      if (type === 'checkbox') return 'checkbox';
+      if (type === 'radio') return 'radio';
+      if (type === 'range') return 'slider';
+      if (type === 'number') return 'spinbutton';
+      if (type === 'search') return 'searchbox';
+      if (['text', 'email', 'tel', 'url', 'password', ''].includes(type)) return 'textbox';
+    }
+    return '';
+  }
+
+  function isVisibleCandidate(element) {
+    if (!(element instanceof Element)) {
+      return false;
+    }
+    if (element.getAttribute('aria-hidden') === 'true') {
+      return false;
+    }
+    if (typeof element.checkVisibility === 'function') {
+      try {
+        return element.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true });
+      } catch {
+        // Older engines may not accept options.
+      }
+    }
+    const style = element.ownerDocument?.defaultView?.getComputedStyle?.(element);
+    if (style && (style.display === 'none' || style.visibility === 'hidden')) {
+      return false;
+    }
+    return element.getClientRects().length > 0;
+  }
+
+  /**
+   * Prefer aria-label match; role disambiguates when multiple nodes share the label.
+   */
+  function resolveByAriaLabel(step, doc) {
+    if (typeof step.aria_label !== 'string' || !step.aria_label.trim()) {
+      return null;
+    }
+
+    const ariaLabel = step.aria_label.trim();
+    let matches = [];
+    try {
+      const escaped =
+        typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
+          ? CSS.escape(ariaLabel)
+          : ariaLabel.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+      matches = Array.from(doc.querySelectorAll(`[aria-label="${escaped}"]`));
+    } catch {
+      return null;
+    }
+
+    if (matches.length === 0) {
+      return null;
+    }
+
+    const wantedRole =
+      typeof step.role === 'string' && step.role.trim() ? step.role.trim().toLowerCase() : '';
+    if (wantedRole && matches.length > 1) {
+      const byRole = matches.filter((el) => inferImplicitRole(el) === wantedRole);
+      if (byRole.length > 0) {
+        matches = byRole;
+      }
+    }
+
+    const visible = matches.filter(isVisibleCandidate);
+    const chosen = (visible.length > 0 ? visible : matches)[0] || null;
+    if (!chosen) {
+      return null;
+    }
+    return { element: chosen, mode: 'aria_label' };
+  }
+
+  /**
+   * Resolver for live walkthrough highlight.
+   * Chain: aria_label → CSS → XPath → label. Full text+role is H09AAPPLE-29.
    */
   function resolveTarget(step, doc = document) {
     if (!step || !doc) {
       return { element: null, mode: 'fallback' };
+    }
+
+    // aria-label first when the step carries one.
+    const byAria = resolveByAriaLabel(step, doc);
+    if (byAria) {
+      return byAria;
     }
 
     // CSS selector
@@ -994,7 +1093,8 @@
     }
     const hasSelector =
       (typeof step?.css_selector === 'string' && step.css_selector.trim()) ||
-      (typeof step?.xpath === 'string' && step.xpath.trim());
+      (typeof step?.xpath === 'string' && step.xpath.trim()) ||
+      (typeof step?.aria_label === 'string' && step.aria_label.trim());
     if (hasSelector) {
       return 'element';
     }

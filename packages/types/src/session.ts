@@ -282,10 +282,14 @@ export interface WalkthroughStep {
   css_selector?: string | null;
   xpath?: string | null;
   target_label: string | null;
+  /** Captured aria-label used preferentially for live highlight resolution. */
+  aria_label?: string | null;
+  /** Explicit or inferred ARIA role used to disambiguate shared aria-labels. */
+  role?: string | null;
   screenshot_url?: string | null;
   time_estimate?: number | null;
   screenshot_highlight?: ScreenshotHighlight | null;
-  /** element: css/xpath; screenshot: image fallback; none: instruction-only. */
+  /** element: css/xpath/aria_label; screenshot: image fallback; none: instruction-only. */
   anchor_mode?: WalkthroughAnchorMode;
   expected_action?: WalkthroughExpectedAction | null;
   expected_url?: string | null;
