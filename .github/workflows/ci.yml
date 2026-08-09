@@ -8,7 +8,8 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Do not interrupt a production migration or ECS rollout with a newer main push.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   web:
@@ -217,3 +218,173 @@ jobs:
 
       - name: Deploy production
         run: vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN"
+
+  deploy-api:
+    name: deploy-api
+    needs: [web, api, extension, desktop]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+
+    permissions:
+      contents: read
+      id-token: write
+
+    env:
+      AWS_REGION: ap-southeast-2
+      ECR_REPOSITORY: worktrace-api
+      ECS_CLUSTER: worktrace-cluster
+      ECS_SERVICE: worktrace-api-service-0w7rw3fb
+      ECS_CONTAINER: worktrace-api
+      ECS_LOG_GROUP: /ecs/worktrace-api
+      API_HEALTH_URL: http://worktrace-api-alb-1142763432.ap-southeast-2.elb.amazonaws.com/api/v1/health
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Log in to Amazon ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push API image
+        id: image
+        env:
+          ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+        run: |
+          set -euo pipefail
+          image_uri="$ECR_REGISTRY/$ECR_REPOSITORY:$GITHUB_SHA"
+          docker build -f apps/api/Dockerfile -t "$image_uri" apps/api
+          docker push "$image_uri"
+          echo "uri=$image_uri" >> "$GITHUB_OUTPUT"
+
+      - name: Register task definition
+        id: task-definition
+        env:
+          IMAGE_URI: ${{ steps.image.outputs.uri }}
+        run: |
+          set -euo pipefail
+          current_task_definition="$(
+            aws ecs describe-services \
+              --cluster "$ECS_CLUSTER" \
+              --services "$ECS_SERVICE" \
+              --query 'services[0].taskDefinition' \
+              --output text
+          )"
+
+          aws ecs describe-task-definition \
+            --task-definition "$current_task_definition" \
+            --query 'taskDefinition' \
+            --output json > task-definition.json
+
+          jq \
+            --arg image "$IMAGE_URI" \
+            --arg container "$ECS_CONTAINER" \
+            '(.containerDefinitions[] | select(.name == $container) | .image) = $image
+             | del(
+                 .taskDefinitionArn,
+                 .revision,
+                 .status,
+                 .requiresAttributes,
+                 .compatibilities,
+                 .registeredAt,
+                 .registeredBy
+               )' \
+            task-definition.json > task-definition-next.json
+
+          task_definition_arn="$(
+            aws ecs register-task-definition \
+              --cli-input-json file://task-definition-next.json \
+              --query 'taskDefinition.taskDefinitionArn' \
+              --output text
+          )"
+          echo "arn=$task_definition_arn" >> "$GITHUB_OUTPUT"
+
+      - name: Run database migrations
+        env:
+          TASK_DEFINITION_ARN: ${{ steps.task-definition.outputs.arn }}
+        run: |
+          set -euo pipefail
+          network_configuration="$(
+            aws ecs describe-services \
+              --cluster "$ECS_CLUSTER" \
+              --services "$ECS_SERVICE" \
+              --query 'services[0].networkConfiguration' \
+              --output json
+          )"
+          overrides="$(
+            jq -cn \
+              --arg container "$ECS_CONTAINER" \
+              '{containerOverrides: [{name: $container, command: ["alembic", "upgrade", "head"]}]}'
+          )"
+          run_result="$(
+            aws ecs run-task \
+              --cluster "$ECS_CLUSTER" \
+              --launch-type FARGATE \
+              --task-definition "$TASK_DEFINITION_ARN" \
+              --network-configuration "$network_configuration" \
+              --overrides "$overrides" \
+              --output json
+          )"
+
+          if [ "$(jq '.failures | length' <<< "$run_result")" -ne 0 ]; then
+            jq '.failures' <<< "$run_result"
+            exit 1
+          fi
+
+          migration_task="$(jq -r '.tasks[0].taskArn' <<< "$run_result")"
+          aws ecs wait tasks-stopped \
+            --cluster "$ECS_CLUSTER" \
+            --tasks "$migration_task"
+
+          exit_code="$(
+            aws ecs describe-tasks \
+              --cluster "$ECS_CLUSTER" \
+              --tasks "$migration_task" \
+              --query "tasks[0].containers[?name=='$ECS_CONTAINER'].exitCode | [0]" \
+              --output text
+          )"
+
+          if [ "$exit_code" != "0" ]; then
+            task_id="${migration_task##*/}"
+            echo "Database migration failed with exit code $exit_code"
+            aws logs get-log-events \
+              --log-group-name "$ECS_LOG_GROUP" \
+              --log-stream-name "ecs/$ECS_CONTAINER/$task_id" \
+              --query 'events[].message' \
+              --output text || true
+            exit 1
+          fi
+
+      - name: Deploy API service
+        env:
+          TASK_DEFINITION_ARN: ${{ steps.task-definition.outputs.arn }}
+        run: |
+          set -euo pipefail
+          aws ecs update-service \
+            --cluster "$ECS_CLUSTER" \
+            --service "$ECS_SERVICE" \
+            --task-definition "$TASK_DEFINITION_ARN" \
+            --force-new-deployment \
+            --no-cli-pager > /dev/null
+
+          aws ecs wait services-stable \
+            --cluster "$ECS_CLUSTER" \
+            --services "$ECS_SERVICE"
+
+          rollout_state="$(
+            aws ecs describe-services \
+              --cluster "$ECS_CLUSTER" \
+              --services "$ECS_SERVICE" \
+              --query 'services[0].deployments[0].rolloutState' \
+              --output text
+          )"
+          test "$rollout_state" = "COMPLETED"
+
+      - name: Verify API health
+        run: curl --fail --silent --show-error --retry 12 --retry-delay 5 "$API_HEALTH_URL"
