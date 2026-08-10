@@ -1,5 +1,6 @@
 {
   "manifest_version": 3,
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAskfVzxu00PxsicyattdecOxFZB3Mpi/hvGZLopJ8sKdMRnfoeQ7k6XLtUAO7n5A5J+JD5UYP+Jrw6r0qfgYEX04Tp+JdgYXIcN7hO/1atD6AgfMv1dhlJvq/Z0Idd/m2NPk09r94z5QWWTHtmGJU0jK/ifTLQQEow7u4nHZxZ8tluXEYfxGKgSLRIJLhyslSTTlnzee6RKMbq+Npik31CHD16ybAAENAcGpxzoU/4zKLHp7t0M9oe3ZLDqKXxFYSxmVyoZjE2nL83C8LlQGnoQrxGCzBCzGKG5VMePiVjsMHmE6CVv9XGb0lDRWMxspX0JebTVa0FOJujz8qat3GQwIDAQAB",
   "name": "WorkTrace AI",
   "version": "0.1.0",
   "description": "Capture workflows and play guided walkthrough overlays on live pages.",

@@ -39,3 +39,6 @@ venv/
 Thumbs.db
 
 .vercel/
+
+# Chrome extension signing key - never commit
+**/extension-key.pem

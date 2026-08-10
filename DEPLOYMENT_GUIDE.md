@@ -8,7 +8,7 @@ PostgreSQL/pgvector, Redis, and automatic Alembic migrations with Docker Compose
 - Docker Engine 24+ or Docker Desktop
 - Docker Compose v2 (`docker compose version`)
 - 4 GB free memory (8 GB recommended when Whisper is preloaded)
-- Ports 80 and 8000 available, or custom values in `.env`
+- Ports 3000 and 8000 available, or custom values in `.env`
 
 ## Quick start
 
@@ -31,18 +31,26 @@ The one-shot `migrate` service waits for PostgreSQL and runs `alembic upgrade
 head` before the API and worker start. Redis and PostgreSQL are only reachable
 on the internal Docker network. The default URLs are:
 
-- Frontend: <http://localhost>
+- Frontend: <http://localhost:3000>
 - API health: <http://localhost:8000/health>
 
 ## Configuration
 
 The root `.env.example` lists all supported Compose values.
 
-- `FRONTEND_PORT`, `API_PORT`: host ports (defaults: 80 and 8000).
+- `FRONTEND_PORT`, `API_PORT`: host ports (defaults: 3000 and 8000). Keep
+  `FRONTEND_PORT` aligned with the extension `externally_connectable` hosts
+  (`localhost:3000` / `127.0.0.1:3000`) unless you also update the extension
+  manifest.
 - `NEXT_PUBLIC_API_BASE_URL`: API URL reachable by users' browsers. For a
   remote deployment, use the public API hostname, not `localhost`.
-- `API_CORS_ORIGINS`: comma-separated allowed frontend origins.
-- `WEB_BASE_URL`: public frontend URL used by backend links and auth.
+- `NEXT_PUBLIC_EXTENSION_ID`: Chrome extension ID for web-to-extension
+  messaging. Build-time only; change requires
+  `docker compose up -d --build frontend`.
+- `API_CORS_ORIGINS`: comma-separated allowed frontend origins (default
+  `http://localhost:3000`).
+- `WEB_BASE_URL`: public frontend URL used by backend links and auth (default
+  `http://localhost:3000`).
 - `SECRET_KEY`: JWT signing key; always replace the example value.
 - `POSTGRES_*`: database name and credentials.
 - `LLM_PROVIDER`, `SOP_GENERATOR`: default to deterministic `mock` mode.
@@ -62,7 +70,7 @@ static `dist/` files served by nginx without removing those server-side routes.
 ```bash
 docker compose ps
 curl --fail http://localhost:8000/health
-curl --fail http://localhost/
+curl --fail http://localhost:3000/
 docker compose exec redis redis-cli ping
 docker compose exec postgres pg_isready -U worktrace -d worktrace
 docker compose exec worker celery -A app.task_queue.celery_app inspect ping
