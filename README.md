@@ -141,6 +141,64 @@ Then load `apps/extension/dist` in `chrome://extensions` (see `apps/extension/RE
 
 Other scripts: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm format`.
 
+## Testing
+
+| Suite     | Framework | Scale                     | Coverage                               |
+| --------- | --------- | ------------------------- | -------------------------------------- |
+| API       | pytest    | 43 test files             | **83% statement** (`pytest --cov=app`) |
+| Web       | Vitest    | 15 test files             | —                                      |
+| Extension | node:test | **93 tests, all passing** | —                                      |
+
+Strategy, layer breakdown and known gaps:
+[`docs/testing/testing-strategy.md`](docs/testing/testing-strategy.md).
+
+Requirements mapping:
+[`docs/requirements-traceability.md`](docs/requirements-traceability.md).
+
+### Running the tests
+
+```bash
+cd apps/api && pytest --cov=app --cov-report=term
+cd apps/web && pnpm test
+cd apps/extension && node --test
+```
+
+### Tests requiring a live database
+
+11 API tests need PostgreSQL with the pgvector extension and will fail against
+a bare checkout:
+
+- `tests/test_sop_step_embedding_schema.py` (4) — pgvector extension and
+  ivfflat index assertions
+- `tests/test_demo_smoke.py` (7) — end-to-end seeded-data checks
+
+Run them with the stack up: `docker compose -p worktrace up -d`.
+
+## Non-trivial implementations
+
+**Two-stage visual element location** — `apps/api/app/vision_grid.py`,
+`vision_locate_service.py`.
+When a recorded CSS selector no longer matches the live page, the target is
+located visually: a coarse grid pass narrows the region, then a cropped fine
+pass returns viewport coordinates. Without this a walkthrough breaks the first
+time the host page is rebuilt.
+
+**Automatic cluster selection** — `apps/api/app/analytics_clustering.py`,
+`workflow_clustering.py`.
+Published SOP steps are embedded as 1536-dimensional vectors in pgvector.
+K-means is run for candidate `k` values and the grouping with the highest
+silhouette score (Rousseeuw, 1987) is kept, so the number of execution paths is
+chosen by the data. Two different entry points enforce different minimum sample
+sizes: `DEFAULT_MIN_SESSIONS = 5` in `analytics_clustering.py` and
+`MIN_SESSIONS_FOR_CLUSTERING = 3` in `workflow_clustering.py`. Below those
+floors the API raises an insufficient-data error rather than inventing a shape.
+
+**Versioned friction model** — `apps/api/app/friction_*.py`.
+Per-step friction = 0.60 x time + 0.25 x retries + 0.15 x path deviation,
+clamped to 0-100. The time component is zero at half the expected duration and
+saturates at twice it, so a single outlier cannot dominate a ranking. The model
+version is stored with every score, so historical numbers remain explainable.
+
 ## Manual verification
 
 Typical end-to-end flow after PostgreSQL (and MinIO, if using screenshots) are up:

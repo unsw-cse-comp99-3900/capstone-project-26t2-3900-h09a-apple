@@ -34,10 +34,13 @@ linked files; this page is navigation only.
 
 ## Deployment
 
-- `docker-compose.yml` (Postgres, Redis)
+- Assessor guide (Compose, MinIO, demo roles, extension): [DEPLOYMENT_GUIDE.md](../DEPLOYMENT_GUIDE.md)
+- Submission zip helper: [scripts/package-submission.sh](../scripts/package-submission.sh)
+- `docker-compose.yml` (Postgres, Redis, API, worker, frontend)
 - Env templates: `.env.example`, `apps/api/.env.example`, `apps/web/.env.example`
 - Guide: [docs/deployment.md](./deployment.md)
 - Local setup also in root [README.md](../README.md)
+- Requirements traceability: [docs/requirements-traceability.md](./requirements-traceability.md)
 - API image: `apps/api/Dockerfile`
 - Web production deploy job: `deploy-web` in `ci.yml` (push to `main`)
 

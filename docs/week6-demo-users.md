@@ -4,32 +4,50 @@ Self-service registration always creates `EMPLOYEE` users in the server configur
 default tenant. Reviewer and manager demo accounts must be created directly in
 the database until an admin role-management flow exists.
 
-Generate password hashes with the API password helper:
+## Preferred path (Docker Compose)
+
+After the API container is healthy:
 
 ```bash
-cd apps/api
-python -c "from app.auth.password import hash_password; print(hash_password('change-me'))"
+docker compose exec -T api python seeds/seed_demo_roles.py
 ```
 
-Then insert or update the demo users in the target database. Replace
-`<tenant-id>` with `DEFAULT_TENANT_ID` and replace the password hash values with
-fresh hashes generated above.
+| Email               | Password   | Role     |
+| ------------------- | ---------- | -------- |
+| `reviewer@work.com` | `11112222` | REVIEWER |
+| `manager@work.com`  | `11112222` | MANAGER  |
+
+See `DEPLOYMENT_GUIDE.md` for the full assessor quick start (MinIO, extension,
+smoke path).
+
+## Manual SQL path (optional)
+
+Generate password hashes with the API password helper on a host with the API
+venv, or inside the API container:
+
+```bash
+docker compose exec -T api python -c "from app.auth.password import hash_password; print(hash_password('11112222'))"
+```
+
+Then insert or update the demo users. Replace `<password-hash>` with the value
+printed above and `<tenant-id>` with `DEFAULT_TENANT_ID` (default
+`22222222-2222-2222-2222-222222222222`).
 
 ```sql
 INSERT INTO users (id, email, hashed_password, role, tenant_id, created_at)
 VALUES
   (
     gen_random_uuid(),
-    'week6-reviewer@example.com',
-    '<reviewer-password-hash>',
+    'reviewer@work.com',
+    '<password-hash>',
     'REVIEWER',
     '<tenant-id>',
     NOW()
   ),
   (
     gen_random_uuid(),
-    'week6-manager@example.com',
-    '<manager-password-hash>',
+    'manager@work.com',
+    '<password-hash>',
     'MANAGER',
     '<tenant-id>',
     NOW()
