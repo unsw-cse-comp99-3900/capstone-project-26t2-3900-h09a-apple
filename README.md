@@ -145,7 +145,7 @@ Other scripts: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm f
 
 | Suite     | Framework | Scale                     | Coverage                               |
 | --------- | --------- | ------------------------- | -------------------------------------- |
-| API       | pytest    | 43 test files             | **83% statement** (`pytest --cov=app`) |
+| API       | pytest    | 51 test files             | **91% statement** (`pytest --cov=app`) |
 | Web       | Vitest    | 15 test files             | —                                      |
 | Extension | node:test | **93 tests, all passing** | —                                      |
 
@@ -154,6 +154,21 @@ Strategy, layer breakdown and known gaps:
 
 Requirements mapping:
 [`docs/requirements-traceability.md`](docs/requirements-traceability.md).
+
+### Coverage by concern
+
+API tests emphasise sad paths and mocked providers, not only happy paths
+(counts from `apps/api/tests` status assertions / mock usage):
+
+| Concern              | Covered by                                       | Evidence                                |
+| -------------------- | ------------------------------------------------ | --------------------------------------- |
+| Data validation      | Rejected payloads on write endpoints             | 20 assertions on HTTP 422               |
+| Authentication       | Unauthenticated access to protected routes       | 23 assertions on HTTP 401               |
+| Authorisation        | Wrong-role and cross-tenant access               | 9 assertions on HTTP 403                |
+| Missing resources    | Unknown IDs and missing records                  | 12 assertions on HTTP 404               |
+| Duplicate operations | Repeat registration / conflicting generate state | 3 assertions on HTTP 409                |
+| External providers   | LLM and task helpers stubbed in unit tests       | 21 test files use `monkeypatch` / mocks |
+| Server errors        | Downstream failure surfaced, not swallowed       | 2 assertions on HTTP 500                |
 
 ### Running the tests
 

@@ -11,6 +11,7 @@ frameworks today.
 - Location: `apps/api/tests/`
 - Config: `apps/api/pyproject.toml` (`[tool.pytest.ini_options]`)
 - CI command: `pytest --cov=app --cov-report=term` (coverage reported; not a hard fail threshold in workflow)
+- Current local statement coverage: **91%** (`4548` stmts, `428` miss)
 - Also in CI: `ruff check`, `ruff format --check`, Alembic
   `upgrade head` -> `downgrade base` -> `upgrade head`
 
@@ -105,6 +106,21 @@ Documented in the root [README.md](../../README.md) Manual verification section:
 4. Confirm generating poll and SOP page; optional DB check.
 
 Auth-protected APIs need a Bearer access token from register/login.
+
+## Concurrency
+
+Session ingestion and SOP generation are driven through queued / job-style
+paths (codification jobs and Celery friction work) rather than long
+read-modify-write loops inside a single request handler. Repeat generate when
+an SOP already exists returns HTTP 409 (`test_generate_sop_returns_409_when_sop_exists`).
+Duplicate email registration in a tenant also returns 409. Publish and approval
+are single-row status transitions on `sops`, so conflicting updates are
+serialised by the database row rather than an application-level lock.
+
+We do not ship dedicated multi-threaded race tests beyond those conflict
+guards. The request-path risk surface is narrow: handlers avoid multi-row
+read-modify-write for the critical SOP lifecycle transitions, and background
+work is handed to the worker/queue.
 
 ## Out of scope (do not claim)
 
