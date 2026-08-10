@@ -1,6 +1,6 @@
 # Sprint 1 market test report (SOP output review)
 
-Brief reference: `27 - Workforce Intelligence`, Project scope, Sprint 1 —
+Brief reference: `27 - Workforce Intelligence`, Project scope, Sprint 1 -
 "Real companies test the output at the end of Week 3".
 
 **This session was run in Week 10, outside the intended Sprint 1 gate window.**
@@ -24,7 +24,7 @@ any field in this document.
 
 ## 2. What we tested
 
-Sprint 1 delivers Modules 1 and 2 — the recorder and the SOP generator. The
+Sprint 1 delivers Modules 1 and 2 - the recorder and the SOP generator. The
 gate asks whether the **output** is usable by a real company, not whether the
 system is deployed. The test is therefore an asynchronous document review: a
 participant reads a generated procedure cold and reports whether they could
@@ -54,7 +54,7 @@ act on it.
 ## 3. Results
 
 Record answers verbatim. Do not paraphrase, tidy, or summarise into a
-conclusion — the raw wording is the evidence.
+conclusion - the raw wording is the evidence.
 
 ### Participant profile
 
@@ -89,7 +89,7 @@ conclusion — the raw wording is the evidence.
 ## 4. Scope decision
 
 The brief requires each market test to record **the scope decision made as a
-result**. State one explicitly even if the decision is to change nothing —
+result**. State one explicitly even if the decision is to change nothing -
 "feedback confirmed the current approach; no change made" is a valid decision
 and must be recorded as such.
 

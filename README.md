@@ -146,8 +146,8 @@ Other scripts: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm f
 | Suite     | Framework | Scale                     | Coverage                               |
 | --------- | --------- | ------------------------- | -------------------------------------- |
 | API       | pytest    | 51 test files             | **91% statement** (`pytest --cov=app`) |
-| Web       | Vitest    | 15 test files             | —                                      |
-| Extension | node:test | **93 tests, all passing** | —                                      |
+| Web       | Vitest    | 15 test files             | n/a                                    |
+| Extension | node:test | **93 tests, all passing** | n/a                                    |
 
 Strategy, layer breakdown and known gaps:
 [`docs/testing/testing-strategy.md`](docs/testing/testing-strategy.md).
@@ -183,22 +183,22 @@ cd apps/extension && node --test
 11 API tests need PostgreSQL with the pgvector extension and will fail against
 a bare checkout:
 
-- `tests/test_sop_step_embedding_schema.py` (4) — pgvector extension and
+- `tests/test_sop_step_embedding_schema.py` (4) - pgvector extension and
   ivfflat index assertions
-- `tests/test_demo_smoke.py` (7) — end-to-end seeded-data checks
+- `tests/test_demo_smoke.py` (7) - end-to-end seeded-data checks
 
 Run them with the stack up: `docker compose -p worktrace up -d`.
 
 ## Non-trivial implementations
 
-**Two-stage visual element location** — `apps/api/app/vision_grid.py`,
+**Two-stage visual element location** - `apps/api/app/vision_grid.py`,
 `vision_locate_service.py`.
 When a recorded CSS selector no longer matches the live page, the target is
 located visually: a coarse grid pass narrows the region, then a cropped fine
 pass returns viewport coordinates. Without this a walkthrough breaks the first
 time the host page is rebuilt.
 
-**Automatic cluster selection** — `apps/api/app/analytics_clustering.py`,
+**Automatic cluster selection** - `apps/api/app/analytics_clustering.py`,
 `workflow_clustering.py`.
 Published SOP steps are embedded as 1536-dimensional vectors in pgvector.
 K-means is run for candidate `k` values and the grouping with the highest
@@ -208,7 +208,7 @@ sizes: `DEFAULT_MIN_SESSIONS = 5` in `analytics_clustering.py` and
 `MIN_SESSIONS_FOR_CLUSTERING = 3` in `workflow_clustering.py`. Below those
 floors the API raises an insufficient-data error rather than inventing a shape.
 
-**Versioned friction model** — `apps/api/app/friction_*.py`.
+**Versioned friction model** - `apps/api/app/friction_*.py`.
 Per-step friction = 0.60 x time + 0.25 x retries + 0.15 x path deviation,
 clamped to 0-100. The time component is zero at half the expected duration and
 saturates at twice it, so a single outlier cannot dominate a ranking. The model
