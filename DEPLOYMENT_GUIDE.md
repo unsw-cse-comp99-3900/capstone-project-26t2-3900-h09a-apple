@@ -3,19 +3,38 @@
 This deployment runs the FastAPI API, Celery friction worker, Next.js frontend,
 PostgreSQL/pgvector, Redis, and automatic Alembic migrations with Docker Compose.
 
-Assessors need **Docker** and **Chrome**. Node, pnpm, and a local Python venv are
-not required for the default path when the submission zip includes
-`apps/extension/dist`.
+Assessors need **Docker** and **Chrome**. An IDE (VS Code, Cursor, or similar)
+is not required.
+
+**Which tree you have matters for the Chrome extension:**
+
+| Source                                                         | `apps/extension/dist`                   | Need Node?                              |
+| -------------------------------------------------------------- | --------------------------------------- | --------------------------------------- |
+| Course **submission zip** from `scripts/package-submission.sh` | Included (appended after `git archive`) | No                                      |
+| GitHub clone / "Download ZIP" / plain `git archive`            | **Absent** (`dist/` is gitignored)      | Yes: run the rebuild fallback in step 4 |
 
 ## Prerequisites
 
-- Docker Engine 24+ or Docker Desktop
-- Docker Compose v2 (`docker compose version`)
-- 4 GB free memory (8 GB recommended when Whisper is preloaded)
-- Ports **3000**, **8000**, **9000**, and **9001** available (or override in
-  `.env` / MinIO flags)
+Install and leave running before any Compose commands:
+
+| Required                                                                                            | Notes                                                                                                         |
+| --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| [Docker Desktop](https://www.docker.com/products/docker-desktop/) (Engine 24+) or Docker Engine 24+ | Wait until Docker shows **Running**. Confirm with `docker version` and `docker compose version` (Compose v2). |
+| [Google Chrome](https://www.google.com/chrome/)                                                     | Load the unpacked MV3 extension and run the walkthrough.                                                      |
+| 4 GB free memory (8 GB recommended if Whisper is preloaded)                                         |                                                                                                               |
+| Free host ports **3000**, **8000**, **9000**, **9001**                                              | Or remap in `.env` (see Troubleshooting).                                                                     |
+
+**Not required** for the submission-zip path: Node.js, pnpm, Python, or an IDE.
+Use any shell that can run `docker`.
 
 ## Quick start (assessor path)
+
+### 0. Unpack
+
+Extract the archive and `cd` into the repository root (the folder that contains
+`docker-compose.yml` and `.env.example`). Prefer the course **submission zip**.
+If you only have a GitHub checkout, Compose still works, but you must build the
+extension in step 4 before loading it in Chrome.
 
 ### 1. Configure environment
 
@@ -76,17 +95,17 @@ Register any other email in the UI for an EMPLOYEE account.
 
 ### 4. Load the Chrome extension
 
-**Primary path (no Node required):** open `chrome://extensions`, enable
-Developer mode, then **Load unpacked** and select `apps/extension/dist` from
-the extracted submission (or this repo after a maintainer has built it).
+Check that the prebuilt extension exists:
 
-The fixed extension ID must be:
+```bash
+test -f apps/extension/dist/manifest.json && echo "dist present" || echo "dist missing"
+```
 
-`bajibpeckacmfdmifdhccckiepadhgog`
+**If `dist` is present** (submission zip): open `chrome://extensions`, enable
+Developer mode, **Load unpacked**, and select `apps/extension/dist`. No Node.
 
-That value is already set as `NEXT_PUBLIC_EXTENSION_ID` in `.env.example`.
-
-**Fallback (rebuild from source):** requires Node 20+ and pnpm:
+**If `dist` is missing** (GitHub clone / source-only tree): `dist/` is not in
+git. Build it once, then load the same folder:
 
 ```bash
 corepack enable
@@ -95,7 +114,11 @@ pnpm install
 pnpm --filter @h09a/extension build
 ```
 
-Then load `apps/extension/dist` as above.
+The fixed extension ID must be:
+
+`bajibpeckacmfdmifdhccckiepadhgog`
+
+That value is already set as `NEXT_PUBLIC_EXTENSION_ID` in `.env.example`.
 
 ### 5. Smoke path
 
@@ -136,6 +159,10 @@ The root `.env.example` lists all supported Compose values.
   `FRONTEND_PORT` aligned with the extension `externally_connectable` hosts
   (`localhost:3000` / `127.0.0.1:3000`) unless you also update the extension
   manifest.
+- `POSTGRES_PORT`, `REDIS_PORT`, `MINIO_API_PORT`, `MINIO_CONSOLE_PORT`: host
+  publish ports only (defaults 5432, 6379, 9000, 9001). Containers still talk
+  to each other on the Compose network; you normally do **not** change
+  `DATABASE_URL` when remapping `POSTGRES_PORT`.
 - `NEXT_PUBLIC_API_BASE_URL`: API URL reachable by users' browsers. For a
   remote deployment, use the public API hostname, not `localhost`.
 - `NEXT_PUBLIC_EXTENSION_ID`: Chrome extension ID for web-to-extension
@@ -332,19 +359,40 @@ on `http://localhost:3000` (not port 80).
 Keep `PRELOAD_WHISPER_MODEL=false`. Inspect `docker compose logs api` for
 database, model-download, or memory errors.
 
-### Port conflict
+### Port conflict (`bind: address already in use`)
 
-Change `FRONTEND_PORT` or `API_PORT` in `.env`, then run `docker compose up -d`.
+Compose publishes Postgres, Redis, MinIO, API, and the frontend to the host.
+A local PostgreSQL install (or another container such as `luma_postgres`) often
+already owns **5432**, which stops `postgres` from starting and leaves `api` /
+`migrate` in `Created`.
+
+Prefer remapping the host port in `.env` (leave any system Postgres running):
+
+```bash
+# Example: host 5433 -> container 5432. In-compose DATABASE_URL stays unchanged.
+echo 'POSTGRES_PORT=5433' >> .env
+docker compose up -d
+```
+
+Other host mappings if needed: `REDIS_PORT`, `MINIO_API_PORT`,
+`MINIO_CONSOLE_PORT`, `FRONTEND_PORT`, `API_PORT`. After editing `.env`, run
+`docker compose up -d` again (rebuild is not required for port-only changes).
+
+Alternatively stop the process holding the port, then retry
+`docker compose up -d`. On macOS, `lsof -nP -iTCP:5432 -sTCP:LISTEN` shows the
+listener.
 
 ## Packaging a submission zip
 
-Maintainers (not assessors) can build a zip that includes a prebuilt extension
-so markers do not need Node:
+Maintainers (not assessors) build the zip markers receive. GitHub alone is not
+enough for the no-Node extension path because `apps/extension/dist` is
+gitignored.
 
 ```bash
+pnpm --filter @h09a/extension build   # must exist before packaging
 bash scripts/package-submission.sh
 ```
 
-This runs `git archive` for `HEAD`, appends `apps/extension/dist`, and optionally
-appends an untracked `SECRETS.txt` if present. Extract elsewhere and follow this
-guide from **Quick start** without `pnpm`.
+The script runs `git archive` for `HEAD`, **then appends**
+`apps/extension/dist`, and optionally appends an untracked `SECRETS.txt` if
+present. Extract that zip elsewhere and follow **Quick start** without `pnpm`.

@@ -27,9 +27,12 @@ Assessment-oriented index (architecture, testing, privacy, CI, troubleshooting):
 ## Assessor / clean-machine path
 
 Assessors and clean-env installs follow
-[`DEPLOYMENT_GUIDE.md`](DEPLOYMENT_GUIDE.md): `cp .env.example .env`, then
-`docker compose up -d --build`. That stack already includes MinIO and creates
-the screenshot bucket. Do **not** start a separate MinIO container on port 9000.
+[`DEPLOYMENT_GUIDE.md`](DEPLOYMENT_GUIDE.md). Prefer the course **submission
+zip** (includes `apps/extension/dist`). A plain GitHub clone has no `dist`
+(gitignored); build the extension or use the packaging script. Then
+`cp .env.example .env` and `docker compose up -d --build`. That stack already
+includes MinIO and creates the screenshot bucket. Do **not** start a separate
+MinIO container on port 9000.
 
 ## Setup
 
