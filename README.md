@@ -2,10 +2,27 @@
 
 UNSW COMP3900 26T2 capstone project.
 
-Monorepo with a Next.js frontend (`apps/web`), a FastAPI backend (`apps/api`),
-a Chrome MV3 extension (`apps/extension`), and shared TypeScript types in
-`packages/types`. `apps/desktop` is an archived Electron capture spike and is
-**not** part of the assessor Docker path (see `apps/desktop/README.md`).
+## Start here (markers / clean machine)
+
+**Installation manual:** [`DEPLOYMENT_GUIDE.md`](DEPLOYMENT_GUIDE.md)
+(same content as the Moodle installation PDF).
+
+1. Open that file first.
+2. Read **Marker checklist (read before typing)**.
+3. Follow **Quick start (assessor path)** end to end.
+
+It covers Docker + Chrome only (no IDE), `.env`, Compose (Postgres / Redis /
+MinIO / API / worker / frontend), port clashes (e.g. host Postgres on 5432),
+demo role seed, Chrome extension `dist`, mock-LLM illustrative SOP text, and
+the record → approve → publish → walkthrough smoke.
+
+Do **not** use the developer `pnpm` Setup section below unless you are
+changing code.
+
+Monorepo layout: Next.js frontend (`apps/web`), FastAPI backend (`apps/api`),
+Chrome MV3 extension (`apps/extension`), shared types in `packages/types`.
+`apps/desktop` is an archived Electron capture spike and is **not** on the
+assessor Docker path (see `apps/desktop/README.md`).
 
 ## Git workflow
 
@@ -26,11 +43,17 @@ Assessment-oriented index (architecture, testing, privacy, CI, troubleshooting):
 
 ## Assessor / clean-machine path
 
-Assessors and clean-env installs follow
-[`DEPLOYMENT_GUIDE.md`](DEPLOYMENT_GUIDE.md): install Docker Desktop + Chrome
-(no IDE / Node required), `cp .env.example .env`, then
-`docker compose up -d --build`. That stack already includes MinIO and creates
-the screenshot bucket. Do **not** start a separate MinIO container on port 9000.
+Same as **Start here** above: full steps live only in
+[`DEPLOYMENT_GUIDE.md`](DEPLOYMENT_GUIDE.md). Short reminders:
+
+- Install Docker Desktop + Chrome (no IDE / Node required for the submission
+  zip). Then `cp .env.example .env` and `docker compose up -d --build`.
+- Prefer the course **submission zip** (includes `apps/extension/dist`).
+- A plain GitHub clone has no `dist` (gitignored); build the extension per the
+  guide, or use `scripts/package-submission.sh`.
+- Compose already includes MinIO; do **not** start a separate MinIO on port 9000.
+- Default mock LLM (no API key) yields illustrative SOP text/highlights; see
+  the guide **LLM modes**.
 
 ## Setup
 
@@ -177,8 +200,9 @@ extension ID `bajibpeckacmfdmifdhccckiepadhgog`).
 | 10  | Logout                | Log out, then browser Back toward a prior SOP URL                  | Redirect to `/login?next=...`, no stale authenticated view      | Pass   |
 
 Related smoke path (record → approve → publish → overlay): `DEPLOYMENT_GUIDE.md`
-section 6. Mock SOP step wording may differ from the live page; the walkthrough
-still demonstrates overlay placement, highlighting, and step navigation.
+smoke path. With default mock LLM (no API key), step text and highlight targets
+are illustrative only; use a real `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` for
+page-accurate guidance (see guide **LLM modes**).
 
 ### Code quality
 

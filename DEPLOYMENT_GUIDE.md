@@ -1,11 +1,83 @@
-# WorkTrace Production Deployment Guide
+# WorkTrace Installation and Deployment Guide
 
-This deployment runs the FastAPI API, Celery friction worker, Next.js frontend,
-PostgreSQL/pgvector, Redis, and automatic Alembic migrations with Docker Compose.
+**Course markers / tutors:** this file (and the matching PDF in the Moodle
+submission) is the **only** install manual you need. The repository
+`README.md` opens with **Start here (markers / clean machine)** and links here.
+Ignore the README developer `pnpm` Setup section unless you are changing code.
+
+This guide runs the FastAPI API, Celery friction worker, Next.js frontend,
+PostgreSQL/pgvector, Redis, MinIO, and automatic Alembic migrations with Docker
+Compose.
 
 Assessors need **Docker** and **Chrome** on a clean machine. An IDE (VS Code,
 Cursor, or similar), Node, pnpm, and a local Python venv are **not** required
 for the default path when the submission zip includes `apps/extension/dist`.
+
+## Marker checklist (read before typing)
+
+Do these in order. Most "broken install" reports are one of the skips below.
+
+1.  **Use the Moodle submission zip**, not a GitHub "Download ZIP" / bare clone,
+    if you want the no-Node path. GitHub trees omit `apps/extension/dist`
+    (`dist/` is gitignored). The submission zip appends a prebuilt `dist`.
+2.  **Install only Docker Desktop + Google Chrome.** You do **not** need VS Code,
+    Cursor, Node, pnpm, or Python for the submission-zip path.
+3.  **Start Docker Desktop and wait until it says Running** before any
+    `docker compose` command (`docker version` and `docker compose version` must
+    work).
+4.  **Unpack, then `cd` into the folder that contains both** `docker-compose.yml`
+    **and** `.env.example` (often named like `...-main` after unzip).
+5.  **Copy env once:** `cp .env.example .env`. Change `SECRET_KEY` and
+    `POSTGRES_PASSWORD`. Leave `DEMO_ROLE_PASSWORD=11112222` unless you know you
+    need another password (seeded accounts use this value).
+6.  **Do not start a separate MinIO or Postgres with `docker run`.** Compose
+    already starts `postgres`, `redis`, `minio`, and `minio-init` (bucket create).
+    A hand-started `worktrace-minio` on port 9000 will conflict.
+7.  **Do not add `docker compose -p worktrace` unless every command uses the same
+    `-p`.** This guide uses the default project name (directory name). Mixing
+    `-p` and no `-p` makes `exec` hit the wrong stack.
+8.  **If `up` fails with `address already in use` on 5432**, your machine already
+    has PostgreSQL (common on macOS). Add `POSTGRES_PORT=5433` to `.env` and run
+    `docker compose up -d` again. You do **not** change in-compose DB URLs.
+    Same idea for 6379 / 9000 / 3000 / 8000 via `REDIS_PORT`, `MINIO_*_PORT`,
+    `FRONTEND_PORT`, `API_PORT`.
+9.  **First `docker compose up -d --build` can take several minutes.** Wait until
+    `docker compose ps` shows `api` / `frontend` / `postgres` / `redis` /
+    `minio` healthy (or running), and `migrate` / `minio-init` exited 0.
+10. **You must run the seed** after the API is up. UI `/register` only creates
+    **EMPLOYEE**. Without seed you cannot demo REVIEWER approve/publish or
+    MANAGER analytics:
+
+        docker compose exec -T api python seeds/seed_demo_roles.py
+
+    | Email               | Password   | Role     |
+    | ------------------- | ---------- | -------- |
+    | `reviewer@work.com` | `11112222` | REVIEWER |
+    | `manager@work.com`  | `11112222` | MANAGER  |
+
+11. **Load the unpacked extension from `apps/extension/dist`.** Confirm
+    `apps/extension/dist/manifest.json` exists. Chrome ID must be
+    `bajibpeckacmfdmifdhccckiepadhgog`. Open the site at
+    **http://localhost:3000** (not port 80, not a random host).
+12. **Default mock LLM (no API key) is intentional.** SOP step text and
+    highlight rings are often **wrong relative to the live page**. Pass the
+    smoke if the overlay UI works (steps, next/back, a highlight appears). For
+    page-accurate copy, set real keys (see **LLM modes**) and generate a **new**
+    SOP.
+13. **Extension login:** use the same account in the web app and the extension
+    popup (web handoff / sign-in). Record on a normal https page (e.g.
+    example.com) for the simplest walkthrough.
+14. **Success looks like:** health curls OK; seed printed updated roles; Chrome
+    shows the fixed extension ID; EMPLOYEE can record and submit; REVIEWER can
+    approve/publish; EMPLOYEE can Start walkthrough and see overlay chrome;
+    MANAGER can open Analytics / friction (may be empty until enough data).
+
+**Which tree you have (extension `dist`):**
+
+| Source                                                         | `apps/extension/dist`                   | Need Node?                              |
+| -------------------------------------------------------------- | --------------------------------------- | --------------------------------------- |
+| Course **submission zip** from `scripts/package-submission.sh` | Included (appended after `git archive`) | No                                      |
+| GitHub clone / "Download ZIP" / plain `git archive`            | **Absent** (`dist/` is gitignored)      | Yes: run the rebuild fallback in step 4 |
 
 ## Prerequisites
 
@@ -16,21 +88,30 @@ Install and leave running before any Compose commands:
 | [Docker Desktop](https://www.docker.com/products/docker-desktop/) (Engine 24+) or Docker Engine 24+ | On Windows/macOS use Docker Desktop and wait until it shows **Running**. Confirm with `docker version` and `docker compose version` (Compose v2). |
 | [Google Chrome](https://www.google.com/chrome/)                                                     | Needed to load the unpacked MV3 extension and run the walkthrough.                                                                                |
 | 4 GB free memory (8 GB recommended if Whisper is preloaded)                                         |                                                                                                                                                   |
-| Free host ports **3000**, **8000**, **9000**, **9001**                                              | Or override in `.env` / MinIO flags.                                                                                                              |
+| Free host ports **3000**, **8000**, **9000**, **9001** (and usually **5432**, **6379**)             | Or remap in `.env` (see Troubleshooting). Local Postgres often blocks 5432.                                                                       |
 
-**Not required** for the default assessor path: Node.js, pnpm, Python, VS Code,
+**Not required** for the submission-zip path: Node.js, pnpm, Python, VS Code,
 Cursor, or any other IDE. Use any shell that can run `docker` (macOS/Linux
-Terminal, Windows PowerShell, or Git Bash).
+Terminal, Windows PowerShell, or Git Bash). Commands below assume you are in
+the repository root.
 
 Optional only if you rebuild the extension from source (fallback in step 4):
 Node 20+ and pnpm 10.28.1.
 
 ## Quick start (assessor path)
 
-### 0. Unpack the submission
+### 0. Unpack
 
-Extract the project zip to a local folder and `cd` into the repository root
+Extract the Moodle submission zip (preferred) and `cd` into the repository root
 (the directory that contains `docker-compose.yml` and `.env.example`).
+
+```bash
+pwd   # should show .../something that contains docker-compose.yml
+ls docker-compose.yml .env.example DEPLOYMENT_GUIDE.md
+```
+
+If you only have a GitHub checkout, Compose still works, but you must build the
+extension in step 4 before loading it in Chrome.
 
 ### 1. Configure environment
 
@@ -39,21 +120,36 @@ cp .env.example .env
 ```
 
 Replace `SECRET_KEY` and `POSTGRES_PASSWORD`. Generate a secret with
-`openssl rand -hex 32`.
+`openssl rand -hex 32` (or any long random string).
 
-The example already sets:
+Keep these defaults unless you have a port conflict:
 
+- `DEMO_ROLE_PASSWORD=11112222` (seeded reviewer/manager password)
 - `FRONTEND_PORT=3000` with matching `API_CORS_ORIGINS` and `WEB_BASE_URL`
-- `NEXT_PUBLIC_EXTENSION_ID` for the fixed unpacked extension ID
-- MinIO `S3_*` defaults (`minio` service + auto bucket create)
+- `NEXT_PUBLIC_EXTENSION_ID=bajibpeckacmfdmifdhccckiepadhgog`
+- MinIO `S3_*` pointing at the Compose `minio` service + public localhost URL
+
+If you already know host port **5432** is taken:
+
+```bash
+echo 'POSTGRES_PORT=5433' >> .env
+```
 
 ### 2. Build and start the stack
 
-Compose starts PostgreSQL, Redis, MinIO (with bucket init), API, worker, and
-frontend:
+Compose starts PostgreSQL, Redis, MinIO (with bucket init), migrate, API,
+worker, and frontend. **Do not** run a separate MinIO container.
 
 ```bash
 docker compose up -d --build
+```
+
+First build commonly takes 5-15 minutes depending on network. Then:
+
+```bash
+docker compose ps
+curl --fail http://localhost:8000/health
+curl --fail -o /dev/null -w "%{http_code}\n" http://localhost:3000/
 ```
 
 Default URLs:
@@ -68,15 +164,23 @@ Screenshots and voice uploads use the Compose MinIO service. Uploads use
 signed with `S3_PUBLIC_ENDPOINT_URL=http://localhost:9000` so the browser Host
 matches SigV4 (do not rewrite a URL that was signed for `minio:9000`).
 
+If Postgres stays `Created` and logs say port 5432 is busy, see **Port
+conflict** under Troubleshooting, then `docker compose up -d` again.
+
 ### 3. Seed REVIEWER and MANAGER accounts (required)
 
 Self-service registration at `/register` **always** creates **EMPLOYEE**.
 Without this seed step, assessors cannot open manager Analytics / friction
 views or reviewer approve/publish flows.
 
-`.env.example` sets `DEMO_ROLE_PASSWORD=11112222`. Copy that into `.env` before
-`docker compose up` (Compose injects it into the API container). Recreate the
-API container if you change the value later.
+`.env.example` sets `DEMO_ROLE_PASSWORD=11112222`. That value must be in `.env`
+**before** `docker compose up` (Compose injects it into the API container). If
+you change it later:
+
+```bash
+docker compose up -d --force-recreate api
+docker compose exec -T api python seeds/seed_demo_roles.py
+```
 
 ```bash
 docker compose exec -T api python seeds/seed_demo_roles.py
@@ -87,21 +191,23 @@ docker compose exec -T api python seeds/seed_demo_roles.py
 | `reviewer@work.com` | `11112222` | REVIEWER |
 | `manager@work.com`  | `11112222` | MANAGER  |
 
-Register any other email in the UI for an EMPLOYEE account.
+Register any other email in the UI for an EMPLOYEE account (or use one of the
+seeded accounts and switch roles only via seed).
 
 ### 4. Load the Chrome extension
 
-**Primary path (no Node required):** open `chrome://extensions`, enable
-Developer mode, then **Load unpacked** and select `apps/extension/dist` from
-the extracted submission (or this repo after a maintainer has built it).
+Check that the prebuilt extension exists:
 
-The fixed extension ID must be:
+```bash
+test -f apps/extension/dist/manifest.json && echo "dist present" || echo "dist missing"
+```
 
-`bajibpeckacmfdmifdhccckiepadhgog`
+**If `dist` is present** (submission zip): open `chrome://extensions`, enable
+Developer mode, **Load unpacked**, and select the `apps/extension/dist` folder
+(not `apps/extension` source). No Node.
 
-That value is already set as `NEXT_PUBLIC_EXTENSION_ID` in `.env.example`.
-
-**Fallback (rebuild from source):** requires Node 20+ and pnpm:
+**If `dist` is missing** (GitHub clone / source-only tree): `dist/` is not in
+git. Build it once, then load the same folder:
 
 ```bash
 corepack enable
@@ -110,38 +216,65 @@ pnpm install
 pnpm --filter @h09a/extension build
 ```
 
-Then load `apps/extension/dist` as above.
+The fixed extension ID on `chrome://extensions` must be exactly:
+
+`bajibpeckacmfdmifdhccckiepadhgog`
+
+That value is already set as `NEXT_PUBLIC_EXTENSION_ID` in `.env.example` and
+baked into the frontend image. If the ID differs, you loaded the wrong folder
+or an old build.
+
+Pin the extension and keep it enabled while testing walkthrough.
 
 ### 5. Smoke path
 
-1. Open <http://localhost:3000> and register an EMPLOYEE (or use the seeded
-   accounts above).
-2. Sign in to the extension popup with the same account.
-3. Record a short workflow, submit, and generate an SOP.
-4. Sign in as `reviewer@work.com` → approve → publish.
-5. As EMPLOYEE, open Library → **Start walkthrough** and confirm the on-page
-   overlay.
+1. Open <http://localhost:3000> (must match `FRONTEND_PORT` / CORS).
+2. Register a new EMPLOYEE **or** sign in as a seeded account.
+3. Open the extension popup and sign in with the **same** account (use the web
+   handoff / sign-in control if shown).
+4. Record a short workflow on a simple page (e.g. https://example.com), stop,
+   submit, and wait for SOP generation.
+5. Sign out, sign in as `reviewer@work.com` / `11112222` → open Review →
+   **Approve** → **Publish**.
+6. Sign in as the EMPLOYEE again → Library → open the published SOP →
+   **Start walkthrough**. Confirm the on-page overlay appears (step panel,
+   next/back, highlight ring).
 
-   The seeded procedure is generated in mock mode, so step wording is
-   illustrative and may not match the live target page verbatim. The
-   walkthrough demonstrates overlay placement, element highlighting and
-   step navigation.
+   **Mock / no API key (default):** step titles, instruction text, and highlight
+   targets are **illustrative only**. Wrong copy, "Click [icon]", or a ring on
+   the wrong control is **expected**. Judge overlay **mechanics**, not NLP
+   accuracy. For accurate guidance, use **LLM modes** (real key), recreate
+   `api`, then record and generate a **new** SOP.
 
-6. Sign in as `manager@work.com` for Analytics / friction views.
+7. Sign in as `manager@work.com` / `11112222` for Analytics / friction views
+   (charts may show empty / insufficient-data states until enough sessions
+   exist; that is normal).
 
 ## LLM modes (mock vs real keys)
 
 The brief allows secrets in the zipped submission as long as they are **not**
 committed to GitHub.
 
-| Mode              | `.env` settings                                                     | When to use                                                |
-| ----------------- | ------------------------------------------------------------------- | ---------------------------------------------------------- |
-| Default (no cost) | `SOP_GENERATOR=mock`, `LLM_PROVIDER=mock`                           | Assessor smoke path; deterministic SOP text and embeddings |
-| Full verification | Set `LLM_PROVIDER=openai` (or `anthropic`) and the matching API key | Real generation / embeddings                               |
+| Mode              | `.env` settings                                                      | What you get                                                                                |
+| ----------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Default (no cost) | `LLM_PROVIDER=mock` (API keys empty; `.env.example` default)         | Stack runs; SOP / walkthrough text and highlights are stubs, **not** page-accurate          |
+| Full verification | `LLM_PROVIDER=openai` or `anthropic` **and** a real matching API key | Real step wording and tighter target binding; recreate `api` after changing keys / provider |
 
-For full verification in a zip submission, place keys in a root file
-`SECRETS.txt` that is **not** tracked by git, and copy values into `.env`
-before `docker compose up`. Never commit `SECRETS.txt` or `.env`.
+Generator selection follows `LLM_PROVIDER` (`mock` → `MockSopGenerator`;
+`openai` / `anthropic` → LLM path). After switching to real keys:
+
+```bash
+# In .env, for example:
+# LLM_PROVIDER=openai
+# OPENAI_API_KEY=sk-...
+docker compose up -d --force-recreate api worker
+```
+
+Then record a **new** session and generate a new SOP; old mock SOPs stay mock.
+
+For a zip submission, place keys in a root file `SECRETS.txt` that is **not**
+tracked by git, and copy values into `.env` before `docker compose up`. Never
+commit `SECRETS.txt` or `.env`.
 
 ## Configuration
 
@@ -151,6 +284,10 @@ The root `.env.example` lists all supported Compose values.
   `FRONTEND_PORT` aligned with the extension `externally_connectable` hosts
   (`localhost:3000` / `127.0.0.1:3000`) unless you also update the extension
   manifest.
+- `POSTGRES_PORT`, `REDIS_PORT`, `MINIO_API_PORT`, `MINIO_CONSOLE_PORT`: host
+  publish ports only (defaults 5432, 6379, 9000, 9001). Containers still talk
+  to each other on the Compose network; you normally do **not** change
+  `DATABASE_URL` when remapping `POSTGRES_PORT`.
 - `NEXT_PUBLIC_API_BASE_URL`: API URL reachable by users' browsers. For a
   remote deployment, use the public API hostname, not `localhost`.
 - `NEXT_PUBLIC_EXTENSION_ID`: Chrome extension ID for web-to-extension
@@ -162,7 +299,7 @@ The root `.env.example` lists all supported Compose values.
   `http://localhost:3000`).
 - `SECRET_KEY`: JWT signing key; always replace the example value.
 - `POSTGRES_*`: database name and credentials.
-- `LLM_PROVIDER`, `SOP_GENERATOR`: see **LLM modes** below.
+- `LLM_PROVIDER`: see **LLM modes** above (`mock` / `openai` / `anthropic`).
 - `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`: required only for the corresponding
   provider.
 - `PRELOAD_WHISPER_MODEL`: defaults to `false` so startup health checks finish
@@ -296,6 +433,22 @@ The count must remain unchanged after the PostgreSQL container is recreated.
 
 ## Troubleshooting
 
+### Common mistakes (quick map)
+
+| Symptom                                               | Likely cause                                              | Fix                                                               |
+| ----------------------------------------------------- | --------------------------------------------------------- | ----------------------------------------------------------------- |
+| No `apps/extension/dist`                              | Used GitHub zip/clone                                     | Build per step 4, or use Moodle submission zip                    |
+| `bind: address already in use` on 5432                | Host PostgreSQL                                           | `POSTGRES_PORT=5433` in `.env`, then `docker compose up -d`       |
+| `api` stuck in `Created`                              | Postgres never became healthy (often port clash)          | Fix ports; `docker compose ps` / `logs postgres`                  |
+| Cannot open Review / Analytics as expected            | Skipped seed; only EMPLOYEE from `/register`              | Run step 3 seed                                                   |
+| Seed password rejected                                | Changed `DEMO_ROLE_PASSWORD` after `up` without recreate  | Recreate `api`, re-run seed                                       |
+| Walkthrough "extension missing" / wrong ID            | Loaded `apps/extension` instead of `dist`, or stale build | Load `apps/extension/dist`; ID must match                         |
+| Site on wrong port / CORS errors                      | Not using `http://localhost:3000`                         | Match `FRONTEND_PORT` and rebuild frontend if you changed it      |
+| Screenshots 403 / SignatureDoesNotMatch               | Public S3 URL / Host mismatch                             | Keep dual endpoints per Object storage notes; recreate api/worker |
+| SOP text / highlights look nonsense                   | `LLM_PROVIDER=mock`, empty API keys                       | Expected; see Marker checklist item 12 and **LLM modes**          |
+| Ran `docker run ... minio` then Compose fails on 9000 | Duplicate MinIO                                           | Stop/remove the hand-started container; use Compose only          |
+| `docker compose exec` cannot find service             | Mixed `-p` project names                                  | Always omit `-p`, or always use the same `-p`                     |
+
 ### Migration service exits non-zero
 
 ```bash
@@ -347,19 +500,41 @@ on `http://localhost:3000` (not port 80).
 Keep `PRELOAD_WHISPER_MODEL=false`. Inspect `docker compose logs api` for
 database, model-download, or memory errors.
 
-### Port conflict
+### Port conflict (`bind: address already in use`)
 
-Change `FRONTEND_PORT` or `API_PORT` in `.env`, then run `docker compose up -d`.
+Compose publishes Postgres, Redis, MinIO, API, and the frontend to the host.
+A local PostgreSQL install (or another container such as `luma_postgres`) often
+already owns **5432**, which stops `postgres` from starting and leaves `api` /
+`migrate` in `Created`.
+
+Prefer remapping the host port in `.env` (leave any system Postgres running):
+
+```bash
+# Example: host 5433 -> container 5432. In-compose DATABASE_URL stays unchanged.
+echo 'POSTGRES_PORT=5433' >> .env
+docker compose up -d
+```
+
+Other host mappings if needed: `REDIS_PORT`, `MINIO_API_PORT`,
+`MINIO_CONSOLE_PORT`, `FRONTEND_PORT`, `API_PORT`. After editing `.env`, run
+`docker compose up -d` again (rebuild is not required for port-only changes).
+
+Alternatively stop the process holding the port, then retry
+`docker compose up -d`. On macOS, `lsof -nP -iTCP:5432 -sTCP:LISTEN` shows the
+listener.
 
 ## Packaging a submission zip
 
-Maintainers (not assessors) can build a zip that includes a prebuilt extension
-so markers do not need Node:
+Maintainers (not assessors) build the zip markers receive. GitHub alone is not
+enough for the no-Node extension path because `apps/extension/dist` is
+gitignored.
 
 ```bash
 bash scripts/package-submission.sh
 ```
 
-This runs `git archive` for `HEAD`, appends `apps/extension/dist`, and optionally
-appends an untracked `SECRETS.txt` if present. Extract elsewhere and follow this
-guide from **Quick start** without `pnpm`.
+The script **builds** `apps/extension/dist` itself (`pnpm --filter @h09a/extension
+build`), then `git archive`s `HEAD`, **then appends** that `dist` into the zip
+(and optionally an untracked `SECRETS.txt`). Maintainers need Node only to run
+this script; markers who extract the resulting zip do not. Extract that zip
+elsewhere and follow **Quick start** without `pnpm`.
