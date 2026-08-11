@@ -181,7 +181,7 @@ extension ID `bajibpeckacmfdmifdhccckiepadhgog`).
 | 6   | Duplicate submit      | Start walkthrough while launch is in flight                        | Button disables (`launching`) until the attempt finishes        | Pass   |
 | 7   | Empty form            | `/login` Sign in with blank required fields                        | Browser/field validation, no HTTP 500                           | Pass   |
 | 8   | Extension absent      | Remove unpacked extension, Start walkthrough on a published SOP    | Red prompt to install/enable extension, not a dead control      | Pass   |
-| 9   | Backend unavailable   | —                                                                  | Not exercised: frontend `depends_on` API healthcheck in Compose | N/A    |
+| 9   | Backend unavailable   | n/a                                                                | Not exercised: frontend `depends_on` API healthcheck in Compose | N/A    |
 | 10  | Logout                | Log out, then browser Back toward a prior SOP URL                  | Redirect to `/login?next=...`, no stale authenticated view      | Pass   |
 
 Related smoke path (record → approve → publish → overlay): `DEPLOYMENT_GUIDE.md`
