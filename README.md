@@ -143,17 +143,33 @@ Other scripts: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm f
 
 ## Testing
 
-| Suite     | Framework | Scale                     | Coverage                               |
-| --------- | --------- | ------------------------- | -------------------------------------- |
-| API       | pytest    | 51 test files             | **91% statement** (`pytest --cov=app`) |
-| Web       | Vitest    | 15 test files             | n/a                                    |
-| Extension | node:test | **93 tests, all passing** | n/a                                    |
+| Suite     | Framework | Scale                     | Coverage                                                     |
+| --------- | --------- | ------------------------- | ------------------------------------------------------------ |
+| API       | pytest    | 51 test files             | **91% statement** (`pytest --cov=app`)                       |
+| Web       | Vitest    | 15 files / 69 tests       | **53% statement** (`pnpm --filter @h09a/web test:coverage`)  |
+| Extension | node:test | **93 tests, all passing** | **65% line** (`pnpm --filter @h09a/extension test:coverage`) |
+
+Web and extension figures are honest suite coverage, not claimed product-wide
+coverage. Web is strongest on `lib/auth` and library helpers; consent UI and the
+full `api.ts` client are thinner. Extension coverage is measured over modules
+loaded by unit tests; popup chrome wiring and some launch/runtime paths sit
+lower than the pure state helpers.
 
 Strategy, layer breakdown and known gaps:
 [`docs/testing/testing-strategy.md`](docs/testing/testing-strategy.md).
 
 Requirements mapping:
 [`docs/requirements-traceability.md`](docs/requirements-traceability.md).
+
+### Code quality
+
+| Practice                | State                                                                      |
+| ----------------------- | -------------------------------------------------------------------------- |
+| TypeScript              | `strict: true` workspace-wide; no `any` type annotations in `apps/web/src` |
+| Python type annotations | 91% of functions annotate their return type; 97% of parameters             |
+| Linting / formatting    | ruff (API), eslint (web), prettier; enforced in CI rather than advised     |
+| Type checking           | `tsc --noEmit` across the workspace in CI                                  |
+| Schema changes          | every migration proven reversible in CI (`alembic` up → down → up)         |
 
 ### Coverage by concern
 
@@ -174,8 +190,8 @@ API tests emphasise sad paths and mocked providers, not only happy paths
 
 ```bash
 cd apps/api && pytest --cov=app --cov-report=term
-cd apps/web && pnpm test
-cd apps/extension && node --test
+cd apps/web && pnpm test:coverage
+cd apps/extension && pnpm test:coverage
 ```
 
 ### Tests requiring a live database

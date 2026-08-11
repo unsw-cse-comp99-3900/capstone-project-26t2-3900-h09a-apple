@@ -23,7 +23,6 @@ function roleAtLeast(role: UserRole, minimum: UserRole): boolean {
   return ROLE_RANK[role] >= ROLE_RANK[minimum];
 }
 
-/** Minimum role for a path, or null when any authenticated role may enter. */
 /** Role required for a path, or null when any authenticated role may enter. */
 export function requiredRoleForPath(pathname: string): UserRole | null {
   if (pathname.startsWith('/dashboard/variance') || pathname.startsWith('/dashboard/feedback')) {

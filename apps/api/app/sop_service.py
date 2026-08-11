@@ -54,6 +54,7 @@ def _warning_text_for_step(step: dict, warnings: object) -> str | None:
 
 
 def _parse_event_ids(source_event_ids: list[str]) -> list[int]:
+    """Parse step source_event_ids into integer event primary keys."""
     parsed: list[int] = []
     for event_id in source_event_ids:
         try:
@@ -69,6 +70,7 @@ def _load_ordered_events(
     tenant_id: UUID,
     db: DBSession,
 ) -> list[models.Event]:
+    """Load tenant-scoped events for a step, ordered by capture sequence."""
     event_ids = _parse_event_ids(source_event_ids)
     if not event_ids:
         return []
@@ -92,6 +94,7 @@ def _resolve_screenshot_url(
     tenant_id: UUID,
     db: DBSession,
 ) -> str | None:
+    """Return a signed screenshot URL for a tenant-scoped screenshot id."""
     screenshot = (
         db.query(models.Screenshot)
         .join(models.Session, models.Screenshot.session_id == models.Session.id)
@@ -114,6 +117,7 @@ def _resolve_screenshot_url(
 
 
 def _xpath_from_attrs(attrs: object) -> str | None:
+    """Read a non-empty xpath string from event attrs, if present."""
     if not isinstance(attrs, dict):
         return None
 
@@ -126,6 +130,7 @@ def _xpath_from_attrs(attrs: object) -> str | None:
 
 
 def _attr_str(attrs: object, key: str) -> str | None:
+    """Read a trimmed string attribute from event attrs."""
     if not isinstance(attrs, dict):
         return None
     value = attrs.get(key)
@@ -151,6 +156,7 @@ def _resolve_step_metadata(
     str | None,
     str | None,
 ]:
+    """Derive selector, screenshot, and action metadata for one SOP step."""
     css_selector = None
     xpath = None
     target_label = None
@@ -255,6 +261,7 @@ def resolve_step_screenshot_url(
     session_id: UUID,
     tenant_id: UUID,
 ) -> str | None:
+    """Public helper: signed screenshot URL for a step via source_event_ids."""
     _, _, _, screenshot_url, *_ = _resolve_step_metadata(
         source_event_ids,
         session_id,
@@ -283,6 +290,7 @@ def resolve_anchor_mode(
 
 
 def build_walkthrough_payload(sop: models.Sop, db: DBSession) -> WalkthroughPayload:
+    """Build the ordered WalkthroughPayload consumed by the extension player."""
     if not sop.steps:
         raise WalkthroughDataError("SOP has no walkthrough steps")
 
@@ -358,6 +366,7 @@ def build_walkthrough_payload(sop: models.Sop, db: DBSession) -> WalkthroughPayl
 
 
 def _extract_screenshot_highlight(attrs: dict | None) -> dict | None:
+    """Normalise target_rect attrs into a viewport highlight box."""
     if not isinstance(attrs, dict):
         return None
 
@@ -393,6 +402,7 @@ def resolve_step_screenshot_highlight(
     db: DBSession,
     session_id: UUID,
 ) -> dict | None:
+    """First usable screenshot highlight among a step's source events."""
     event_ids = _parse_event_ids(source_event_ids)
     if not event_ids:
         return None
@@ -424,6 +434,7 @@ def resolve_step_time_estimate(
     session_id: UUID,
     tenant_id: UUID,
 ) -> int | None:
+    """Estimate step duration in seconds from captured event timestamps."""
     events = _load_ordered_events(source_event_ids, session_id, tenant_id, db)
 
     timestamps = sorted(
