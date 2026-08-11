@@ -27,7 +27,8 @@ Assessment-oriented index (architecture, testing, privacy, CI, troubleshooting):
 ## Assessor / clean-machine path
 
 Assessors and clean-env installs follow
-[`DEPLOYMENT_GUIDE.md`](DEPLOYMENT_GUIDE.md): `cp .env.example .env`, then
+[`DEPLOYMENT_GUIDE.md`](DEPLOYMENT_GUIDE.md): install Docker Desktop + Chrome
+(no IDE / Node required), `cp .env.example .env`, then
 `docker compose up -d --build`. That stack already includes MinIO and creates
 the screenshot bucket. Do **not** start a separate MinIO container on port 9000.
 
