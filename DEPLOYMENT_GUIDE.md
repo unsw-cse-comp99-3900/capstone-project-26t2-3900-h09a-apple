@@ -30,32 +30,12 @@ The example already sets:
 
 - `FRONTEND_PORT=3000` with matching `API_CORS_ORIGINS` and `WEB_BASE_URL`
 - `NEXT_PUBLIC_EXTENSION_ID` for the fixed unpacked extension ID
-- local MinIO `S3_*` defaults for screenshots and voice uploads
+- MinIO `S3_*` defaults (`minio` service + auto bucket create)
 
-### 2. Start object storage (MinIO)
+### 2. Build and start the stack
 
-Screenshots and voice feedback require S3-compatible storage. Compose does not
-bundle MinIO; start it once on the host:
-
-```bash
-docker start worktrace-minio 2>/dev/null || docker run -d --name worktrace-minio \
-  -p 9000:9000 -p 9001:9001 \
-  -e MINIO_ROOT_USER=minioadmin \
-  -e MINIO_ROOT_PASSWORD=minioadmin \
-  minio/minio server /data --console-address ":9001"
-```
-
-Create the bucket once (Git Bash on Windows: prefix with `MSYS_NO_PATHCONV=1`):
-
-```bash
-docker run --rm --entrypoint /bin/sh minio/mc -c \
-  "mc alias set local http://host.docker.internal:9000 minioadmin minioadmin && \
-   mc mb --ignore-existing local/worktrace-screenshots"
-```
-
-Console (optional): <http://localhost:9001> (`minioadmin` / `minioadmin`).
-
-### 3. Build and start the stack
+Compose starts PostgreSQL, Redis, MinIO (with bucket init), API, worker, and
+frontend:
 
 ```bash
 docker compose up -d --build
@@ -65,8 +45,15 @@ Default URLs:
 
 - Frontend: <http://localhost:3000>
 - API health: <http://localhost:8000/health>
+- MinIO API: <http://localhost:9000>
+- MinIO console (optional): <http://localhost:9001> (`minioadmin` / `minioadmin`)
 
-### 4. Seed REVIEWER and MANAGER accounts (required)
+Screenshots and voice uploads use the Compose MinIO service. Uploads use
+`S3_ENDPOINT_URL=http://minio:9000` inside the network. Presigned GET URLs are
+signed with `S3_PUBLIC_ENDPOINT_URL=http://localhost:9000` so the browser Host
+matches SigV4 (do not rewrite a URL that was signed for `minio:9000`).
+
+### 3. Seed REVIEWER and MANAGER accounts (required)
 
 Self-service registration at `/register` **always** creates **EMPLOYEE**.
 Without this seed step, assessors cannot open manager Analytics / friction
@@ -87,7 +74,7 @@ docker compose exec -T api python seeds/seed_demo_roles.py
 
 Register any other email in the UI for an EMPLOYEE account.
 
-### 5. Load the Chrome extension
+### 4. Load the Chrome extension
 
 **Primary path (no Node required):** open `chrome://extensions`, enable
 Developer mode, then **Load unpacked** and select `apps/extension/dist` from
@@ -110,7 +97,7 @@ pnpm --filter @h09a/extension build
 
 Then load `apps/extension/dist` as above.
 
-### 6. Smoke path
+### 5. Smoke path
 
 1. Open <http://localhost:3000> and register an EMPLOYEE (or use the seeded
    accounts above).
@@ -166,8 +153,9 @@ The root `.env.example` lists all supported Compose values.
 - `PRELOAD_WHISPER_MODEL`: defaults to `false` so startup health checks finish
   quickly. Set to `true` only when sufficient memory and startup time are
   available.
-- `S3_*`: object storage for screenshots and voice. Local defaults point at
-  MinIO on `host.docker.internal:9000`.
+- `S3_*`: object storage for screenshots and voice. Compose defaults upload via
+  the `minio` service (`http://minio:9000`) and sign browser GET URLs with
+  `S3_PUBLIC_ENDPOINT_URL` (`http://localhost:9000`) so SigV4 Host matches.
 
 Because the web app contains Next.js server routes for authentication, its
 production image uses Next.js standalone output. It cannot be reduced to
@@ -189,16 +177,16 @@ designed to respond within five seconds and does not preload Whisper by default.
 
 ## Object storage notes
 
-After changing `S3_*` in `.env`, recreate API and worker so they pick up the
-values:
+MinIO runs inside Compose (`minio` + `minio-init`). After changing `S3_*` in
+`.env`, recreate API and worker so they pick up the values:
 
 ```bash
 docker compose up -d --force-recreate api worker
 ```
 
-On Linux, if `host.docker.internal` is unavailable, add
-`--add-host=host.docker.internal:host-gateway` to the MinIO `docker run`, or
-set `S3_ENDPOINT_URL` to a reachable host IP from the containers.
+If signed screenshot URLs fail in the browser, confirm
+`S3_PUBLIC_ENDPOINT_URL` is reachable from the host (default
+`http://localhost:9000`) and that `MINIO_API_PORT` is free.
 
 ## Demo roles (reference)
 
@@ -328,9 +316,10 @@ Also include the frontend origin in `API_CORS_ORIGINS`.
 
 ### Screenshots or voice upload fail
 
-Confirm MinIO is running, the `worktrace-screenshots` bucket exists, and
-`S3_*` in `.env` matches the MinIO credentials. Recreate `api` and `worker`
-after changing those values.
+Confirm `docker compose ps` shows `minio` healthy and `minio-init` exited 0,
+`S3_*` matches `.env.example`, and `api` / `worker` were recreated after any
+`S3_*` change. Presigned URLs must be signed with `S3_PUBLIC_ENDPOINT_URL` (not rewritten
+from the internal hostname), or the browser will get SignatureDoesNotMatch.
 
 ### Extension cannot start walkthrough
 

@@ -17,6 +17,8 @@ import { StateLoading } from '@/components/ui/state-loading';
 import { useCurrentUser } from '@/contexts/auth-context';
 import { ApiError, approveSop, getSopsByStatus, publishSop } from '@/lib/api';
 
+import { ReviewApproveButton } from './review-approve-button';
+
 import styles from './review.module.css';
 import { SopStepEditor } from './sop-step-editor';
 import { VoiceFeedbackPanel } from './voice-feedback-panel';
@@ -229,14 +231,10 @@ export function ReviewQueueClient({ embedded = false }: ReviewQueueClientProps) 
                       Open
                     </Link>
                     {sop.status === 'draft' || sop.status === 'needs_review' ? (
-                      <button
-                        type="button"
-                        className={styles.primaryButton}
-                        disabled={sop.busy}
-                        onClick={() => void handleApprove(sop.id)}
-                      >
-                        {sop.busy ? 'Approving...' : 'Approve'}
-                      </button>
+                      <ReviewApproveButton
+                        busy={Boolean(sop.busy)}
+                        onApprove={() => void handleApprove(sop.id)}
+                      />
                     ) : null}
                     {sop.status === 'approved' ? (
                       <button

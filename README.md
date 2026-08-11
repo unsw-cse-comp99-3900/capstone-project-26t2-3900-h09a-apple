@@ -4,7 +4,8 @@ UNSW COMP3900 26T2 capstone project.
 
 Monorepo with a Next.js frontend (`apps/web`), a FastAPI backend (`apps/api`),
 a Chrome MV3 extension (`apps/extension`), and shared TypeScript types in
-`packages/types`.
+`packages/types`. `apps/desktop` is an archived Electron capture spike and is
+**not** part of the assessor Docker path (see `apps/desktop/README.md`).
 
 ## Git workflow
 
@@ -21,7 +22,7 @@ Assessment-oriented index (architecture, testing, privacy, CI, troubleshooting):
 - Node 20+
 - pnpm 9+
 - Python 3.11
-- Docker (local PostgreSQL and MinIO for manual testing)
+- Docker (Compose runs PostgreSQL, Redis, MinIO, API, worker, and frontend)
 
 ## Setup
 
@@ -143,23 +144,49 @@ Other scripts: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm f
 
 ## Testing
 
-| Suite     | Framework | Scale                     | Coverage                                                     |
-| --------- | --------- | ------------------------- | ------------------------------------------------------------ |
-| API       | pytest    | 51 test files             | **91% statement** (`pytest --cov=app`)                       |
-| Web       | Vitest    | 15 files / 69 tests       | **53% statement** (`pnpm --filter @h09a/web test:coverage`)  |
-| Extension | node:test | **93 tests, all passing** | **65% line** (`pnpm --filter @h09a/extension test:coverage`) |
+| Suite     | Framework | Scale                     | Coverage                                                                                               |
+| --------- | --------- | ------------------------- | ------------------------------------------------------------------------------------------------------ |
+| API       | pytest    | 51 test files             | **91% statement** (`pytest --cov=app`)                                                                 |
+| Web       | Vitest    | 27 files / 108 tests      | **83% statement** on `src/lib` (+ nav model); RTL for login / library search / approve / access denied |
+| Extension | node:test | **93 tests, all passing** | **65% line** (`pnpm --filter @h09a/extension test:coverage`)                                           |
 
-Web and extension figures are honest suite coverage, not claimed product-wide
-coverage. Web is strongest on `lib/auth` and library helpers; consent UI and the
-full `api.ts` client are thinner. Extension coverage is measured over modules
-loaded by unit tests; popup chrome wiring and some launch/runtime paths sit
-lower than the pure state helpers.
+Web automated coverage is still primarily the unit-tested client surface
+(`src/lib/**` and `nav-items.ts`). A small RTL set covers key interactions
+(empty login submit, library search typing, approve busy state, access denied).
+Broader page behaviour stays in **Manual test cases** below (assessor Docker
+path). Extension coverage is measured over modules loaded by unit tests; popup
+chrome wiring and some launch/runtime paths sit lower than the pure state
+helpers.
 
 Strategy, layer breakdown and known gaps:
 [`docs/testing/testing-strategy.md`](docs/testing/testing-strategy.md).
 
 Requirements mapping:
 [`docs/requirements-traceability.md`](docs/requirements-traceability.md).
+
+### Manual test cases (pages and components)
+
+Page-level behaviour is verified manually against the assessor Docker path
+rather than by component tests. Each case below was executed on 11 Aug 2026,
+stack started per `DEPLOYMENT_GUIDE.md` (Compose on `:3000` / `:8000`, fixed
+extension ID `bajibpeckacmfdmifdhccckiepadhgog`).
+
+| #   | Case                  | Steps                                                              | Expected                                                        | Result |
+| --- | --------------------- | ------------------------------------------------------------------ | --------------------------------------------------------------- | ------ |
+| 1   | Empty dashboard       | New EMPLOYEE, open `/dashboard`                                    | Zero-state copy with CTA, no blank panel                        | Pass   |
+| 2   | Insufficient sessions | Manager opens `/dashboard/variance/clustering`, run with thin data | States insufficient data in words, no empty chart crash         | Pass   |
+| 3   | Role boundary         | EMPLOYEE opens `/dashboard/variance`                               | Access denied with role, reason, and back link                  | Pass   |
+| 4   | Reload                | F5 on `/dashboard` and `/library` while authenticated              | Session preserved, no forced logout                             | Pass   |
+| 5   | Back navigation       | Library → open published SOP → browser Back                        | Returns to Library cleanly                                      | Pass   |
+| 6   | Duplicate submit      | Start walkthrough while launch is in flight                        | Button disables (`launching`) until the attempt finishes        | Pass   |
+| 7   | Empty form            | `/login` Sign in with blank required fields                        | Browser/field validation, no HTTP 500                           | Pass   |
+| 8   | Extension absent      | Remove unpacked extension, Start walkthrough on a published SOP    | Red prompt to install/enable extension, not a dead control      | Pass   |
+| 9   | Backend unavailable   | —                                                                  | Not exercised: frontend `depends_on` API healthcheck in Compose | N/A    |
+| 10  | Logout                | Log out, then browser Back toward a prior SOP URL                  | Redirect to `/login?next=...`, no stale authenticated view      | Pass   |
+
+Related smoke path (record → approve → publish → overlay): `DEPLOYMENT_GUIDE.md`
+section 6. Mock SOP step wording may differ from the live page; the walkthrough
+still demonstrates overlay placement, highlighting, and step navigation.
 
 ### Code quality
 

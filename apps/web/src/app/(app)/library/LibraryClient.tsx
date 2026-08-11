@@ -23,6 +23,7 @@ import {
   filterAndRankSops,
   type LibraryFilterChip,
 } from './library-search';
+import { LibrarySearchBox } from './library-search-box';
 import styles from './library.module.css';
 
 const VIEW_STORAGE_KEY = 'worktrace.library.view';
@@ -213,19 +214,7 @@ export default function LibraryClient() {
 
       <div className={styles.drawer}>
         <div className={styles.controlsRow}>
-          <div className={styles.searchBlock}>
-            <label htmlFor="search" className={styles.drawerLabel}>
-              Find a procedure
-            </label>
-            <input
-              id="search"
-              type="search"
-              placeholder="Search by title…"
-              value={searchInput}
-              onChange={(event) => setSearchInput(event.target.value)}
-              className={styles.input}
-            />
-          </div>
+          <LibrarySearchBox value={searchInput} onChange={setSearchInput} />
 
           <div className={styles.viewToggle} role="group" aria-label="Library view">
             <button
