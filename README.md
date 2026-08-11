@@ -205,6 +205,25 @@ a bare checkout:
 
 Run them with the stack up: `docker compose up -d`.
 
+## Performance (local Compose, mock LLM)
+
+Measured on the assessor default stack (`SOP_GENERATOR=mock`,
+`LLM_PROVIDER=mock`) against a running `docker compose` project. Five runs each;
+times are wall-clock from the client.
+
+| Check                     | Method                                                                          | Result (5 runs)                               | Brief target               |
+| ------------------------- | ------------------------------------------------------------------------------- | --------------------------------------------- | -------------------------- |
+| SOP generate end-to-end   | `POST /api/v1/sessions` then `POST .../generate-sop` until `sop_id` is set      | avg **81 ms** (min 67, max 110)               | under 60 s                 |
+| Dashboard / friction load | `GET /api/v1/dashboard/summary` and `GET /api/v1/analytics/friction` as manager | summary avg **25 ms**; friction avg **28 ms** | under 5 s for ~50 sessions |
+
+Notes:
+
+- Mock generation is deterministic and intentionally fast; real-provider runs will
+  be slower and should be re-timed when keys are present.
+- The dashboard figures are for the current local database (9 sessions / 1
+  friction workflow at measurement time), not a synthetic 50-session load. Both
+  stay well under the 5 s budget at this scale.
+
 ## Non-trivial implementations
 
 **Two-stage visual element location** - `apps/api/app/vision_grid.py`,
