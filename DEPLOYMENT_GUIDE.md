@@ -3,19 +3,34 @@
 This deployment runs the FastAPI API, Celery friction worker, Next.js frontend,
 PostgreSQL/pgvector, Redis, and automatic Alembic migrations with Docker Compose.
 
-Assessors need **Docker** and **Chrome**. Node, pnpm, and a local Python venv are
-not required for the default path when the submission zip includes
-`apps/extension/dist`.
+Assessors need **Docker** and **Chrome** on a clean machine. An IDE (VS Code,
+Cursor, or similar), Node, pnpm, and a local Python venv are **not** required
+for the default path when the submission zip includes `apps/extension/dist`.
 
 ## Prerequisites
 
-- Docker Engine 24+ or Docker Desktop
-- Docker Compose v2 (`docker compose version`)
-- 4 GB free memory (8 GB recommended when Whisper is preloaded)
-- Ports **3000**, **8000**, **9000**, and **9001** available (or override in
-  `.env` / MinIO flags)
+Install and leave running before any Compose commands:
+
+| Required                                                                                            | Notes                                                                                                                                             |
+| --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [Docker Desktop](https://www.docker.com/products/docker-desktop/) (Engine 24+) or Docker Engine 24+ | On Windows/macOS use Docker Desktop and wait until it shows **Running**. Confirm with `docker version` and `docker compose version` (Compose v2). |
+| [Google Chrome](https://www.google.com/chrome/)                                                     | Needed to load the unpacked MV3 extension and run the walkthrough.                                                                                |
+| 4 GB free memory (8 GB recommended if Whisper is preloaded)                                         |                                                                                                                                                   |
+| Free host ports **3000**, **8000**, **9000**, **9001**                                              | Or override in `.env` / MinIO flags.                                                                                                              |
+
+**Not required** for the default assessor path: Node.js, pnpm, Python, VS Code,
+Cursor, or any other IDE. Use any shell that can run `docker` (macOS/Linux
+Terminal, Windows PowerShell, or Git Bash).
+
+Optional only if you rebuild the extension from source (fallback in step 4):
+Node 20+ and pnpm 10.28.1.
 
 ## Quick start (assessor path)
+
+### 0. Unpack the submission
+
+Extract the project zip to a local folder and `cd` into the repository root
+(the directory that contains `docker-compose.yml` and `.env.example`).
 
 ### 1. Configure environment
 
