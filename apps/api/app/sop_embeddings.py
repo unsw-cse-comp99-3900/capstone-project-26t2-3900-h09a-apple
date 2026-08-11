@@ -1,3 +1,7 @@
+"""
+Embed published SOP steps into pgvector for semantic clustering.
+"""
+
 from __future__ import annotations
 
 import hashlib

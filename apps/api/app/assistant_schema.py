@@ -1,3 +1,7 @@
+"""
+Request/response schemas for the walkthrough assistant API.
+"""
+
 from __future__ import annotations
 
 from typing import Literal

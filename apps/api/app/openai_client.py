@@ -1,3 +1,7 @@
+"""
+Shared OpenAI-compatible client factory (OpenAI or Azure-style base).
+"""
+
 from __future__ import annotations
 
 import os

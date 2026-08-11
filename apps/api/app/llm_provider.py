@@ -1,3 +1,7 @@
+"""
+Protocol/base types for chat LLM providers used by SOP generation.
+"""
+
 from decimal import Decimal
 from typing import Protocol
 

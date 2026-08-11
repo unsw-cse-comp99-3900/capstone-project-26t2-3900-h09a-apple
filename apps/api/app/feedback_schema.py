@@ -1,3 +1,7 @@
+"""
+Pydantic schemas for voice feedback and notification APIs.
+"""
+
 from __future__ import annotations
 
 from datetime import datetime

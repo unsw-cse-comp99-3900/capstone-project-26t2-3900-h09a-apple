@@ -1,3 +1,7 @@
+"""
+S3-compatible object storage client and signed URL helpers.
+"""
+
 from __future__ import annotations
 
 import base64

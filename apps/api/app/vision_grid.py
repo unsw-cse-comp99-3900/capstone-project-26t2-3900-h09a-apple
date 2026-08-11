@@ -1,4 +1,9 @@
-"""Two-stage grid geometry for vision-based element location (H09AAPPLE-53)."""
+"""Two-stage grid geometry for vision-based element location (H09AAPPLE-53).
+
+When a recorded CSS selector no longer matches the live page, a coarse grid
+narrows the region and a cropped fine grid returns viewport coordinates. Pure
+geometry helpers; the vision model call lives in vision_locate_service.
+"""
 
 from __future__ import annotations
 
@@ -8,8 +13,10 @@ from dataclasses import dataclass
 
 from PIL import Image, ImageDraw, ImageFont
 
+# Coarse pass: enough cells for a full desktop screenshot without tiny labels.
 COARSE_COLS = 12
 COARSE_ROWS = 8
+# Fine pass: denser grid on the cropped coarse cell only.
 FINE_COLS = 6
 FINE_ROWS = 6
 
@@ -53,6 +60,7 @@ class PixelRect:
 
 
 def col_letter_to_index(letter: str, cols: int) -> int | None:
+    """Map A.. letter to a 0-based column, or None if out of range."""
     if not letter or len(letter) != 1:
         return None
     index = ord(letter.upper()) - ord("A")
@@ -84,6 +92,7 @@ def parse_cell_label(text: str, *, cols: int, rows: int) -> GridCell | None:
 
 
 def cell_rect(cell: GridCell, image_width: int, image_height: int) -> PixelRect:
+    """Pixel bounds of one grid cell inside the full image."""
     cell_w = image_width / cell.cols
     cell_h = image_height / cell.rows
     return PixelRect(
@@ -119,6 +128,7 @@ def scale_rect_to_viewport(
     viewport_width: int,
     viewport_height: int,
 ) -> PixelRect:
+    """Scale image-space rect into CSS viewport pixels for the overlay."""
     if image_width <= 0 or image_height <= 0:
         raise ValueError("image dimensions must be positive")
     if viewport_width <= 0 or viewport_height <= 0:
@@ -190,6 +200,7 @@ def crop_cell_image(
     *,
     pad_ratio: float = 0.05,
 ) -> bytes:
+    """Crop one cell (plus pad) for the fine-grid vision pass; returns PNG."""
     image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
     width, height = image.size
     rect = cell_rect(cell, width, height)
@@ -206,5 +217,6 @@ def crop_cell_image(
 
 
 def open_image_size(image_bytes: bytes) -> tuple[int, int]:
+    """Return (width, height) without keeping the decoded image open."""
     with Image.open(io.BytesIO(image_bytes)) as image:
         return image.size

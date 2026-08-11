@@ -1,3 +1,7 @@
+"""
+Redis pub/sub channel helpers for friction dashboard live updates.
+"""
+
 from __future__ import annotations
 
 import json

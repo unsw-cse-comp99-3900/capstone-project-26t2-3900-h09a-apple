@@ -1,3 +1,7 @@
+"""
+Celery app instance shared by API enqueue sites and workers.
+"""
+
 from __future__ import annotations
 
 import os

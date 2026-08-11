@@ -1,3 +1,7 @@
+"""
+Resolve which generator/provider pair is active for a request.
+"""
+
 from app.llm_sop_generator import LlmSopGenerator
 from app.mock_sop_generator import MockSopGenerator
 from app.settings import SettingsError, get_llm_provider

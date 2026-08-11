@@ -1,3 +1,7 @@
+"""
+In-app notification hub and email fallback for new voice feedback.
+"""
+
 from __future__ import annotations
 
 import asyncio

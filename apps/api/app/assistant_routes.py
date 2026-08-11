@@ -1,3 +1,10 @@
+"""
+Walkthrough AI assistant endpoint with task-specific prompts.
+
+Supports qa, coach, recover, match_step, analyze, and handoff_summary for the
+Chrome extension overlay; confidence is parsed from a trailing footer line.
+"""
+
 from __future__ import annotations
 
 import os

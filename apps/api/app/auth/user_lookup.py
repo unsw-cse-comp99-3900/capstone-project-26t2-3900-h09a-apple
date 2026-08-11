@@ -1,3 +1,7 @@
+"""
+Shared user lookup helpers used by auth and handoff flows.
+"""
+
 from __future__ import annotations
 
 from uuid import UUID

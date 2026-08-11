@@ -1,3 +1,7 @@
+"""
+Pydantic models for analytics clustering request and response bodies.
+"""
+
 from __future__ import annotations
 
 from datetime import datetime

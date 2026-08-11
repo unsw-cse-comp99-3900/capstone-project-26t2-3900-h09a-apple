@@ -1,3 +1,9 @@
+"""
+SOP lifecycle: create from session, approve, publish, list, delete.
+
+Publishing triggers friction recalculation and embedding generation jobs.
+"""
+
 from __future__ import annotations
 
 from math import ceil

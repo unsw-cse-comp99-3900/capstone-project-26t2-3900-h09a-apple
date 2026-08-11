@@ -1,3 +1,7 @@
+"""
+Forgot/reset password token lifecycle and validation.
+"""
+
 from __future__ import annotations
 
 import hashlib

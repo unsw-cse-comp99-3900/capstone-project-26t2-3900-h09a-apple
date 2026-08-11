@@ -1,3 +1,7 @@
+"""
+Celery tasks that recalculate friction after SOP publish or refresh.
+"""
+
 from __future__ import annotations
 
 import logging

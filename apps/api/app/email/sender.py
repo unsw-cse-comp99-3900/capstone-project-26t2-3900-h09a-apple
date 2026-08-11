@@ -1,3 +1,7 @@
+"""
+Outbound email sender with mock outbox and SES production path.
+"""
+
 from __future__ import annotations
 
 import html

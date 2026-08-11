@@ -1,3 +1,9 @@
+"""
+FastAPI auth dependencies: current user, role guards, tenant filters.
+
+`require_role` is cumulative (manager can call reviewer/employee routes).
+"""
+
 from __future__ import annotations
 
 from collections.abc import Callable

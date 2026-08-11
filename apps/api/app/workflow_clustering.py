@@ -1,3 +1,10 @@
+"""K-means clustering of published workflow sessions into execution paths.
+
+Sessions are mean-pooled from 1536-d step embeddings in pgvector, then clustered
+with k chosen by silhouette score (Rousseeuw, 1987) over k = 2..4. Persists
+cluster membership and per-step semantic variance for the path-comparison UI.
+"""
+
 from __future__ import annotations
 
 import logging
@@ -24,9 +31,16 @@ from app.workflow_cluster_schema import (
 
 logger = logging.getLogger(__name__)
 
+# Cosine distance to the cluster centroid beyond which a session is flagged.
 HIGH_VARIANCE_THRESHOLD = 0.25
+# Candidate cluster counts; silhouette picks the best feasible k.
 CANDIDATE_K = (2, 3, 4)
+# Path-comparison clustering can start with fewer sessions than the friction
+# analytics pipeline (`analytics_clustering.DEFAULT_MIN_SESSIONS = 5`). This
+# floor is for silhouette (needs k < n) on embedding-complete published SOPs;
+# raising it would hide early path-comparison demos with sparse data.
 MIN_SESSIONS_FOR_CLUSTERING = 3
+# OpenAI text-embedding-3-small output width stored in pgvector.
 EMBEDDING_DIM = 1536
 
 
@@ -51,6 +65,7 @@ def _as_float_vector(raw: object) -> list[float]:
 
 
 def mean_pool_session_vector(step_vectors: Sequence[Sequence[float]]) -> np.ndarray:
+    """Average step embeddings into one L2-normalised session vector."""
     matrix = np.asarray(step_vectors, dtype=np.float64)
     if matrix.ndim != 2 or matrix.shape[0] == 0:
         raise ValueError("session has no step embeddings to pool")
@@ -62,12 +77,14 @@ def mean_pool_session_vector(step_vectors: Sequence[Sequence[float]]) -> np.ndar
 
 
 def cosine_distance(left: np.ndarray, right: np.ndarray) -> float:
+    """Cosine distance in [0, 2]; used for high-variance session flags."""
     left_2d = np.asarray(left, dtype=np.float64).reshape(1, -1)
     right_2d = np.asarray(right, dtype=np.float64).reshape(1, -1)
     return float(cosine_distances(left_2d, right_2d)[0, 0])
 
 
 def mean_pairwise_cosine_distance(vectors: Sequence[Sequence[float]]) -> float:
+    """Mean upper-triangle cosine distance; 0 when fewer than two vectors."""
     if len(vectors) < 2:
         return 0.0
     matrix = np.asarray(vectors, dtype=np.float64)
@@ -79,12 +96,14 @@ def mean_pairwise_cosine_distance(vectors: Sequence[Sequence[float]]) -> float:
 
 
 def candidate_k_values(session_count: int) -> list[int]:
+    """Return k values that leave at least one sample outside every cluster."""
     return [k for k in CANDIDATE_K if k < session_count]
 
 
 def select_kmeans_model(
     session_matrix: np.ndarray,
 ) -> tuple[int, float, dict[int, float], np.ndarray, np.ndarray]:
+    """Fit KMeans for each candidate k and keep the highest silhouette score."""
     n_samples = session_matrix.shape[0]
     candidates = candidate_k_values(n_samples)
     if not candidates:
@@ -135,6 +154,7 @@ def load_eligible_session_bundles(
     tenant_id: UUID,
     workflow_name: str,
 ) -> list[SessionEmbeddingBundle]:
+    """Load published, embedding-complete SOPs for one tenant workflow name."""
     rows = (
         filter_by_tenant(db.query(models.Sop), models.Sop, tenant_id)
         .join(models.Session, models.Sop.session_id == models.Session.id)
@@ -170,6 +190,7 @@ def load_eligible_session_bundles(
 def compute_step_variance(
     bundles: Sequence[SessionEmbeddingBundle],
 ) -> list[StepVarianceItem]:
+    """Per-step semantic spread across sessions (mean pairwise cosine)."""
     by_step: dict[int, list[list[float]]] = {}
     for bundle in bundles:
         for step_number, vector in bundle.step_vectors.items():
@@ -191,6 +212,11 @@ def cluster_workflow(
     tenant_id: UUID,
     workflow_name: str,
 ) -> WorkflowClusterResponse:
+    """Cluster a workflow and replace prior cluster/variance rows for that name.
+
+    Raises InsufficientClusterDataError when too few embedding-complete
+    sessions exist, or when no candidate k yields a stable fit.
+    """
     started = time.perf_counter()
     trimmed_name = workflow_name.strip()
     if not trimmed_name:

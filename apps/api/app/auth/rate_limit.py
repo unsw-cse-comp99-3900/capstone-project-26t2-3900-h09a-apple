@@ -1,3 +1,7 @@
+"""
+Simple in-process rate limits for auth-sensitive endpoints.
+"""
+
 from __future__ import annotations
 
 import os

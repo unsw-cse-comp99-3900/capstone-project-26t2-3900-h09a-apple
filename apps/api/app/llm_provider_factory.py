@@ -1,3 +1,7 @@
+"""
+Build the configured LLM provider (mock, OpenAI, or Anthropic).
+"""
+
 import os
 
 from app.anthropic_sop_provider import AnthropicSopProvider

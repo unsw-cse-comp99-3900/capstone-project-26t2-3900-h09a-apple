@@ -1,3 +1,7 @@
+"""
+Client-aligned PII masking helpers for screenshots and text fields.
+"""
+
 from __future__ import annotations
 
 import re

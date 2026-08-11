@@ -1,3 +1,7 @@
+"""
+LLM-backed SOP generator that maps session events to draft steps.
+"""
+
 import time
 
 from app import models

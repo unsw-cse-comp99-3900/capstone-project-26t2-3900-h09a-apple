@@ -1,3 +1,7 @@
+"""
+Consent accept/status routes required before capture starts.
+"""
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
