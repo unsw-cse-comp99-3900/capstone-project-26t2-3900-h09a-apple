@@ -24,6 +24,13 @@ Assessment-oriented index (architecture, testing, privacy, CI, troubleshooting):
 - Python 3.11
 - Docker (Compose runs PostgreSQL, Redis, MinIO, API, worker, and frontend)
 
+## Assessor / clean-machine path
+
+Assessors and clean-env installs follow
+[`DEPLOYMENT_GUIDE.md`](DEPLOYMENT_GUIDE.md): `cp .env.example .env`, then
+`docker compose up -d --build`. That stack already includes MinIO and creates
+the screenshot bucket. Do **not** start a separate MinIO container on port 9000.
+
 ## Setup
 
 ```bash
@@ -49,9 +56,27 @@ Python dependencies:
 
 ## Database setup for manual testing
 
-### PostgreSQL
+For screenshots and the full local data path, prefer Compose services (bucket is
+created by `minio-init`):
 
-Start the local container:
+```bash
+docker compose up -d postgres redis minio minio-init
+```
+
+Point `apps/api/.env` at those services. When the API runs on the host (not
+inside Compose), use localhost for S3:
+
+- `S3_ENDPOINT_URL=http://localhost:9000`
+- `S3_PUBLIC_ENDPOINT_URL=http://localhost:9000`
+
+When the API runs inside Compose, keep the root `.env.example` defaults
+(`S3_ENDPOINT_URL=http://minio:9000`, public URL still `http://localhost:9000`).
+Also align `DATABASE_URL`, `SECRET_KEY`, and `DEFAULT_TENANT_ID` with
+`apps/api/.env.example`.
+
+### PostgreSQL (standalone, no Compose)
+
+If you only need Postgres for API unit work without screenshots:
 
 ```bash
 docker start worktrace-postgres
@@ -67,40 +92,6 @@ docker run --name worktrace-postgres \
   -p 5432:5432 \
   -d pgvector/pgvector:pg15
 ```
-
-### MinIO (screenshot uploads)
-
-Required when submitting sessions that include screenshots. Start or create:
-
-```bash
-docker start worktrace-minio
-```
-
-If the container does not exist yet (Git Bash on Windows: prefix with `MSYS_NO_PATHCONV=1`):
-
-```bash
-docker run --name worktrace-minio \
-  -p 9000:9000 \
-  -p 9001:9001 \
-  -e MINIO_ROOT_USER=minioadmin \
-  -e MINIO_ROOT_PASSWORD=minioadmin \
-  -d minio/minio server /data --console-address ":9001"
-```
-
-Create the bucket once (with MinIO running). Either use the console at
-http://localhost:9001 (login `minioadmin` / `minioadmin`, create bucket
-`worktrace-screenshots`), or:
-
-```bash
-docker run --rm minio/mc sh -c "\
-  mc alias set local http://host.docker.internal:9000 minioadmin minioadmin && \
-  mc mb --ignore-existing local/worktrace-screenshots"
-```
-
-On Linux, if `host.docker.internal` is unavailable, add
-`--add-host=host.docker.internal:host-gateway` to the `docker run` command.
-
-Ensure `apps/api/.env` matches `apps/api/.env.example` for `DATABASE_URL`, `S3_*`, `SECRET_KEY`, and `DEFAULT_TENANT_ID`.
 
 ### Run migrations
 
@@ -278,7 +269,8 @@ version is stored with every score, so historical numbers remain explainable.
 
 ## Manual verification
 
-Typical end-to-end flow after PostgreSQL (and MinIO, if using screenshots) are up:
+Typical end-to-end flow after Postgres (and MinIO via Compose, if using
+screenshots) are up:
 
 1. Start both apps with `pnpm dev` (venv activated).
 2. Record a workflow in the extension, then open review/submit from the web UI
@@ -290,9 +282,9 @@ Typical end-to-end flow after PostgreSQL (and MinIO, if using screenshots) are u
 6. Confirm the SOP row exists in PostgreSQL (see below).
 
 **Auth note:** Session and SOP API routes require `Authorization: Bearer <access_token>`.
-Register or log in via `POST /api/v1/auth/register` and `POST /api/v1/auth/login`,
-then pass the token on API calls. Web/extension Bearer integration may still be
-in progress; use curl or an API client to verify the backend while UI auth is wired up.
+The web app and extension obtain tokens through the normal login / handoff path.
+For raw API checks, register or log in via `POST /api/v1/auth/register` and
+`POST /api/v1/auth/login`, then pass the token on curl calls.
 
 Example:
 
