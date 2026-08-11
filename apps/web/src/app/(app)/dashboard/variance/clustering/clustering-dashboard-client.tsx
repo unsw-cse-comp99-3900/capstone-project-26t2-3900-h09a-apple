@@ -1,5 +1,12 @@
 'use client';
 
+/**
+ * Manager UI for walkthrough K-means clustering (path groups + outliers).
+ *
+ * Loads published SOPs, runs or refreshes analysis, and can subscribe to
+ * friction WebSocket updates when a recalculation finishes.
+ */
+
 import type { FrictionAnalysisUpdate, KmeansAnalysisResponse, SopLibraryItem } from '@h09a/types';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 

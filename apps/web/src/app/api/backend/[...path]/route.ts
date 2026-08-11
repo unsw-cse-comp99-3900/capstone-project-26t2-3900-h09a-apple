@@ -1,3 +1,7 @@
+/**
+ * Same-origin BFF proxy: forwards `/api/backend/*` to FastAPI with the access cookie.
+ */
+
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 

@@ -1,3 +1,10 @@
+/**
+ * Browser-side API client for the WorkTrace FastAPI backend.
+ *
+ * Calls go through the Next.js `/api/backend` proxy so cookies stay same-origin.
+ * 401 responses trigger a silent refresh once before failing.
+ */
+
 import type {
   ConsentAcceptRequest,
   ConsentAcceptResponse,

@@ -1,5 +1,11 @@
 'use client';
 
+/**
+ * SOP Library browser: search, filter chips, and role-aware draft/published lists.
+ *
+ * Employees see published playable SOPs; authors also see their own drafts.
+ */
+
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import type { SopLibraryItem } from '@h09a/types';

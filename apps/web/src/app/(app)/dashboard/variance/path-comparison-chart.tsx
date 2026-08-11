@@ -1,5 +1,9 @@
 'use client';
 
+/**
+ * Line chart comparing cluster path timings against the workflow average.
+ */
+
 import type { FrictionStepChartPoint, WorkflowClusterTimingsResponse } from '@h09a/types';
 import {
   CartesianGrid,

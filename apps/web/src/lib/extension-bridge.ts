@@ -1,3 +1,9 @@
+/**
+ * chrome.runtime messaging helpers for the fixed-ID WorkTrace extension.
+ *
+ * Used for login handoff, walkthrough start, and presence pings from the web app.
+ */
+
 import { getExtensionId } from '@/lib/extension-config';
 
 export const EXTENSION_MESSAGE_TYPES = {

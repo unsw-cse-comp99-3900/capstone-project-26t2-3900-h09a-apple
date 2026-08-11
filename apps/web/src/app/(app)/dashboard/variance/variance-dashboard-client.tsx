@@ -1,5 +1,12 @@
 'use client';
 
+/**
+ * Manager friction ranking list for published workflows.
+ *
+ * Shows PII-free summaries and opens live updates when the friction worker
+ * finishes a recalculation.
+ */
+
 import type { FrictionWorkflowListResponse } from '@h09a/types';
 import { useCallback, useEffect, useState } from 'react';
 

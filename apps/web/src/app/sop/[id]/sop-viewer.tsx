@@ -1,3 +1,9 @@
+/**
+ * Read-only SOP detail page: steps, screenshots, and Start walkthrough CTA.
+ *
+ * Presentational; data is loaded by the route server/client wrapper.
+ */
+
 import type { SopDetailPayload, SopStepResponse, SopWarning } from '@h09a/types';
 import Image from 'next/image';
 import Link from 'next/link';

@@ -1,5 +1,11 @@
 'use client';
 
+/**
+ * Persistent app sidebar: role-filtered nav, recent SOPs, and account footer.
+ *
+ * Collapse state and recent SOP pins are stored in localStorage.
+ */
+
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';

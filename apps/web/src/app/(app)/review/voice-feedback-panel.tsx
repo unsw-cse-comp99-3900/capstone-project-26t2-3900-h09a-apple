@@ -1,5 +1,9 @@
 'use client';
 
+/**
+ * Reviewer voice-feedback inbox: list, play, tag, and live notification updates.
+ */
+
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { FeedbackNotificationItem, VoiceFeedbackItem } from '@h09a/types';
 

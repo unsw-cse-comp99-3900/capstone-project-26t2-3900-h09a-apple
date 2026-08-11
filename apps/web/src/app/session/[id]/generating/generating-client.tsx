@@ -1,5 +1,9 @@
 'use client';
 
+/**
+ * Polls SOP generation status after session submit and offers retry on failure.
+ */
+
 import type { SessionStatusResponse } from '@h09a/types';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';

@@ -1,5 +1,11 @@
 'use client';
 
+/**
+ * Reviewer queue: approve/publish SOPs and review voice feedback tabs.
+ *
+ * Deep-links via `?tab=` and `?feedbackId=` from notification emails.
+ */
+
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';

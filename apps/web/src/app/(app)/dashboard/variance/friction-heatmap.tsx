@@ -1,5 +1,9 @@
 'use client';
 
+/**
+ * Step-level friction heatmap for a single workflow analysis.
+ */
+
 import type { FrictionStepChartPoint } from '@h09a/types';
 import { useState } from 'react';
 
