@@ -12,6 +12,9 @@ After the API container is healthy:
 docker compose exec -T api python seeds/seed_demo_roles.py
 ```
 
+Requires `DEMO_ROLE_PASSWORD` in the root `.env` (passed into the API
+container). Stock assessor value from `.env.example` is `11112222`.
+
 | Email               | Password   | Role     |
 | ------------------- | ---------- | -------- |
 | `reviewer@work.com` | `11112222` | REVIEWER |
@@ -26,7 +29,7 @@ Generate password hashes with the API password helper on a host with the API
 venv, or inside the API container:
 
 ```bash
-docker compose exec -T api python -c "from app.auth.password import hash_password; print(hash_password('11112222'))"
+docker compose exec -T api python -c "import os; from app.auth.password import hash_password; print(hash_password(os.environ['DEMO_ROLE_PASSWORD']))"
 ```
 
 Then insert or update the demo users. Replace `<password-hash>` with the value

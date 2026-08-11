@@ -66,10 +66,15 @@ Default URLs:
 - Frontend: <http://localhost:3000>
 - API health: <http://localhost:8000/health>
 
-### 4. Seed REVIEWER and MANAGER accounts
+### 4. Seed REVIEWER and MANAGER accounts (required)
 
-Self-service registration at `/register` always creates **EMPLOYEE**. Create
-demo elevated roles after the API is healthy:
+Self-service registration at `/register` **always** creates **EMPLOYEE**.
+Without this seed step, assessors cannot open manager Analytics / friction
+views or reviewer approve/publish flows.
+
+`.env.example` sets `DEMO_ROLE_PASSWORD=11112222`. Copy that into `.env` before
+`docker compose up` (Compose injects it into the API container). Recreate the
+API container if you change the value later.
 
 ```bash
 docker compose exec -T api python seeds/seed_demo_roles.py

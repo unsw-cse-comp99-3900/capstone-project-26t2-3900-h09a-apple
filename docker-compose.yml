@@ -48,6 +48,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       SECRET_KEY: ${SECRET_KEY:-replace-this-development-secret}
       DEFAULT_TENANT_ID: ${DEFAULT_TENANT_ID:-22222222-2222-2222-2222-222222222222}
+      DEMO_ROLE_PASSWORD: ${DEMO_ROLE_PASSWORD:-}
       API_CORS_ORIGINS: ${API_CORS_ORIGINS:-http://localhost}
       WEB_BASE_URL: ${WEB_BASE_URL:-http://localhost}
       SOP_GENERATOR: ${SOP_GENERATOR:-mock}
