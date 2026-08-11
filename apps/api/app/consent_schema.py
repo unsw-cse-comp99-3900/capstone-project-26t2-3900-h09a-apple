@@ -1,3 +1,7 @@
+"""
+Pydantic schemas for consent accept and status responses.
+"""
+
 from __future__ import annotations
 
 from datetime import datetime

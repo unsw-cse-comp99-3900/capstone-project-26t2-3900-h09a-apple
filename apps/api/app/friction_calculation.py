@@ -1,3 +1,10 @@
+"""Aggregate walkthrough completions into persisted friction analysis rows.
+
+Loads latest completion per employee, derives expected step durations, scores
+each step via friction_model, and writes aggregates plus employee step scores
+for the manager friction charts.
+"""
+
 from __future__ import annotations
 
 from collections import Counter, defaultdict

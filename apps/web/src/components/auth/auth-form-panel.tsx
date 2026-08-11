@@ -1,3 +1,7 @@
+/**
+ * Right-hand auth form panel layout for login/register.
+ */
+
 import type { ReactNode } from 'react';
 
 import styles from '@/app/login/auth.module.css';

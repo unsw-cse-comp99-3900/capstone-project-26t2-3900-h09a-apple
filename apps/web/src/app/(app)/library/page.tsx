@@ -1,3 +1,7 @@
+/**
+ * Route entry for the SOP library browser.
+ */
+
 import { Suspense } from 'react';
 
 import { StateLoading } from '@/components/ui/state-loading';

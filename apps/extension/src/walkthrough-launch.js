@@ -1,3 +1,7 @@
+/**
+ * Infer launch URLs and open/sync the walkthrough tab before overlay playback.
+ */
+
 const URL_PATTERN =
   /\bhttps?:\/\/[^\s)]+|\b(?:www\.)?[a-z0-9][a-z0-9-]*(?:\.[a-z0-9][a-z0-9-]*)+(?:\/[^\s)]*)?/i;
 
@@ -5,6 +9,7 @@ const DEFAULT_TAB_TIMEOUT_MS = 30_000;
 const SYNC_ATTEMPTS = 12;
 const SYNC_RETRY_MS = 250;
 
+/** Normalize a loose URL string to an absolute http(s) URL, or null. */
 export function normalizeLaunchUrl(value) {
   if (!value) {
     return null;
@@ -25,6 +30,7 @@ export function normalizeLaunchUrl(value) {
   }
 }
 
+/** Prefer expected_url / page_url, else first URL found in instruction text. */
 export function inferStepPageUrl(step) {
   if (!step || typeof step !== 'object') {
     return null;
@@ -45,6 +51,7 @@ export function inferStepPageUrl(step) {
   return normalizeLaunchUrl(match?.[0]);
 }
 
+/** First inferable step URL from a walkthrough SOP payload. */
 export function inferLaunchUrl(payload) {
   const steps = Array.isArray(payload?.steps) ? payload.steps : [];
   for (const step of steps) {
@@ -56,6 +63,7 @@ export function inferLaunchUrl(payload) {
   return null;
 }
 
+/** True when origin/path/search differ enough to need a tab navigation. */
 export function urlsRequireNavigation(currentHref, targetUrl) {
   const current = normalizeLaunchUrl(currentHref);
   const target = normalizeLaunchUrl(targetUrl);
@@ -90,6 +98,7 @@ function runtimeLastErrorMessage() {
   return lastError?.message || null;
 }
 
+/** Resolve when the tab reaches status complete, or reject on timeout. */
 export async function waitForTabComplete(tabsApi, tabId, timeoutMs = DEFAULT_TAB_TIMEOUT_MS) {
   if (!tabsApi?.get || !tabsApi?.onUpdated) {
     return null;
@@ -148,6 +157,7 @@ function sendTabMessage(tabsApi, tabId, message) {
   });
 }
 
+/** Retry WALKTHROUGH_SYNC until the content script responds ok. */
 export async function syncWalkthroughToTab(tabsApi, tabId, attempts = SYNC_ATTEMPTS) {
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     try {
@@ -163,6 +173,7 @@ export async function syncWalkthroughToTab(tabsApi, tabId, attempts = SYNC_ATTEM
   return false;
 }
 
+/** Open or navigate to the launch URL, wait for load, then sync walkthrough state. */
 export async function ensureWalkthroughPage(tabsApi, storageApi, storageKeys, url, tabId) {
   const normalized = normalizeLaunchUrl(url);
   if (!normalized) {

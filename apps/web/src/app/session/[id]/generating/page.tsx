@@ -1,3 +1,7 @@
+/**
+ * Route entry for the SOP generation progress screen.
+ */
+
 import { GeneratingClient } from './generating-client';
 
 type Props = {

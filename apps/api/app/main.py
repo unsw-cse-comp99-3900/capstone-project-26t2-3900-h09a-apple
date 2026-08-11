@@ -1,3 +1,7 @@
+"""
+FastAPI application entry: routers, CORS, health, and lifespan hooks.
+"""
+
 import os
 import time
 from contextlib import asynccontextmanager

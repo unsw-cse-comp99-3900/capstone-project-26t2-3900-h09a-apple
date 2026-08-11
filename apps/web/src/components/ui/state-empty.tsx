@@ -1,3 +1,7 @@
+/**
+ * Empty-state block with optional call-to-action.
+ */
+
 import Link from 'next/link';
 
 import styles from './state-blocks.module.css';

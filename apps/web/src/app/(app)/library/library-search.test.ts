@@ -1,3 +1,7 @@
+/**
+ * Tests for library search ranking and filter chips.
+ */
+
 import { describe, expect, it } from 'vitest';
 import type { SopLibraryItem } from '@h09a/types';
 

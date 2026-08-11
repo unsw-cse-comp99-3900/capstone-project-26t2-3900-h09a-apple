@@ -1,3 +1,7 @@
+"""
+Workflow path-comparison, insight summary, and friction refresh routes.
+"""
+
 from __future__ import annotations
 
 from datetime import UTC, datetime

@@ -1,3 +1,7 @@
+/**
+ * Returns the current user from the access-token cookie.
+ */
+
 import type { MeResponse } from '@h09a/types';
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';

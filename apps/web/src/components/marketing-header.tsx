@@ -1,3 +1,7 @@
+/**
+ * Top navigation for public marketing pages.
+ */
+
 import Link from 'next/link';
 
 import styles from '@/app/marketing.module.css';

@@ -1,3 +1,7 @@
+/**
+ * Sidebar nav model and role-rank helpers aligned with API RBAC.
+ */
+
 import type { UserRole } from '@h09a/types';
 
 import { canRoleAccessPath } from '@/lib/auth/protected-paths';

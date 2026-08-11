@@ -1,5 +1,9 @@
 'use client';
 
+/**
+ * Legacy web floating assistant (not the extension overlay source of truth).
+ */
+
 import type { SopDetailPayload, SopStepResponse } from '@h09a/types';
 import { usePathname } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';

@@ -1,3 +1,7 @@
+"""
+Pydantic schemas for walkthrough completion and vision locate.
+"""
+
 from __future__ import annotations
 
 from datetime import datetime

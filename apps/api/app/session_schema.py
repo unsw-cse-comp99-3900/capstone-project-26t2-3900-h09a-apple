@@ -1,3 +1,7 @@
+"""
+Pydantic schemas for session submit and status responses.
+"""
+
 from __future__ import annotations
 
 import base64

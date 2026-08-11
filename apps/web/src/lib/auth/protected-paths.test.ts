@@ -1,3 +1,7 @@
+/**
+ * Tests for which routes require which minimum role.
+ */
+
 import { describe, expect, it } from 'vitest';
 
 import { canRoleAccessPath, isProtectedPath } from '@/lib/auth/protected-paths';

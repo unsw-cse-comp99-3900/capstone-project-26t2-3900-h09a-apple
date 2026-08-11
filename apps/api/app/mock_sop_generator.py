@@ -1,3 +1,7 @@
+"""
+Deterministic mock SOP generator for offline and assessor demos.
+"""
+
 from urllib.parse import urlparse
 
 from app.models import EventType, Session

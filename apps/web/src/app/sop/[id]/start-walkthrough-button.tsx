@@ -1,5 +1,9 @@
 'use client';
 
+/**
+ * Starts an on-page walkthrough via the extension after consent is current.
+ */
+
 import React from 'react';
 import { WalkthroughConsentButton } from '@/components/consent/walkthrough-consent-button';
 import { postExtensionStartWalkthrough } from '@/lib/extension-bridge';

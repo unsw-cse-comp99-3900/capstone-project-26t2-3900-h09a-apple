@@ -1,3 +1,7 @@
+"""
+Persisted refresh-token rows with rotation and revocation.
+"""
+
 from __future__ import annotations
 
 from datetime import UTC, datetime

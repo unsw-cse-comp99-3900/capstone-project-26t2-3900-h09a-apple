@@ -1,3 +1,7 @@
+/**
+ * Client helper to request an extension handoff code from the BFF.
+ */
+
 import { pingExtension, postExtensionHandoff } from '@/lib/extension-bridge';
 import { pingDesktop, launchDesktopHandoff } from '@/lib/desktop-bridge';
 
@@ -19,6 +23,7 @@ async function mintHandoffCode(): Promise<string | null> {
   return payload.code ?? null;
 }
 
+/** Mint a handoff code via API and push it to the extension. */
 export async function broadcastExtensionHandoff(): Promise<void> {
   // Check which clients are available before requesting a handoff code.
   const [extensionPresent, desktopPresent] = await Promise.all([pingExtension(), pingDesktop()]);

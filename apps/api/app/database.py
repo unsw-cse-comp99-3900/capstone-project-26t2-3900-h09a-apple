@@ -1,3 +1,7 @@
+"""
+SQLAlchemy engine/session factory wired from DATABASE_URL.
+"""
+
 from __future__ import annotations
 
 import os

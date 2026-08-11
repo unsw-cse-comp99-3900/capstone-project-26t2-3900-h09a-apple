@@ -1,5 +1,9 @@
 'use client';
 
+/**
+ * Authenticated layout: sidebar plus role gate for the active path.
+ */
+
 import { usePathname } from 'next/navigation';
 import type { ReactNode } from 'react';
 

@@ -1,3 +1,7 @@
+/**
+ * Shown when the signed-in role cannot access the current route.
+ */
+
 import Link from 'next/link';
 
 import styles from './sidebar.module.css';

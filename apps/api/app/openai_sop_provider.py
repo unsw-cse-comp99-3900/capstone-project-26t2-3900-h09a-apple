@@ -1,3 +1,7 @@
+"""
+OpenAI chat adapter used when SOP_GENERATOR selects the OpenAI path.
+"""
+
 import json
 import os
 

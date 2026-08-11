@@ -1,3 +1,7 @@
+"""
+Embed published SOP steps into pgvector for semantic clustering.
+"""
+
 from __future__ import annotations
 
 import hashlib
@@ -31,7 +35,9 @@ class EmbeddingResult:
 
 
 class EmbeddingClient(Protocol):
-    def embed(self, text: str) -> EmbeddingResult: ...
+    def embed(self, text: str) -> EmbeddingResult:
+        """Embed text into a fixed-size vector plus token metadata."""
+        ...
 
 
 class MockEmbeddingClient:
@@ -40,6 +46,7 @@ class MockEmbeddingClient:
     model = EMBEDDING_MODEL
 
     def embed(self, text: str) -> EmbeddingResult:
+        """Deterministic mock embedding for local and CI runs."""
         digest = hashlib.sha256(text.encode("utf-8")).digest()
         values: list[float] = []
         seed = digest
@@ -60,10 +67,12 @@ class MockEmbeddingClient:
 
 class OpenAiEmbeddingClient:
     def __init__(self, model: str = EMBEDDING_MODEL) -> None:
+        """Configure the OpenAI embedding model name."""
         self.model = model
         self._client = create_openai_compatible_client()
 
     def embed(self, text: str) -> EmbeddingResult:
+        """Call the OpenAI embeddings API and return the first vector."""
         response = self._client.embeddings.create(model=self.model, input=text)
         item = response.data[0]
         usage = getattr(response, "usage", None)
@@ -76,6 +85,7 @@ class OpenAiEmbeddingClient:
 
 
 def get_embedding_client() -> EmbeddingClient:
+    """Return mock or OpenAI embedding client from LLM_PROVIDER."""
     provider = os.getenv("LLM_PROVIDER", "mock").strip().lower()
     if provider in {"", "mock"}:
         return MockEmbeddingClient()
@@ -83,10 +93,12 @@ def get_embedding_client() -> EmbeddingClient:
 
 
 def build_step_embed_text(title: str, instruction: str) -> str:
+    """Concatenate title and instruction into the embedding input text."""
     return f"{title}\n{instruction}"
 
 
 def parse_sop_steps(steps_payload: object) -> list[tuple[int, str, str]]:
+    """Extract (order, title, instruction) tuples from a SOP steps payload."""
     if not isinstance(steps_payload, list):
         return []
 
@@ -108,6 +120,7 @@ def parse_sop_steps(steps_payload: object) -> list[tuple[int, str, str]]:
 
 
 def enqueue_embed_job(db: DBSession, sop: models.Sop) -> models.CodificationJob:
+    """Queue a pending embed CodificationJob and mark the SOP embedding pending."""
     job = models.CodificationJob(
         id=uuid4(),
         session_id=sop.session_id,
@@ -134,6 +147,7 @@ def _process_embed_job(
     job_id: UUID,
     client: EmbeddingClient,
 ) -> None:
+    """Embed every SOP step, then replace stored vectors only after all succeed."""
     job = db.query(models.CodificationJob).filter(models.CodificationJob.id == job_id).first()
     if job is None or job.job_type != models.CodificationJobType.embed.value:
         return
@@ -209,6 +223,7 @@ def _embed_with_retries(
     client: EmbeddingClient,
     text: str,
 ) -> EmbeddingResult:
+    """Call the embedding client with exponential backoff and audit logging."""
     last_error: Exception | None = None
     for attempt in range(EMBED_MAX_RETRIES + 1):
         started = time.perf_counter()
@@ -265,6 +280,7 @@ def _log_embed_audit(
     cost_usd: Decimal | None = None,
     error_message: str | None = None,
 ) -> None:
+    """Append one LlmAuditLog row for an embedding attempt."""
     db.add(
         models.LlmAuditLog(
             session_id=session_id,

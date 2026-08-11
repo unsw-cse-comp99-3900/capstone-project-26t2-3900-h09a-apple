@@ -1,3 +1,7 @@
+/**
+ * Icon helpers used by auth and marketing panels.
+ */
+
 type IconProps = {
   className?: string;
 };

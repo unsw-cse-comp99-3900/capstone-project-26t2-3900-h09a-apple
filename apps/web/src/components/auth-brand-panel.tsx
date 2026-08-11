@@ -1,3 +1,7 @@
+/**
+ * Left brand panel for auth screens (product name and pitch).
+ */
+
 import Link from 'next/link';
 
 import styles from '@/app/login/auth.module.css';

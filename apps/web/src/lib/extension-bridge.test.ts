@@ -1,3 +1,7 @@
+/**
+ * Tests for chrome.runtime messaging helpers.
+ */
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const EXTENSION_ID = 'abcdefghijklmnopqrstuvwxyzabcd';

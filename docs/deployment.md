@@ -53,8 +53,10 @@ Fargate. The original target was AWS App Runner, but App Runner is unavailable
 for this AWS account because AWS no longer accepts new App Runner customers.
 ECS Fargate is the replacement backend container service.
 
-Production backend URL: TBD  
-Health check: `GET /api/v1/health`
+Production backend URL: deployed on AWS ECS Fargate behind an application
+load balancer. Not required for the local assessor path; see
+`DEPLOYMENT_GUIDE.md`.
+Health check: `GET /api/v1/health` (also `GET /health`)
 
 ### AWS services
 

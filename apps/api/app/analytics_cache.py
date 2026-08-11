@@ -1,3 +1,9 @@
+"""
+Redis-backed cache helpers for manager analytics payloads.
+
+Keeps short-lived cluster/friction reads off the database for dashboard polls.
+"""
+
 from __future__ import annotations
 
 import logging

@@ -1,3 +1,9 @@
+"""
+Voice feedback upload, review, stats, and notification WebSocket routes.
+
+Employees upload audio; reviewers/managers list, review, and subscribe to pushes.
+"""
+
 from __future__ import annotations
 
 from datetime import UTC, datetime

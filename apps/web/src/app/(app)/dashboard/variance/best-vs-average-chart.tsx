@@ -1,5 +1,9 @@
 'use client';
 
+/**
+ * Chart comparing best-path step timings against the cohort average.
+ */
+
 import type { FrictionStepChartPoint, WorkflowClusterTimingsResponse } from '@h09a/types';
 import {
   CartesianGrid,

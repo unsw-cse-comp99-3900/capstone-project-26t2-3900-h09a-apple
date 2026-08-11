@@ -1,3 +1,7 @@
+"""
+Pydantic schemas for workflow embedding-cluster API responses.
+"""
+
 from __future__ import annotations
 
 from uuid import UUID

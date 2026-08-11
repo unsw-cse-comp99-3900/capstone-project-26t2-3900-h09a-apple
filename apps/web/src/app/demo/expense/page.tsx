@@ -1,3 +1,7 @@
+/**
+ * Demo expense host page used for local walkthrough recordings.
+ */
+
 export default function DemoExpensePage() {
   return (
     <main

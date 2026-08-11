@@ -1,3 +1,7 @@
+"""
+Access, refresh, and WebSocket ticket JWT minting and verification.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

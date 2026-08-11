@@ -1,3 +1,7 @@
+/**
+ * Tests for auth cookie names and JWT expiry helpers.
+ */
+
 import { describe, expect, it } from 'vitest';
 
 import {

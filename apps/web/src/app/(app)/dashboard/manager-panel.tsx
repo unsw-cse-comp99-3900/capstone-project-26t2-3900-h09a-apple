@@ -1,5 +1,9 @@
 'use client';
 
+/**
+ * Manager home cards: summary KPIs and links into friction analytics.
+ */
+
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 

@@ -1,3 +1,9 @@
+"""
+Auth HTTP routes: register, login, refresh, Google, password reset.
+
+Sets httponly cookies for the web app and issues bearer tokens for the API.
+"""
+
 from __future__ import annotations
 
 import logging

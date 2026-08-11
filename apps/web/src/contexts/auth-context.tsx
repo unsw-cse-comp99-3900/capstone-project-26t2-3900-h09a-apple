@@ -1,5 +1,11 @@
 'use client';
 
+/**
+ * Client auth session: current user, silent refresh, and logout broadcast.
+ *
+ * Protected routes redirect to login when the session cannot be restored.
+ */
+
 import type { AuthUser, UserRole } from '@h09a/types';
 import {
   createContext,

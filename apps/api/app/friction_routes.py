@@ -1,3 +1,7 @@
+"""
+Manager friction analytics list/detail and live update WebSocket routes.
+"""
+
 from __future__ import annotations
 
 from collections import defaultdict

@@ -1,3 +1,7 @@
+"""
+Short-lived codes that hand a web login session to the extension.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

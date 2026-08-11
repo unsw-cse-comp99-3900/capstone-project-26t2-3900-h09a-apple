@@ -90,7 +90,7 @@ Related schema notes: [docs/db-schema.md](../db-schema.md).
 ### Future or partial
 
 - Production backend URL and full AWS cutover details still evolving in
-  [docs/deployment.md](../deployment.md) (some fields marked TBD)
+  [docs/deployment.md](../deployment.md)
 - Friction / advanced desktop global-hook automation remains limited by OS policy;
   prefer manual validation records over claiming full E2E coverage
 

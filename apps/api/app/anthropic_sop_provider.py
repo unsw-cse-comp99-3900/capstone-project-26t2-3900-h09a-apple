@@ -1,3 +1,7 @@
+"""
+Anthropic Messages API adapter that turns sessions into SOP drafts.
+"""
+
 import json
 import os
 

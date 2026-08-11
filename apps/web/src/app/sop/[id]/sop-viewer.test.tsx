@@ -1,3 +1,7 @@
+/**
+ * Tests for SopViewer presentation and walkthrough CTA.
+ */
+
 import type { SopDetailPayload, SopStepResponse } from '@h09a/types';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';

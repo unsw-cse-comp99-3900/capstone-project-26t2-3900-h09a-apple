@@ -1,3 +1,7 @@
+/**
+ * Issues a short-lived code so the web session can hand off to the extension.
+ */
+
 import type { ExtensionHandoffCreateResponse } from '@h09a/types';
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';

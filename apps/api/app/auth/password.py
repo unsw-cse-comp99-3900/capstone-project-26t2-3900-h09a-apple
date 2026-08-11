@@ -1,3 +1,7 @@
+"""
+Password hashing and verification (bcrypt via passlib).
+"""
+
 from __future__ import annotations
 
 from passlib.context import CryptContext

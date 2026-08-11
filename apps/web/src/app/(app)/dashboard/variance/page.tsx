@@ -1,3 +1,7 @@
+/**
+ * Route entry for the manager friction rankings list.
+ */
+
 import { VarianceDashboardClient } from './variance-dashboard-client';
 import { loadFrictionWorkflowList } from '@/lib/server-api';
 

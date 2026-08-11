@@ -1,5 +1,9 @@
 'use client';
 
+/**
+ * Library Play control: consent gate then extension START_WALKTHROUGH.
+ */
+
 import { useState, type MouseEvent } from 'react';
 
 import {

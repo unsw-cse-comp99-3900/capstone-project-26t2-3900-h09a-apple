@@ -1,8 +1,15 @@
+"""Deterministic per-step friction scoring (versioned weights).
+
+Higher score means more friction. Weights are fixed at 60% time / 25% retries /
+15% path deviation so historical analyses stay comparable across releases.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
 from statistics import mean
 
+# Bump when weight formula or clamps change; stored on FrictionAnalysis rows.
 ALGORITHM_VERSION = "friction-v1"
 
 
@@ -42,6 +49,7 @@ def friction_score_model(metrics: FrictionScoreInput) -> float:
 
 
 def percentile(values: list[float], fraction: float) -> float:
+    """Linear-interpolated percentile for IQR outlier fences."""
     if not values:
         raise ValueError("values must not be empty")
     ordered = sorted(values)
@@ -64,4 +72,5 @@ def outlier_indexes(scores: list[float]) -> set[int]:
 
 
 def average_score(scores: list[float]) -> float:
+    """Rounded mean score, or 0.0 when the list is empty."""
     return round(mean(scores), 2) if scores else 0.0

@@ -1,5 +1,12 @@
 'use client';
 
+/**
+ * Post-capture session review before the employee submits to the API.
+ *
+ * Pulls the buffered session from the extension, lets the user confirm, then
+ * creates the backend session and notifies the extension of the handoff.
+ */
+
 import type { EventType, SessionUploadPayload, WTEventInput } from '@h09a/types';
 import { useRouter } from 'next/navigation';
 import type { ReactNode } from 'react';

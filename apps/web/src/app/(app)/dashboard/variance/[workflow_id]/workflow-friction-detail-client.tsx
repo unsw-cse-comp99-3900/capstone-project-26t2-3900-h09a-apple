@@ -1,5 +1,11 @@
 'use client';
 
+/**
+ * Per-workflow friction drill-down: heatmap, path comparison, insight teaser.
+ *
+ * Manager-only; can trigger recalculation and embedding path clustering.
+ */
+
 import type {
   FrictionWorkflowSummary,
   WorkflowClusterTimingsResponse,

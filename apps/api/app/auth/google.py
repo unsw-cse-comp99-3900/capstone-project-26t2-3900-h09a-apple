@@ -1,3 +1,7 @@
+"""
+Google OAuth code exchange and ID-token verification helpers.
+"""
+
 from __future__ import annotations
 
 import json

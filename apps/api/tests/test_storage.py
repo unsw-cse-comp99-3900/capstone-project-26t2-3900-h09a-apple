@@ -1,7 +1,8 @@
+from unittest.mock import MagicMock
 from uuid import UUID
 
 from app.session_schema import ScreenshotInput
-from app.storage import build_screenshot_object_key, upload_screenshot
+from app.storage import S3ObjectStorage, build_screenshot_object_key, upload_screenshot
 
 
 class FakeStorage:
@@ -52,3 +53,29 @@ def test_upload_screenshot_decodes_base64_and_uploads_bytes():
     assert uploaded.bytes == len(b"fake-png-bytes")
     assert storage.uploads[0]["body"] == b"fake-png-bytes"
     assert storage.uploads[0]["content_type"] == "image/png"
+
+
+def test_s3_object_storage_puts_on_internal_client_and_signs_on_public_client():
+    put_client = MagicMock()
+    sign_client = MagicMock()
+    sign_client.generate_presigned_url.return_value = (
+        "http://localhost:9000/bucket/key.png?X-Amz-Signature=abc"
+    )
+    storage = S3ObjectStorage(put_client=put_client, sign_client=sign_client, bucket_name="bucket")
+
+    storage.put_object("key.png", b"bytes", "image/png")
+    url = storage.generate_signed_url("key.png", expires=60)
+
+    put_client.put_object.assert_called_once_with(
+        Bucket="bucket",
+        Key="key.png",
+        Body=b"bytes",
+        ContentType="image/png",
+    )
+    sign_client.generate_presigned_url.assert_called_once_with(
+        ClientMethod="get_object",
+        Params={"Bucket": "bucket", "Key": "key.png"},
+        ExpiresIn=60,
+    )
+    assert url.startswith("http://localhost:9000/")
+    put_client.generate_presigned_url.assert_not_called()

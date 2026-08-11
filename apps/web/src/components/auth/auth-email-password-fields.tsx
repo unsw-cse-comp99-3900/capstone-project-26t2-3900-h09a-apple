@@ -1,3 +1,7 @@
+/**
+ * Shared email and password fields for login/register forms.
+ */
+
 import type { Dispatch, FormEvent, SetStateAction } from 'react';
 
 import { AuthEnvelopeIcon, AuthLockIcon } from '@/components/auth/auth-icons';

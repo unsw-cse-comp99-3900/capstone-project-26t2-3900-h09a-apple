@@ -1,3 +1,7 @@
+/**
+ * Tests for API client silent-refresh retry on 401.
+ */
+
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { getPublishedSops } from './api';

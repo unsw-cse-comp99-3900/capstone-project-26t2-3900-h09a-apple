@@ -1,5 +1,9 @@
 'use client';
 
+/**
+ * Form that submits a new password with a reset token.
+ */
+
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { FormEvent, Suspense, useState } from 'react';

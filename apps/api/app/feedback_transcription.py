@@ -1,3 +1,7 @@
+"""
+Local Whisper transcription for short voice-feedback uploads.
+"""
+
 from __future__ import annotations
 
 import os

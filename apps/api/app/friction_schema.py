@@ -1,3 +1,7 @@
+"""
+Pydantic schemas for friction analysis and workflow summary APIs.
+"""
+
 from __future__ import annotations
 
 from datetime import datetime

@@ -1,5 +1,9 @@
 'use client';
 
+/**
+ * Employee home: recent drafts, published SOPs, and next-action links.
+ */
+
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 

@@ -1,3 +1,7 @@
+"""
+Classify voice-feedback transcripts (heuristic or LLM fallback).
+"""
+
 from __future__ import annotations
 
 import json

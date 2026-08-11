@@ -1,3 +1,7 @@
+/**
+ * Not-found UI when an SOP id cannot be loaded.
+ */
+
 import styles from './sop-viewer.module.css';
 
 export default function SopNotFound() {

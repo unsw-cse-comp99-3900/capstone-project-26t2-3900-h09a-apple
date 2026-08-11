@@ -1,3 +1,7 @@
+"""
+Object-storage keys and heuristic classification helpers for feedback.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

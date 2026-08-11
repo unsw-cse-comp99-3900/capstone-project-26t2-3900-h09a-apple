@@ -55,6 +55,7 @@ CellPicker = Callable[[bytes, str, int, int], GridCell]
 
 
 def decode_image_payload(image_base64: str, content_type: str | None = None) -> bytes:
+    """Decode a data-URL or raw base64 screenshot; reject oversized payloads."""
     raw = (image_base64 or "").strip()
     if not raw:
         raise VisionLocateError("image_base64 is required")
@@ -137,6 +138,10 @@ def locate_element_two_stage(
     viewport_height: int,
     pick_cell: CellPicker | None = None,
 ) -> VisionLocateResult:
+    """Coarse grid, crop, fine grid, then map the cell into viewport pixels.
+
+    `pick_cell` defaults to the OpenAI vision call; tests inject a stub picker.
+    """
     description = (description or "").strip()
     if not description:
         raise VisionLocateError("description is required")

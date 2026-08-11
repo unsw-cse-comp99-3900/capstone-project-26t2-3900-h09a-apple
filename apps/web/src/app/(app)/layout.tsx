@@ -1,5 +1,9 @@
 'use client';
 
+/**
+ * Authenticated app segment layout wrapping pages in AppShell.
+ */
+
 import type { ReactNode } from 'react';
 
 import { AppShell } from '@/components/shell/app-shell';

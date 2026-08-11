@@ -1,3 +1,7 @@
+/**
+ * Data-capture consent for recording: local storage mirror plus API sync/accept.
+ */
+
 import { authenticatedFetch } from './auth.js';
 
 export const CONSENT_STORAGE_KEY = 'dataCaptureConsent';
@@ -6,16 +10,19 @@ export const CONSENT_TYPE = 'recording';
 /** Keep in sync with apps/web/src/lib/consent/constants.ts and apps/api/app/consent_constants.py */
 export const CONSENT_TERMS_VERSION = '2026-07-01';
 
+/** True when consent is accepted for the current terms version. */
 export function isConsentCurrent(consent) {
   return consent?.accepted === true && consent.version === CONSENT_TERMS_VERSION;
 }
 
+/** Load the local consent record (or null) via chrome.storage. */
 export function readDataCaptureConsent(callback) {
   chrome.storage?.local.get([CONSENT_STORAGE_KEY], (result) => {
     callback(result[CONSENT_STORAGE_KEY] ?? null);
   });
 }
 
+/** Write an accepted consent record for the current terms version. */
 export function saveDataCaptureConsent(acceptedAt, callback) {
   const record = {
     accepted: true,
@@ -28,10 +35,12 @@ export function saveDataCaptureConsent(acceptedAt, callback) {
   });
 }
 
+/** Clear the local consent mirror (e.g. on logout). */
 export function clearDataCaptureConsent(callback = () => {}) {
   chrome.storage?.local.remove([CONSENT_STORAGE_KEY], callback);
 }
 
+/** GET /api/v1/consent/status for the recording consent type. */
 export async function fetchConsentStatus() {
   const response = await authenticatedFetch(
     `/api/v1/consent/status?consent_type=${encodeURIComponent(CONSENT_TYPE)}`,
@@ -44,6 +53,7 @@ export async function fetchConsentStatus() {
   return response.json();
 }
 
+/** POST /api/v1/consent/accept for the recording consent type. */
 export async function postConsentAccept() {
   const response = await authenticatedFetch('/api/v1/consent/accept', {
     method: 'POST',
@@ -63,6 +73,7 @@ export async function postConsentAccept() {
   return response.json();
 }
 
+/** Mirror server consent into local storage (accept or clear). */
 export async function syncConsentFromServer() {
   const status = await fetchConsentStatus();
 

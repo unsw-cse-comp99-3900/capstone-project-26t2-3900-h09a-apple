@@ -1,5 +1,11 @@
 'use client';
 
+/**
+ * SOP Library browser: search, filter chips, and role-aware draft/published lists.
+ *
+ * Employees see published playable SOPs; authors also see their own drafts.
+ */
+
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import type { SopLibraryItem } from '@h09a/types';
@@ -17,6 +23,7 @@ import {
   filterAndRankSops,
   type LibraryFilterChip,
 } from './library-search';
+import { LibrarySearchBox } from './library-search-box';
 import styles from './library.module.css';
 
 const VIEW_STORAGE_KEY = 'worktrace.library.view';
@@ -207,19 +214,7 @@ export default function LibraryClient() {
 
       <div className={styles.drawer}>
         <div className={styles.controlsRow}>
-          <div className={styles.searchBlock}>
-            <label htmlFor="search" className={styles.drawerLabel}>
-              Find a procedure
-            </label>
-            <input
-              id="search"
-              type="search"
-              placeholder="Search by title…"
-              value={searchInput}
-              onChange={(event) => setSearchInput(event.target.value)}
-              className={styles.input}
-            />
-          </div>
+          <LibrarySearchBox value={searchInput} onChange={setSearchInput} />
 
           <div className={styles.viewToggle} role="group" aria-label="Library view">
             <button

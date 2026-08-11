@@ -1,3 +1,7 @@
+/**
+ * Client-side SOP library search scoring and chip filters.
+ */
+
 import type { SopLibraryItem } from '@h09a/types';
 
 export type LibraryFilterChip = 'all' | 'recent' | 'mine';

@@ -1,3 +1,7 @@
+/**
+ * Rotates access tokens using the refresh-token cookie.
+ */
+
 import type { RefreshResponse } from '@h09a/types';
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';

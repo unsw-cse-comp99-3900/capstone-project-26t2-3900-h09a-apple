@@ -1,3 +1,7 @@
+/**
+ * Auth cookie names, role landing paths, and JWT helpers.
+ */
+
 import type { UserRole } from '@h09a/types';
 
 export const ACCESS_TOKEN_COOKIE = 'wt_access_token';
@@ -9,10 +13,12 @@ const ROLE_LANDING: Record<UserRole, string> = {
   MANAGER: '/dashboard',
 };
 
+/** Default post-login landing path for a role. */
 export function roleLandingPath(role: UserRole): string {
   return ROLE_LANDING[role];
 }
 
+/** FastAPI base URL from env (server-side). */
 export function backendBaseUrl(): string {
   return (
     process.env.API_BASE_URL ??
@@ -21,11 +27,13 @@ export function backendBaseUrl(): string {
   ).replace(/\/$/, '');
 }
 
+/** Default tenant id used when none is supplied. */
 export function defaultTenantId(): string {
   return process.env.AUTH_DEFAULT_TENANT_ID ?? '22222222-2222-2222-2222-222222222222';
 }
 
 /** Edge-safe base64url decode for JWT payload segments (no Node Buffer). */
+/** Decode a JWT base64url segment to a UTF-8 string. */
 export function decodeBase64Url(segment: string): string {
   const base64 = segment.replace(/-/g, '+').replace(/_/g, '/');
   const padding = '='.repeat((4 - (base64.length % 4)) % 4);
@@ -34,6 +42,7 @@ export function decodeBase64Url(segment: string): string {
   return new TextDecoder().decode(bytes);
 }
 
+/** Extract the role claim from a JWT access token, if present. */
 export function roleFromAccessToken(token: string | undefined): UserRole | null {
   if (!token) {
     return null;
@@ -59,6 +68,7 @@ export function roleFromAccessToken(token: string | undefined): UserRole | null 
 }
 
 /** Seconds until access-token exp claim; null when missing/invalid. */
+/** Seconds until JWT exp, or null if missing/invalid. */
 export function expiresInFromAccessToken(token: string | undefined): number | null {
   if (!token) {
     return null;

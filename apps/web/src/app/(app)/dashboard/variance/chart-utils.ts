@@ -1,3 +1,7 @@
+/**
+ * Shared colour scales and step labels for friction charts.
+ */
+
 import type { ClusterStepTiming, FrictionStepChartPoint } from '@h09a/types';
 
 export const HIGH_VARIANCE_COLOR = '#EF4444';

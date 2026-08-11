@@ -1,3 +1,7 @@
+"""
+Pydantic schemas for authentication request and response bodies.
+"""
+
 from __future__ import annotations
 
 from typing import Annotated

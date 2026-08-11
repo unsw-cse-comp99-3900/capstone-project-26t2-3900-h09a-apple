@@ -1,3 +1,7 @@
+/**
+ * Clears auth cookies and notifies the API to revoke refresh tokens.
+ */
+
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 

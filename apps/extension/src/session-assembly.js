@@ -1,3 +1,7 @@
+/**
+ * Map buffered page events into a SessionPayload for IndexedDB and API upload.
+ */
+
 function mapBufferedEventToWTEventInput(evt) {
   const payload = evt.payload || {};
   const pageTitle = typeof payload.title === 'string' ? payload.title.trim() : '';

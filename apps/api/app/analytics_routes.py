@@ -1,3 +1,9 @@
+"""
+HTTP routes for walkthrough K-means analytics under /api/v1/analytics.
+
+Manager-only; thin wrappers around analytics_clustering and response schemas.
+"""
+
 from __future__ import annotations
 
 import logging

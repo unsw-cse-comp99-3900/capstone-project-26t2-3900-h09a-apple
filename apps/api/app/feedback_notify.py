@@ -1,3 +1,7 @@
+"""
+In-app notification hub and email fallback for new voice feedback.
+"""
+
 from __future__ import annotations
 
 import asyncio
@@ -27,16 +31,21 @@ class NotificationPushPayload:
 
 
 class NotificationHub:
+    """In-memory WebSocket fan-out for per-user feedback notifications."""
+
     def __init__(self) -> None:
+        """Create an empty connection map."""
         self._connections: dict[UUID, set[WebSocket]] = {}
         self._lock = asyncio.Lock()
 
     async def connect(self, user_id: UUID, websocket: WebSocket) -> None:
+        """Accept a socket and register it under the user id."""
         await websocket.accept()
         async with self._lock:
             self._connections.setdefault(user_id, set()).add(websocket)
 
     async def disconnect(self, user_id: UUID, websocket: WebSocket) -> None:
+        """Drop a socket; remove the user entry when none remain."""
         async with self._lock:
             sockets = self._connections.get(user_id)
             if not sockets:
@@ -46,9 +55,11 @@ class NotificationHub:
                 self._connections.pop(user_id, None)
 
     def has_connection(self, user_id: UUID) -> bool:
+        """True when the user currently has at least one open socket."""
         return bool(self._connections.get(user_id))
 
     async def push(self, user_id: UUID, payload: NotificationPushPayload) -> bool:
+        """Send JSON to all sockets for the user; return whether any delivered."""
         async with self._lock:
             sockets = list(self._connections.get(user_id, set()))
         if not sockets:
@@ -76,6 +87,7 @@ def build_feedback_uploaded_email(
     sop_title: str,
     feedback_id: UUID,
 ) -> OutboundEmail:
+    """Build the reviewer/manager email for a newly uploaded voice feedback."""
     base = get_web_base_url().rstrip("/")
     review_url = f"{base}/review?tab=feedback&feedbackId={feedback_id}"
     subject = f"Voice feedback on {sop_title}"
@@ -104,6 +116,7 @@ def list_feedback_recipients(
     tenant_id: UUID,
     exclude_user_id: UUID,
 ) -> list[User]:
+    """Reviewers and managers in the tenant, excluding the uploading employee."""
     return (
         db.query(User)
         .filter(
@@ -123,6 +136,7 @@ async def notify_feedback_uploaded(
     sop_title: str,
     email_sender: EmailSender | None = None,
 ) -> list[FeedbackNotification]:
+    """Create in-app notifications and email recipients about new feedback."""
     recipients = list_feedback_recipients(
         db,
         tenant_id=feedback.tenant_id,

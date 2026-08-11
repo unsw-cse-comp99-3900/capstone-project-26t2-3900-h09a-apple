@@ -1,3 +1,11 @@
+"""Walkthrough-session K-means for the manager variance dashboard.
+
+Builds a feature matrix from step timings, friction events, and light user
+signals, then clusters with a configurable k (default 3). Requires more
+sessions than workflow embedding clustering so noisy timing features do not
+dominate silhouette choice on tiny samples.
+"""
+
 from __future__ import annotations
 
 import time
@@ -24,6 +32,8 @@ from app.analytics_schema import (
 
 ALGORITHM_VERSION = "walkthrough-kmeans-v2"
 DEFAULT_CLUSTER_COUNT = 3
+# Higher than workflow_clustering.MIN_SESSIONS_FOR_CLUSTERING (3): this path
+# uses heterogeneous timing features that need denser samples to be stable.
 DEFAULT_MIN_SESSIONS = 5
 FRICTION_TYPES = tuple(item.value for item in models.WalkthroughFrictionType)
 

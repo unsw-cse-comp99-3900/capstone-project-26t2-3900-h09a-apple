@@ -1,3 +1,7 @@
+/**
+ * BFF proxy for password-reset token submission.
+ */
+
 import { NextResponse } from 'next/server';
 
 import { backendFetch } from '@/lib/auth/backend';

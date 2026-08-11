@@ -1,5 +1,9 @@
 'use client';
 
+/**
+ * Modal that records capture/walkthrough consent locally and on the API.
+ */
+
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';

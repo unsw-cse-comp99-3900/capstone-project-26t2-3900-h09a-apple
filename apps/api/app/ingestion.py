@@ -1,3 +1,7 @@
+"""
+Session ingestion: validate payloads, persist events, enqueue SOP work.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

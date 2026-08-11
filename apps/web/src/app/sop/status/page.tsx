@@ -1,3 +1,7 @@
+/**
+ * Lightweight SOP generation status page for redirects.
+ */
+
 type Props = {
   searchParams: Promise<{
     sessionId?: string;

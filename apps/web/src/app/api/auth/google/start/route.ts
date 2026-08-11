@@ -1,3 +1,7 @@
+/**
+ * Redirects the browser into the Google OAuth authorize URL.
+ */
+
 import { NextResponse } from 'next/server';
 
 import { backendBaseUrl } from '@/lib/auth/constants';

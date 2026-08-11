@@ -1,3 +1,7 @@
+"""
+Pydantic schemas for SOP list, detail, approve, and publish APIs.
+"""
+
 from datetime import datetime
 from typing import Literal
 

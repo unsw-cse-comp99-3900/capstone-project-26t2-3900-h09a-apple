@@ -1,3 +1,7 @@
+"""
+Construct the configured SopGenerator from SOP_GENERATOR env.
+"""
+
 from app.llm_sop_generator import LlmSopGenerator
 from app.sop_generator import SopGenerator
 

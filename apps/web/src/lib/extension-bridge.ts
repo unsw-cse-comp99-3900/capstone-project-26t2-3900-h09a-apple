@@ -1,3 +1,9 @@
+/**
+ * chrome.runtime messaging helpers for the fixed-ID WorkTrace extension.
+ *
+ * Used for login handoff, walkthrough start, and presence pings from the web app.
+ */
+
 import { getExtensionId } from '@/lib/extension-config';
 
 export const EXTENSION_MESSAGE_TYPES = {
@@ -64,6 +70,7 @@ function sendExtensionMessage(message: unknown): Promise<ExtensionRuntimeRespons
   });
 }
 
+/** Probe whether the installed extension responds to EXTENSION_PING. */
 export function pingExtension(timeoutMs = DEFAULT_PING_TIMEOUT_MS): Promise<boolean> {
   if (typeof window === 'undefined' || !getExtensionId()) {
     return Promise.resolve(false);
@@ -84,6 +91,7 @@ export function pingExtension(timeoutMs = DEFAULT_PING_TIMEOUT_MS): Promise<bool
   ]);
 }
 
+/** Send a one-time handoff code to the extension for token redeem. */
 export async function postExtensionHandoff(code: string): Promise<void> {
   await sendExtensionMessage({
     type: EXTENSION_MESSAGE_TYPES.handoff,
@@ -92,6 +100,7 @@ export async function postExtensionHandoff(code: string): Promise<void> {
   });
 }
 
+/** Ask the extension to clear stored auth tokens. */
 export async function postExtensionLogout(): Promise<void> {
   await sendExtensionMessage({
     type: EXTENSION_MESSAGE_TYPES.logout,
@@ -99,6 +108,7 @@ export async function postExtensionLogout(): Promise<void> {
   });
 }
 
+/** Notify the extension that a session was submitted so local cache can drop. */
 export async function postExtensionSessionSubmitted(sessionId: string): Promise<void> {
   await sendExtensionMessage({
     type: EXTENSION_MESSAGE_TYPES.sessionSubmitted,
@@ -107,6 +117,7 @@ export async function postExtensionSessionSubmitted(sessionId: string): Promise<
   });
 }
 
+/** Ask the extension to start walkthrough playback for a SOP. */
 export async function postExtensionStartWalkthrough(sopId: string): Promise<void> {
   const response = await sendExtensionMessage({
     type: EXTENSION_MESSAGE_TYPES.startWalkthrough,

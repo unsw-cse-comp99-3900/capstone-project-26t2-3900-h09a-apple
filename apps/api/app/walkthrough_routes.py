@@ -1,3 +1,7 @@
+"""
+Walkthrough completion ingest and vision-locate helper routes.
+"""
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
