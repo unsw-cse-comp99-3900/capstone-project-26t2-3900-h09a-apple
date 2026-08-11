@@ -119,6 +119,12 @@ Then load `apps/extension/dist` as above.
 4. Sign in as `reviewer@work.com` → approve → publish.
 5. As EMPLOYEE, open Library → **Start walkthrough** and confirm the on-page
    overlay.
+
+   The seeded procedure is generated in mock mode, so step wording is
+   illustrative and may not match the live target page verbatim. The
+   walkthrough demonstrates overlay placement, element highlighting and
+   step navigation.
+
 6. Sign in as `manager@work.com` for Analytics / friction views.
 
 ## LLM modes (mock vs real keys)
