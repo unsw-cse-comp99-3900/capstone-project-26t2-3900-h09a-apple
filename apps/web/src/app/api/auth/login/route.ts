@@ -1,3 +1,7 @@
+/**
+ * BFF login: exchanges credentials for httponly auth cookies.
+ */
+
 import type { LoginResponse } from '@h09a/types';
 import { NextResponse } from 'next/server';
 

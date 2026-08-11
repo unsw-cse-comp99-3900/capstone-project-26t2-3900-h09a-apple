@@ -1,5 +1,9 @@
 'use client';
 
+/**
+ * Inline editor for reviewer edits to SOP step instructions.
+ */
+
 import { useCallback, useEffect, useState } from 'react';
 import type { SopDetailPayload } from '@h09a/types';
 

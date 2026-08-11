@@ -1,3 +1,7 @@
+/**
+ * Footer links under auth forms (privacy, alternate action).
+ */
+
 import Link from 'next/link';
 
 import styles from '@/app/login/auth.module.css';

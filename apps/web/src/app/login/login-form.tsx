@@ -1,5 +1,9 @@
 'use client';
 
+/**
+ * Email/password (and Google) login form for the marketing auth panel.
+ */
+
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { FormEvent, useEffect, useState } from 'react';

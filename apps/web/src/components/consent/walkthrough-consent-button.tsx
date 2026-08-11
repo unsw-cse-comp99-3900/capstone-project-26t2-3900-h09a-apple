@@ -1,5 +1,9 @@
 'use client';
 
+/**
+ * Button that gates an action behind current walkthrough consent.
+ */
+
 import React, { useState } from 'react';
 
 import {

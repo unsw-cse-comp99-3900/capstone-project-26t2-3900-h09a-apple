@@ -1,5 +1,9 @@
 'use client';
 
+/**
+ * After web login, mints a handoff code and pushes it to the extension.
+ */
+
 import { useEffect } from 'react';
 
 import { useCurrentUser } from '@/contexts/auth-context';

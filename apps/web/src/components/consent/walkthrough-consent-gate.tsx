@@ -1,5 +1,9 @@
 'use client';
 
+/**
+ * Renders children only after walkthrough consent is accepted.
+ */
+
 import { useState } from 'react';
 
 import { WalkthroughConsentButton } from '@/components/consent/walkthrough-consent-button';

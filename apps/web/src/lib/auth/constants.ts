@@ -1,3 +1,7 @@
+/**
+ * Auth cookie names, role landing paths, and JWT helpers.
+ */
+
 import type { UserRole } from '@h09a/types';
 
 export const ACCESS_TOKEN_COOKIE = 'wt_access_token';

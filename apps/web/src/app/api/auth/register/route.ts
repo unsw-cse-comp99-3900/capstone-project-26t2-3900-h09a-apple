@@ -1,3 +1,7 @@
+/**
+ * BFF register: creates an EMPLOYEE and sets auth cookies.
+ */
+
 import type { LoginResponse } from '@h09a/types';
 import { NextResponse } from 'next/server';
 

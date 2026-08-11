@@ -1,3 +1,7 @@
+/**
+ * Helpers to set and clear httponly auth cookies in route handlers.
+ */
+
 import type { NextResponse } from 'next/server';
 
 import { ACCESS_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE } from '@/lib/auth/constants';

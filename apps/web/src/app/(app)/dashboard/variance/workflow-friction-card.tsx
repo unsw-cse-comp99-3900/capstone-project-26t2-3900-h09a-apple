@@ -1,5 +1,9 @@
 'use client';
 
+/**
+ * Summary card for one workflow on the friction rankings list.
+ */
+
 import type { FrictionWorkflowSummary } from '@h09a/types';
 import Link from 'next/link';
 

@@ -1,3 +1,7 @@
+/**
+ * OAuth callback that completes Google login and sets auth cookies.
+ */
+
 import type { LoginResponse } from '@h09a/types';
 import { NextResponse } from 'next/server';
 

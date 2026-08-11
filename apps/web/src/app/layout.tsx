@@ -1,3 +1,7 @@
+/**
+ * Root Next.js layout: fonts, providers, and global chrome.
+ */
+
 import type { Metadata } from 'next';
 
 import { AuthProvider } from '@/contexts/auth-context';

@@ -1,3 +1,7 @@
+/**
+ * Tests for local consent record read/write helpers.
+ */
+
 import { describe, expect, it } from 'vitest';
 
 import { CONSENT_TERMS_VERSION } from '@/lib/consent/constants';

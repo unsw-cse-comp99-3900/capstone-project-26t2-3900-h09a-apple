@@ -1,5 +1,9 @@
 'use client';
 
+/**
+ * Redirect helper that sends a role to its default dashboard path.
+ */
+
 import type { ReactNode } from 'react';
 import type { UserRole } from '@h09a/types';
 

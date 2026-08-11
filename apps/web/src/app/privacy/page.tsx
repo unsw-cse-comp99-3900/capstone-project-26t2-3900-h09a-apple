@@ -1,3 +1,7 @@
+/**
+ * Privacy policy page linked from consent and auth footers.
+ */
+
 import Link from 'next/link';
 
 import { CONSENT_COPY, CONSENT_TERMS_VERSION } from '@/lib/consent/constants';

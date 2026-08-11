@@ -1,3 +1,7 @@
+/**
+ * Marketing landing page for WorkTrace.
+ */
+
 import type { Metadata } from 'next';
 import Link from 'next/link';
 

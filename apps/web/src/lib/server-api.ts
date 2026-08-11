@@ -1,3 +1,7 @@
+/**
+ * Server-component helpers for authenticated FastAPI reads.
+ */
+
 import type { FrictionWorkflowListResponse } from '@h09a/types';
 import { cookies } from 'next/headers';
 

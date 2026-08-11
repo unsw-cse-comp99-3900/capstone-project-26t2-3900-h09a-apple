@@ -1,5 +1,9 @@
 'use client';
 
+/**
+ * Forgot-password form UI that calls the BFF forgot-password route.
+ */
+
 import Link from 'next/link';
 import { FormEvent, useState } from 'react';
 

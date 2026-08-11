@@ -1,3 +1,7 @@
+/**
+ * Path to minimum-role map for middleware and AppShell gates.
+ */
+
 import type { UserRole } from '@h09a/types';
 
 const PROTECTED_PREFIXES = ['/library', '/review', '/dashboard', '/session', '/sop'] as const;

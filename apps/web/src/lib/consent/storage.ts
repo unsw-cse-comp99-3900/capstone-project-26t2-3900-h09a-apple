@@ -1,3 +1,7 @@
+/**
+ * localStorage helpers for capture/walkthrough consent records.
+ */
+
 import {
   CONSENT_STORAGE_KEY_LEGACY,
   CONSENT_TERMS_VERSION,

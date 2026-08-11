@@ -1,5 +1,9 @@
 'use client';
 
+/**
+ * Library card for one SOP with play/open actions by role.
+ */
+
 import { useState, type MouseEvent } from 'react';
 import Link from 'next/link';
 import type { SopLibraryItem } from '@h09a/types';

@@ -1,5 +1,9 @@
 'use client';
 
+/**
+ * Reviewer home: pending SOP queue summary and shortcuts into Review.
+ */
+
 import Link from 'next/link';
 import { Suspense, useCallback, useEffect, useState } from 'react';
 

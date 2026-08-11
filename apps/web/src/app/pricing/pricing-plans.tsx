@@ -1,5 +1,9 @@
 'use client';
 
+/**
+ * Painted-door pricing plan cards used in the market test.
+ */
+
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 

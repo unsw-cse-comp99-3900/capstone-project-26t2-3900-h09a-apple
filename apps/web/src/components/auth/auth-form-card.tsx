@@ -1,3 +1,7 @@
+/**
+ * Card chrome wrapping auth forms on marketing pages.
+ */
+
 import type { ReactNode } from 'react';
 
 import styles from '@/app/login/auth.module.css';

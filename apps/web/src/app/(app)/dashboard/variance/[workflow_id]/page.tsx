@@ -1,3 +1,7 @@
+/**
+ * Server/client entry for a single workflow friction detail page.
+ */
+
 import { WorkflowFrictionDetailClient } from './workflow-friction-detail-client';
 
 type WorkflowFrictionDetailPageProps = {

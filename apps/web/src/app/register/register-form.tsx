@@ -1,5 +1,9 @@
 'use client';
 
+/**
+ * Registration form that creates an EMPLOYEE via the BFF.
+ */
+
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { FormEvent, useEffect, useState } from 'react';

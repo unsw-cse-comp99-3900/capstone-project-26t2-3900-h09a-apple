@@ -1,5 +1,9 @@
 'use client';
 
+/**
+ * Role-aware dashboard page that mounts employee, reviewer, or manager panels.
+ */
+
 import { useCurrentUser } from '@/contexts/auth-context';
 
 import { EmployeePanel } from './employee-panel';

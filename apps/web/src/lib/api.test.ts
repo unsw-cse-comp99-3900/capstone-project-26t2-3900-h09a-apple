@@ -1,3 +1,7 @@
+/**
+ * Unit tests for the browser API client helpers.
+ */
+
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   ApiError,

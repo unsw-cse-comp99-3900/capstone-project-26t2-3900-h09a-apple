@@ -1,3 +1,7 @@
+/**
+ * Route entry for the pricing experiment page.
+ */
+
 import type { Metadata } from 'next';
 import Link from 'next/link';
 

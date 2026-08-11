@@ -1,3 +1,7 @@
+/**
+ * Client helper to request an extension handoff code from the BFF.
+ */
+
 import { pingExtension, postExtensionHandoff } from '@/lib/extension-bridge';
 import { pingDesktop, launchDesktopHandoff } from '@/lib/desktop-bridge';
 

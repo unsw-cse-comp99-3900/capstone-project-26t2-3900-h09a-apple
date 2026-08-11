@@ -1,3 +1,7 @@
+/**
+ * Tests for the per-workflow friction detail client.
+ */
+
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 

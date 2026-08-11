@@ -1,3 +1,7 @@
+/**
+ * Tests for the friction rankings list client.
+ */
+
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 

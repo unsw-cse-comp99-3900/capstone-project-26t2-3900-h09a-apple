@@ -1,5 +1,9 @@
 'use client';
 
+/**
+ * Manager voice-feedback stats dashboard (severity and classification tiles).
+ */
+
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import type { FeedbackStatsResponse } from '@h09a/types';

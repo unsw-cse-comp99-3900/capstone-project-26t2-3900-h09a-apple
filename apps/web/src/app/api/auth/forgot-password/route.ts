@@ -1,3 +1,7 @@
+/**
+ * BFF proxy for forgot-password email requests.
+ */
+
 import { NextResponse } from 'next/server';
 
 import { backendFetch } from '@/lib/auth/backend';

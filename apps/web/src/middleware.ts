@@ -1,3 +1,7 @@
+/**
+ * Edge middleware: cookie presence checks for protected routes.
+ */
+
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 

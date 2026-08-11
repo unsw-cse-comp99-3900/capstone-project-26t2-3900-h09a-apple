@@ -1,3 +1,7 @@
+/**
+ * Loading placeholder for async panels.
+ */
+
 import styles from './state-blocks.module.css';
 
 type StateLoadingProps = {

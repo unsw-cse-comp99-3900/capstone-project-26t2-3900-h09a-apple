@@ -1,3 +1,7 @@
+/**
+ * Normalises FastAPI auth error payloads for forms.
+ */
+
 type ValidationDetail = {
   loc?: unknown[];
   msg?: string;

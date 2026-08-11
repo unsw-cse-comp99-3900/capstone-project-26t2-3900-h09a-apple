@@ -1,3 +1,7 @@
+/**
+ * Tests for the in-flight silent refresh latch.
+ */
+
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { resetSilentRefreshLatch, silentRefreshAccessToken } from './session-refresh';

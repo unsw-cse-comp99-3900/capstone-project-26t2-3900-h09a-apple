@@ -1,5 +1,9 @@
 'use client';
 
+/**
+ * Client wrapper that fetches SOP detail and renders SopViewer.
+ */
+
 import type { SopDetailPayload } from '@h09a/types';
 import { notFound } from 'next/navigation';
 import { useEffect, useState } from 'react';

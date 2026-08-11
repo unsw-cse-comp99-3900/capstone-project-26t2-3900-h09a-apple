@@ -1,3 +1,7 @@
+/**
+ * Optional bridge stubs for the desktop capture shell.
+ */
+
 const DESKTOP_PING_URL = 'http://127.0.0.1:37891/ping';
 export async function pingDesktop(): Promise<boolean> {
   const controller = new AbortController();

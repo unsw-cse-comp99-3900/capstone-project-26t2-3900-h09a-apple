@@ -1,3 +1,7 @@
+/**
+ * Inline error state with retry-friendly copy.
+ */
+
 import styles from './state-blocks.module.css';
 
 type StateErrorProps = {

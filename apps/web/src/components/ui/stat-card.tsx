@@ -1,3 +1,7 @@
+/**
+ * Small KPI tile used on role home dashboards.
+ */
+
 import styles from './stat-card.module.css';
 
 type StatCardProps = {

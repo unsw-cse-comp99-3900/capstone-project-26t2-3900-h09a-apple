@@ -1,3 +1,7 @@
+/**
+ * Route entry for post-capture session review before submit.
+ */
+
 import { SessionReviewClient } from './session-review-client';
 
 type Props = {

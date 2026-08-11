@@ -1,5 +1,9 @@
 'use client';
 
+/**
+ * Bar chart of per-step average friction scores.
+ */
+
 import type { FrictionStepChartPoint } from '@h09a/types';
 import {
   Bar,

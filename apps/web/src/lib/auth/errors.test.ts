@@ -1,3 +1,7 @@
+/**
+ * Tests for mapping backend auth errors to UI messages.
+ */
+
 import { describe, expect, it } from 'vitest';
 
 import { formatApiDetail } from '@/lib/auth/errors';

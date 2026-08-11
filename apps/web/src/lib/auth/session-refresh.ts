@@ -1,3 +1,7 @@
+/**
+ * Client silent refresh of the access token via /api/auth/refresh.
+ */
+
 export type RefreshResult = {
   ok: boolean;
   expires_in: number | null;
