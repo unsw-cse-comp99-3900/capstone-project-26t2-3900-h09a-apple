@@ -9,6 +9,10 @@ This guide runs the FastAPI API, Celery friction worker, Next.js frontend,
 PostgreSQL/pgvector, Redis, MinIO, and automatic Alembic migrations with Docker
 Compose.
 
+Assessors need **Docker** and **Chrome** on a clean machine. An IDE (VS Code,
+Cursor, or similar), Node, pnpm, and a local Python venv are **not** required
+for the default path when the submission zip includes `apps/extension/dist`.
+
 ## Marker checklist (read before typing)
 
 Do these in order. Most "broken install" reports are one of the skips below.
@@ -79,16 +83,20 @@ Do these in order. Most "broken install" reports are one of the skips below.
 
 Install and leave running before any Compose commands:
 
-| Required                                                                                            | Notes                                                                                                         |
-| --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| [Docker Desktop](https://www.docker.com/products/docker-desktop/) (Engine 24+) or Docker Engine 24+ | Wait until Docker shows **Running**. Confirm with `docker version` and `docker compose version` (Compose v2). |
-| [Google Chrome](https://www.google.com/chrome/)                                                     | Load the unpacked MV3 extension and run the walkthrough.                                                      |
-| 4 GB free memory (8 GB recommended if Whisper is preloaded)                                         |                                                                                                               |
-| Free host ports **3000**, **8000**, **9000**, **9001** (and usually **5432**, **6379**)             | Or remap in `.env` (see Troubleshooting). Local Postgres often blocks 5432.                                   |
+| Required                                                                                            | Notes                                                                                                                                             |
+| --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [Docker Desktop](https://www.docker.com/products/docker-desktop/) (Engine 24+) or Docker Engine 24+ | On Windows/macOS use Docker Desktop and wait until it shows **Running**. Confirm with `docker version` and `docker compose version` (Compose v2). |
+| [Google Chrome](https://www.google.com/chrome/)                                                     | Needed to load the unpacked MV3 extension and run the walkthrough.                                                                                |
+| 4 GB free memory (8 GB recommended if Whisper is preloaded)                                         |                                                                                                                                                   |
+| Free host ports **3000**, **8000**, **9000**, **9001** (and usually **5432**, **6379**)             | Or remap in `.env` (see Troubleshooting). Local Postgres often blocks 5432.                                                                       |
 
-**Not required** for the submission-zip path: Node.js, pnpm, Python, or an IDE.
-Use any shell that can run `docker` (macOS Terminal, Windows PowerShell, or Git
-Bash). Commands below assume you are in the repository root.
+**Not required** for the submission-zip path: Node.js, pnpm, Python, VS Code,
+Cursor, or any other IDE. Use any shell that can run `docker` (macOS/Linux
+Terminal, Windows PowerShell, or Git Bash). Commands below assume you are in
+the repository root.
+
+Optional only if you rebuild the extension from source (fallback in step 4):
+Node 20+ and pnpm 10.28.1.
 
 ## Quick start (assessor path)
 

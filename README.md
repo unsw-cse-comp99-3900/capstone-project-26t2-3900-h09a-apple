@@ -46,6 +46,8 @@ Assessment-oriented index (architecture, testing, privacy, CI, troubleshooting):
 Same as **Start here** above: full steps live only in
 [`DEPLOYMENT_GUIDE.md`](DEPLOYMENT_GUIDE.md). Short reminders:
 
+- Install Docker Desktop + Chrome (no IDE / Node required for the submission
+  zip). Then `cp .env.example .env` and `docker compose up -d --build`.
 - Prefer the course **submission zip** (includes `apps/extension/dist`).
 - A plain GitHub clone has no `dist` (gitignored); build the extension per the
   guide, or use `scripts/package-submission.sh`.
