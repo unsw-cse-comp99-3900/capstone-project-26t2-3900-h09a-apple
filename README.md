@@ -187,7 +187,7 @@ a bare checkout:
   ivfflat index assertions
 - `tests/test_demo_smoke.py` (7) - end-to-end seeded-data checks
 
-Run them with the stack up: `docker compose -p worktrace up -d`.
+Run them with the stack up: `docker compose up -d`.
 
 ## Non-trivial implementations
 
