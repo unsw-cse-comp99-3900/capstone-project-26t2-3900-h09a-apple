@@ -128,12 +128,15 @@ That value is already set as `NEXT_PUBLIC_EXTENSION_ID` in `.env.example`.
 3. Record a short workflow, submit, and generate an SOP.
 4. Sign in as `reviewer@work.com` → approve → publish.
 5. As EMPLOYEE, open Library → **Start walkthrough** and confirm the on-page
-   overlay.
+   overlay appears (step chrome, next/back, highlight ring).
 
-   The seeded procedure is generated in mock mode, so step wording is
-   illustrative and may not match the live target page verbatim. The
-   walkthrough demonstrates overlay placement, element highlighting and
-   step navigation.
+   **Mock / no API key (default `.env.example`):** step titles, instruction
+   text, and highlight targets are **illustrative only**. They often do not
+   match the live page (wrong copy, vague "Click [icon]", or a highlight on
+   the wrong control). That is expected without `OPENAI_API_KEY` /
+   `ANTHROPIC_API_KEY`. Judge the smoke on overlay **mechanics**, not copy
+   accuracy. For accurate guidance and selectors, use **Full verification**
+   under LLM modes below, then record and generate again.
 
 6. Sign in as `manager@work.com` for Analytics / friction views.
 
@@ -142,14 +145,26 @@ That value is already set as `NEXT_PUBLIC_EXTENSION_ID` in `.env.example`.
 The brief allows secrets in the zipped submission as long as they are **not**
 committed to GitHub.
 
-| Mode              | `.env` settings                                                     | When to use                                                |
-| ----------------- | ------------------------------------------------------------------- | ---------------------------------------------------------- |
-| Default (no cost) | `SOP_GENERATOR=mock`, `LLM_PROVIDER=mock`                           | Assessor smoke path; deterministic SOP text and embeddings |
-| Full verification | Set `LLM_PROVIDER=openai` (or `anthropic`) and the matching API key | Real generation / embeddings                               |
+| Mode              | `.env` settings                                                      | What you get                                                                                |
+| ----------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Default (no cost) | `LLM_PROVIDER=mock` (API keys empty; `.env.example` default)         | Stack runs; SOP / walkthrough text and highlights are stubs, **not** page-accurate          |
+| Full verification | `LLM_PROVIDER=openai` or `anthropic` **and** a real matching API key | Real step wording and tighter target binding; recreate `api` after changing keys / provider |
 
-For full verification in a zip submission, place keys in a root file
-`SECRETS.txt` that is **not** tracked by git, and copy values into `.env`
-before `docker compose up`. Never commit `SECRETS.txt` or `.env`.
+Generator selection follows `LLM_PROVIDER` (`mock` → `MockSopGenerator`;
+`openai` / `anthropic` → LLM path). After switching to real keys:
+
+```bash
+# In .env, for example:
+# LLM_PROVIDER=openai
+# OPENAI_API_KEY=sk-...
+docker compose up -d --force-recreate api worker
+```
+
+Then record a **new** session and generate a new SOP; old mock SOPs stay mock.
+
+For a zip submission, place keys in a root file `SECRETS.txt` that is **not**
+tracked by git, and copy values into `.env` before `docker compose up`. Never
+commit `SECRETS.txt` or `.env`.
 
 ## Configuration
 

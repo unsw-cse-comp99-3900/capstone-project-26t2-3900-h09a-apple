@@ -179,8 +179,9 @@ extension ID `bajibpeckacmfdmifdhccckiepadhgog`).
 | 10  | Logout                | Log out, then browser Back toward a prior SOP URL                  | Redirect to `/login?next=...`, no stale authenticated view      | Pass   |
 
 Related smoke path (record → approve → publish → overlay): `DEPLOYMENT_GUIDE.md`
-section 6. Mock SOP step wording may differ from the live page; the walkthrough
-still demonstrates overlay placement, highlighting, and step navigation.
+smoke path. With default mock LLM (no API key), step text and highlight targets
+are illustrative only; use a real `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` for
+page-accurate guidance (see guide **LLM modes**).
 
 ### Code quality
 
