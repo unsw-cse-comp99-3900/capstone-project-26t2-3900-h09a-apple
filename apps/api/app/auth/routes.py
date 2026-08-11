@@ -166,6 +166,7 @@ def google_callback(payload: GoogleAuthCodeRequest, db: DB_DEPENDENCY) -> LoginR
             detail=str(exc),
         ) from None
     except GoogleAuthError:
+        logger.exception("Google OAuth exchange or token verification failed")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid Google sign-in",
