@@ -1,3 +1,7 @@
+/**
+ * Content script: page bridge messages, capture hooks, and walkthrough overlay runtime.
+ */
+
 const CONSENT_STORAGE_KEY = 'dataCaptureConsent';
 const CONSENT_TERMS_VERSION = '2026-07-01';
 

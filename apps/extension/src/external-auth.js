@@ -1,9 +1,18 @@
+/**
+ * Origin-gated external messages from the web app (ping, handoff, logout, walkthrough).
+ */
+
 export const ALLOWED_EXTERNAL_ORIGINS = new Set(['http://localhost:3000', 'http://127.0.0.1:3000']);
 
+/** Allow only local web-app origins for external messaging. */
 export function isAllowedExternalOrigin(origin) {
   return Boolean(origin && ALLOWED_EXTERNAL_ORIGINS.has(origin));
 }
 
+/**
+ * Route external chrome.runtime messages from the web app.
+ * Returns true when the response will be sent asynchronously.
+ */
 export function handleExternalAuthMessage(message, sender, sendResponse, handlers) {
   if (!isAllowedExternalOrigin(sender?.origin)) {
     sendResponse({ ok: false, error: 'Unauthorized origin' });

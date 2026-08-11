@@ -2,6 +2,7 @@
  * Formats SOP step time estimates for the viewer.
  */
 
+/** Format a duration in seconds as a short human-readable estimate. */
 export function formatTimeEstimate(seconds: number): string {
   if (seconds < 60) {
     return `${seconds}s`;

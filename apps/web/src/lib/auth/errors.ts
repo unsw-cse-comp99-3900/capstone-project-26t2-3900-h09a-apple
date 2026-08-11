@@ -7,6 +7,7 @@ type ValidationDetail = {
   msg?: string;
 };
 
+/** Flatten FastAPI detail payloads into a user-facing string. */
 export function formatApiDetail(detail: unknown, fallback: string): string {
   if (typeof detail === 'string' && detail.trim()) {
     return detail;

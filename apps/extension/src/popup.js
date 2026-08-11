@@ -1,3 +1,7 @@
+/**
+ * Extension popup UI: auth chip, consent gate, recording controls, walkthrough launch.
+ */
+
 import {
   RecordingStatus,
   canStartRecording,

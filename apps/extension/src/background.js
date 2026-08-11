@@ -1,7 +1,12 @@
-// H09AAPPLE-80 remaining (background side of extension ball):
-// T0: forwards task + confidence (done)
-// T2-2 captureVisibleTab for stuck analyze: WALKTHROUGH_CAPTURE_VISIBLE
-// T3-2/T3-3 optional notify hooks when handoff/stuck aggregates land
+/**
+ * MV3 service worker: session assembly, external auth, vision locate, walkthrough launch.
+ *
+ * Ticket notes:
+ * - H09AAPPLE-80 remaining (background side of extension ball)
+ * - T0: forwards task + confidence (done)
+ * - T2-2 captureVisibleTab for stuck analyze: WALKTHROUGH_CAPTURE_VISIBLE
+ * - T3-2/T3-3 optional notify hooks when handoff/stuck aggregates land
+ */
 
 import { assembleSession } from './session-assembly.js';
 import {

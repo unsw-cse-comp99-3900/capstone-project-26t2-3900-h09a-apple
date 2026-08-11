@@ -1,3 +1,7 @@
+/**
+ * Extension auth: chrome.storage tokens, handoff redeem, and Bearer fetch with refresh.
+ */
+
 import { API_BASE_URL } from './config.js';
 
 export const AUTH_STORAGE_KEYS = {
@@ -25,6 +29,7 @@ function storageRemove(keys) {
   });
 }
 
+/** Read access/refresh tokens and user id from chrome.storage.local. */
 export async function getStoredAuthTokens() {
   const result = await storageGet(Object.values(AUTH_STORAGE_KEYS));
   return {
@@ -35,6 +40,7 @@ export async function getStoredAuthTokens() {
   };
 }
 
+/** Persist tokens; expiresIn is seconds from now. */
 export async function setStoredAuthTokens(accessToken, refreshToken, expiresIn, userId) {
   const expiresAt = Date.now() + expiresIn * 1000;
   await storageSet({
@@ -45,10 +51,12 @@ export async function setStoredAuthTokens(accessToken, refreshToken, expiresIn, 
   });
 }
 
+/** Remove all auth keys from extension storage. */
 export async function clearStoredAuthTokens() {
   await storageRemove(Object.values(AUTH_STORAGE_KEYS));
 }
 
+/** True when both access and refresh tokens are present. */
 export async function hasStoredAuthTokens() {
   const tokens = await getStoredAuthTokens();
   return Boolean(tokens.accessToken && tokens.refreshToken);
@@ -59,6 +67,7 @@ function authUrl(path) {
   return `${API_BASE_URL.replace(/\/$/, '')}${trimmed}`;
 }
 
+/** Exchange a short-lived web handoff code for extension tokens. */
 export async function redeemHandoffCode(code) {
   const response = await fetch(authUrl('/api/v1/auth/extension-handoff/redeem'), {
     method: 'POST',
@@ -99,6 +108,7 @@ async function refreshAccessToken(refreshToken) {
   return payload.access_token;
 }
 
+/** Fetch against API_BASE_URL with Bearer auth; refreshes once on 401. */
 export async function authenticatedFetch(path, init = {}) {
   const tokens = await getStoredAuthTokens();
   if (!tokens.accessToken) {

@@ -13,6 +13,7 @@ const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000'
  * Server-side friction list fetch for the variance dashboard initial render.
  * Returns null when unauthenticated or the API is unavailable so the client can retry.
  */
+/** Server-component helper to load friction workflows (null on failure). */
 export async function loadFrictionWorkflowList(): Promise<FrictionWorkflowListResponse | null> {
   const token = (await cookies()).get(ACCESS_TOKEN_COOKIE)?.value;
   if (!token) {

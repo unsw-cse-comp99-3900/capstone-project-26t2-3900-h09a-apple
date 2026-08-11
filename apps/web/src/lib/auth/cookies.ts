@@ -8,6 +8,7 @@ import { ACCESS_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE } from '@/lib/auth/constants'
 
 const SECURE = process.env.NODE_ENV === 'production';
 
+/** Set access + refresh cookies on a NextResponse. */
 export function setAuthCookies(
   response: NextResponse,
   accessToken: string,
@@ -31,6 +32,7 @@ export function setAuthCookies(
   });
 }
 
+/** Set only the access-token cookie (e.g. after refresh). */
 export function setAccessCookie(
   response: NextResponse,
   accessToken: string,
@@ -45,6 +47,7 @@ export function setAccessCookie(
   });
 }
 
+/** Clear the access-token cookie. */
 export function clearAccessCookie(response: NextResponse): void {
   response.cookies.set(ACCESS_TOKEN_COOKIE, '', {
     httpOnly: true,
@@ -55,6 +58,7 @@ export function clearAccessCookie(response: NextResponse): void {
   });
 }
 
+/** Clear both access and refresh cookies. */
 export function clearAuthCookies(response: NextResponse): void {
   clearAccessCookie(response);
 

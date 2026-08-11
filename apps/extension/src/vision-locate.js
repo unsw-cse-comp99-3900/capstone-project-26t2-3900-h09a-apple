@@ -3,10 +3,12 @@
  * API keys never live here; the service worker proxies to the API.
  */
 
+/** Cache key for a vision locate result scoped to SOP step + tab + page. */
 export function buildVisionCacheKey({ sopId, stepNumber, tabId, pageKey }) {
   return `${sopId ?? ''}:${stepNumber ?? ''}:${tabId ?? ''}:${pageKey ?? ''}`;
 }
 
+/** Stable page key from origin + pathname + search (ignores hash). */
 export function pageKeyFromUrl(url) {
   try {
     const parsed = new URL(url);
@@ -29,6 +31,7 @@ export function describeStepForVision(step) {
   return '';
 }
 
+/** True when rect has finite positive width/height suitable for overlay placement. */
 export function isUsableLocateRect(rect) {
   return (
     rect &&

@@ -14,6 +14,7 @@ let refreshInFlight: Promise<RefreshResult> | null = null;
  * Returns expires_in seconds when the BFF provides it so callers can reschedule
  * proactive refresh.
  */
+/** Refresh the access cookie once; latched to avoid parallel storms. */
 export async function silentRefreshAccessToken(): Promise<RefreshResult> {
   if (!refreshInFlight) {
     refreshInFlight = (async (): Promise<RefreshResult> => {
@@ -35,6 +36,7 @@ export async function silentRefreshAccessToken(): Promise<RefreshResult> {
 }
 
 /** Test helper: clear in-flight latch between cases. */
+/** Clear the silent-refresh latch (e.g. after logout). */
 export function resetSilentRefreshLatch(): void {
   refreshInFlight = null;
 }

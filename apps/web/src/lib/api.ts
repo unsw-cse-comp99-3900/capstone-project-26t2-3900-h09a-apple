@@ -38,6 +38,7 @@ import { silentRefreshAccessToken } from '@/lib/auth/session-refresh';
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000';
 
+/** Error with HTTP status from a failed API call. */
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -54,6 +55,7 @@ function redirectToLogin(): void {
   }
 }
 
+/** Absolute backend URL (bypasses the Next proxy; used for /health). */
 export function apiUrl(path: string): string {
   const trimmed = path.startsWith('/') ? path : `/${path}`;
   return `${BASE_URL.replace(/\/$/, '')}${trimmed}`;
@@ -115,6 +117,7 @@ async function authedFetch(path: string, init?: RequestInit): Promise<Response> 
   return response;
 }
 
+/** Unauthenticated health probe against the API. */
 export async function getHealth(): Promise<HealthResponse> {
   const res = await fetch(apiUrl('/health'), { cache: 'no-store' });
   if (!res.ok) {
@@ -123,6 +126,7 @@ export async function getHealth(): Promise<HealthResponse> {
   return res.json();
 }
 
+/** Upload a recorded session payload for SOP generation. */
 export async function createSession(payload: SessionUploadPayload): Promise<SessionCreateResponse> {
   const res = await authedFetch('/api/v1/sessions', {
     method: 'POST',
@@ -139,6 +143,7 @@ export async function createSession(payload: SessionUploadPayload): Promise<Sess
   return res.json();
 }
 
+/** Poll processing status for an uploaded session. */
 export async function getSessionStatus(sessionId: string): Promise<SessionStatusResponse> {
   const res = await authedFetch(`/api/v1/sessions/${sessionId}`);
 
@@ -149,6 +154,7 @@ export async function getSessionStatus(sessionId: string): Promise<SessionStatus
   return res.json();
 }
 
+/** Re-trigger SOP generation for a failed/pending session. */
 export async function retryGenerateSop(sessionId: string): Promise<void> {
   const res = await authedFetch(`/api/v1/sessions/${sessionId}/generate-sop`, {
     method: 'POST',
@@ -159,6 +165,7 @@ export async function retryGenerateSop(sessionId: string): Promise<void> {
   }
 }
 
+/** Load full SOP detail including steps. */
 export async function getSop(sopId: string): Promise<SopDetailPayload> {
   const res = await authedFetch(`/api/v1/sops/${sopId}`);
 
@@ -169,6 +176,7 @@ export async function getSop(sopId: string): Promise<SopDetailPayload> {
   return res.json();
 }
 
+/** List published SOPs for the library view. */
 export async function getPublishedSops(): Promise<SopListResponse> {
   const res = await authedFetch('/api/v1/sops?status=published');
 
@@ -179,6 +187,7 @@ export async function getPublishedSops(): Promise<SopListResponse> {
   return res.json();
 }
 
+/** Soft-delete or remove a SOP the caller can manage. */
 export async function deleteSop(sopId: string): Promise<void> {
   const res = await authedFetch(`/api/v1/sops/${encodeURIComponent(sopId)}`, {
     method: 'DELETE',
@@ -189,6 +198,7 @@ export async function deleteSop(sopId: string): Promise<void> {
   }
 }
 
+/** Run K-means clustering analysis for a workflow payload. */
 export async function runKmeansAnalysis(
   payload: KmeansAnalysisRequest,
 ): Promise<KmeansAnalysisResponse> {
@@ -207,6 +217,7 @@ export async function runKmeansAnalysis(
   return res.json();
 }
 
+/** Fetch the latest stored K-means result for a workflow. */
 export async function getKmeansAnalysis(workflowId: string): Promise<KmeansAnalysisResponse> {
   const res = await authedFetch(`/api/v1/analytics/kmeans/${encodeURIComponent(workflowId)}`);
 
@@ -217,6 +228,7 @@ export async function getKmeansAnalysis(workflowId: string): Promise<KmeansAnaly
   return res.json();
 }
 
+/** Load friction analysis for a single SOP. */
 export async function getFrictionAnalysis(sopId: string): Promise<FrictionAnalysisResponse> {
   const res = await authedFetch(`/api/v1/analytics/friction/${encodeURIComponent(sopId)}`);
 
@@ -227,6 +239,7 @@ export async function getFrictionAnalysis(sopId: string): Promise<FrictionAnalys
   return res.json();
 }
 
+/** List workflows with friction aggregates for the dashboard. */
 export async function getFrictionWorkflowList(): Promise<FrictionWorkflowListResponse> {
   const res = await authedFetch('/api/v1/analytics/friction');
 
@@ -258,6 +271,7 @@ export type DashboardSummary = {
   primary_items: DashboardListItem[];
 };
 
+/** Role-aware dashboard greeting, KPIs, and primary list items. */
 export async function getDashboardSummary(): Promise<DashboardSummary> {
   const res = await authedFetch('/api/v1/dashboard/summary');
 
@@ -268,6 +282,7 @@ export async function getDashboardSummary(): Promise<DashboardSummary> {
   return res.json();
 }
 
+/** Narrative insight summary for a workflow. */
 export async function getWorkflowInsightSummary(
   workflowId: string,
 ): Promise<WorkflowInsightSummaryResponse> {
@@ -282,6 +297,7 @@ export async function getWorkflowInsightSummary(
   return res.json();
 }
 
+/** Recompute friction scores for a workflow. */
 export async function recalculateWorkflowFriction(
   workflowId: string,
 ): Promise<FrictionRecalculateResponse> {
@@ -297,6 +313,7 @@ export async function recalculateWorkflowFriction(
   return res.json();
 }
 
+/** Per-cluster timing breakdown for path comparison. */
 export async function getWorkflowClusterTimings(
   workflowId: string,
 ): Promise<WorkflowClusterTimingsResponse> {
@@ -332,6 +349,7 @@ export type FrictionWsTicket = {
   ws_path: string;
 };
 
+/** Mint a short-lived ticket for the friction WebSocket. */
 export async function createFrictionWsTicket(): Promise<FrictionWsTicket> {
   const res = await authedFetch('/api/v1/analytics/friction/ws-ticket', { method: 'POST' });
   if (!res.ok) {
@@ -343,6 +361,7 @@ export async function createFrictionWsTicket(): Promise<FrictionWsTicket> {
   return res.json();
 }
 
+/** Build the friction WS URL with the minted ticket query param. */
 export function frictionWebSocketUrl(
   ticket: string,
   wsPath = '/api/v1/analytics/friction/ws',
@@ -356,6 +375,7 @@ export function frictionWebSocketUrl(
   return `${wsBase}${path}?token=${encodeURIComponent(ticket)}`;
 }
 
+/** List SOPs owned by the current user (drafts). */
 export async function getMyDrafts(): Promise<SopListResponse> {
   const res = await authedFetch('/api/v1/sops?mine=true');
 
@@ -366,6 +386,7 @@ export async function getMyDrafts(): Promise<SopListResponse> {
   return res.json();
 }
 
+/** List published SOPs owned by the current user. */
 export async function getMyPublishedSops(): Promise<SopListResponse> {
   const res = await authedFetch('/api/v1/sops?mine=true&status=published');
 
@@ -376,6 +397,7 @@ export async function getMyPublishedSops(): Promise<SopListResponse> {
   return res.json();
 }
 
+/** List SOPs filtered by workflow status. */
 export async function getSopsByStatus(status: SopStatus): Promise<SopListResponse> {
   const res = await authedFetch(`/api/v1/sops?status=${encodeURIComponent(status)}`);
 
@@ -386,6 +408,7 @@ export async function getSopsByStatus(status: SopStatus): Promise<SopListRespons
   return res.json();
 }
 
+/** Manager approve action for a pending SOP. */
 export async function approveSop(sopId: string): Promise<SopApproveResponse> {
   const res = await authedFetch(`/api/v1/sops/${encodeURIComponent(sopId)}/approve`, {
     method: 'POST',
@@ -398,6 +421,7 @@ export async function approveSop(sopId: string): Promise<SopApproveResponse> {
   return res.json();
 }
 
+/** Publish an approved SOP to the library. */
 export async function publishSop(sopId: string): Promise<SopPublishResponse> {
   const res = await authedFetch(`/api/v1/sops/${encodeURIComponent(sopId)}/publish`, {
     method: 'POST',
@@ -427,6 +451,7 @@ export type SopStepEditLogItem = {
   created_at: string;
 };
 
+/** Patch a single step instruction and return the edit metadata. */
 export async function patchSopStepInstruction(
   sopId: string,
   stepNumber: number,
@@ -448,6 +473,7 @@ export async function patchSopStepInstruction(
   return res.json();
 }
 
+/** Load step instruction edit history for a SOP. */
 export async function getSopStepEdits(
   sopId: string,
 ): Promise<{ sop_id: string; edits: SopStepEditLogItem[] }> {
@@ -460,6 +486,7 @@ export async function getSopStepEdits(
   return res.json();
 }
 
+/** Server-side consent status for a consent type. */
 export async function getConsentStatus(consentType: ConsentType): Promise<ConsentStatusResponse> {
   const res = await authedFetch(
     `/api/v1/consent/status?consent_type=${encodeURIComponent(consentType)}`,
@@ -472,6 +499,7 @@ export async function getConsentStatus(consentType: ConsentType): Promise<Consen
   return res.json();
 }
 
+/** Record consent acceptance for a consent type/version. */
 export async function acceptConsent(payload: ConsentAcceptRequest): Promise<ConsentAcceptResponse> {
   const res = await authedFetch('/api/v1/consent/accept', {
     method: 'POST',
@@ -488,6 +516,7 @@ export async function acceptConsent(payload: ConsentAcceptRequest): Promise<Cons
   return res.json();
 }
 
+/** List voice feedback items with optional filters. */
 export async function listVoiceFeedback(params?: {
   severity?: string;
   classification?: string;
@@ -508,6 +537,7 @@ export async function listVoiceFeedback(params?: {
   return res.json();
 }
 
+/** Load one voice feedback item by id. */
 export async function getVoiceFeedback(feedbackId: string): Promise<VoiceFeedbackItem> {
   const res = await authedFetch(`/api/v1/feedback/${encodeURIComponent(feedbackId)}`);
   if (!res.ok) {
@@ -516,6 +546,7 @@ export async function getVoiceFeedback(feedbackId: string): Promise<VoiceFeedbac
   return res.json();
 }
 
+/** Submit a manager review decision for a feedback item. */
 export async function reviewVoiceFeedback(
   feedbackId: string,
   payload: VoiceFeedbackReviewRequest,
@@ -531,6 +562,7 @@ export async function reviewVoiceFeedback(
   return res.json();
 }
 
+/** Aggregate feedback stats for the manager dashboard. */
 export async function getFeedbackStats(): Promise<FeedbackStatsResponse> {
   const res = await authedFetch('/api/v1/feedback/stats');
   if (!res.ok) {
@@ -539,6 +571,7 @@ export async function getFeedbackStats(): Promise<FeedbackStatsResponse> {
   return res.json();
 }
 
+/** List in-app feedback notifications (optionally unread only). */
 export async function listFeedbackNotifications(
   unreadOnly = false,
 ): Promise<FeedbackNotificationListResponse> {
@@ -550,6 +583,7 @@ export async function listFeedbackNotifications(
   return res.json();
 }
 
+/** Mark a feedback notification as read. */
 export async function markFeedbackNotificationRead(notificationId: string): Promise<void> {
   const res = await authedFetch(
     `/api/v1/notifications/${encodeURIComponent(notificationId)}/read`,
@@ -566,6 +600,7 @@ export type NotificationWsTicket = {
   ws_path: string;
 };
 
+/** Mint a short-lived ticket for the notifications WebSocket. */
 export async function createNotificationWsTicket(): Promise<NotificationWsTicket> {
   const res = await authedFetch('/api/v1/notifications/ws-ticket', { method: 'POST' });
   if (!res.ok) {
@@ -577,6 +612,7 @@ export async function createNotificationWsTicket(): Promise<NotificationWsTicket
   return res.json();
 }
 
+/** Build the notifications WS URL with the minted ticket query param. */
 export function notificationsWebSocketUrl(
   ticket: string,
   wsPath = '/api/v1/notifications/ws',

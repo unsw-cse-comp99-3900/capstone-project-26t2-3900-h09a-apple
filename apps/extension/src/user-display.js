@@ -6,6 +6,7 @@ export function nameTokens(source) {
     .filter(Boolean);
 }
 
+/** Build a Title Case display name from the email local-part. */
 export function displayNameFromEmail(email) {
   const local =
     String(email || '')
@@ -22,6 +23,7 @@ export function displayNameFromEmail(email) {
  * - "ANN BEE WEE" -> AB
  * - single token "Man" -> MA, "Wan" -> WA
  */
+/** One or two initials for avatar chips. */
 export function avatarInitials(displayName, email = '') {
   const source = String(displayName || '').trim() || String(email || '').split('@')[0] || 'U';
   const parts = nameTokens(source);
